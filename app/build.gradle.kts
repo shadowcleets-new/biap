@@ -5,10 +5,10 @@ plugins {
 }
 
 android {
-    namespace = "com.example.biapp"
+    namespace = "com.example.biap"
     compileSdk = 36
     defaultConfig {
-        applicationId = "com.example.biapp"
+        applicationId = "com.example.biap"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -81,4 +81,9 @@ dependencies {
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+  implementation(libs.coil.compose)
+  implementation(libs.kotlinx.serialization.json)
+  implementation(libs.androidx.material.icons.extended)
 }
+
+

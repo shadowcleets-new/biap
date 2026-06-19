@@ -1,12 +1,17 @@
-package com.example.biapp.ui.main
+package com.example.biap.ui.main
 
-import com.example.biapp.data.DataRepository
+import com.example.biap.data.DataRepository
 import junit.framework.TestCase.assertEquals
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import com.example.biap.data.BusinessIntelligenceData
+import com.example.biap.data.Design
 
 class MainScreenViewModelTest {
   @Test
@@ -23,5 +28,9 @@ class MainScreenViewModelTest {
 }
 
 private class FakeMyModelRepository : DataRepository {
-  override val data: Flow<List<String>> = flow { emit(listOf("Sample")) }
+  override val biData: StateFlow<BusinessIntelligenceData> = MutableStateFlow(BusinessIntelligenceData())
+  override fun addOrUpdateDesign(design: Design) {}
+  override fun deleteDesign(designId: String) {}
+  override fun addGlobalCustomField(field: String) {}
+  override fun removeGlobalCustomField(field: String) {}
 }
