@@ -1,5 +1,34 @@
 # Chronos Changelog
 
+## [2026-06-19 19:42:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
+
+### 1. Intent, Roles, & Context
+
+- **The Problem:** Implement a robust, dynamic search filtering system matching names, categories, size availabilities, and custom attributes.
+- **Specialist Personas Invoked:** Android Architect, Systems Integrator, UI Specialist.
+- **The Strategy:**
+  - Create a combined flow in `MainScreenViewModel.kt` utilizing Kotlin coroutine operators to filter design products based on active queries in real-time.
+  - Implement a highly curved `SearchBarField` matching Google's search style and integrated with clear actions.
+  - Revamp empty states in `MainScreen.kt` to dynamically switch between "no designs" and "no search results found" with descriptive hints.
+
+### 2. Surgical Technical Modifications
+
+- **Modified Files:**
+  - `CHANGELOG.md` (Updated header & added new session log)
+  - `app/src/main/java/com/example/biap/ui/main/MainScreen.kt` (Embedded SearchBarField and added dynamic empty search layout templates)
+  - `app/src/main/java/com/example/biap/ui/main/MainScreenViewModel.kt` (Combined biData flow and searchQuery state flow with typed result casting)
+- **New Files:** None.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+
+- **Execution Commands & Diagnostics:**
+  - Verified Kotlin compilation via `.\gradlew.bat compileDebugKotlin` task bcd7f83e-34ea-4da0-b29f-917437ddf6eb/task-594 (BUILD SUCCESSFUL).
+  - Verified full test suite execution via `.\gradlew.bat test` task bcd7f83e-34ea-4da0-b29f-917437ddf6eb/task-598 (BUILD SUCCESSFUL).
+- **Resulting App State:** Search input filters data instantly as the user types; clean empty states handle missing matches.
+
+---
+
 ## [2026-06-19 19:37:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
 
 ### 1. Intent, Roles, & Context
