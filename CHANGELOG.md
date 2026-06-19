@@ -1,5 +1,38 @@
 # Chronos Changelog
 
+## [2026-06-19 20:30:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
+
+### 1. Intent, Roles, & Context
+
+- **The Problem:** Link assigned Karigars (artisans/tailors) to specific design portfolio entries and support dynamic addition and re-assignment later.
+- **Specialist Personas Invoked:** Android Architect, UI/UX Designer, Database Designer.
+- **The Strategy:**
+  - Update `Design` model in `Design.kt` to include `karigars: List<String>` field, with a default value to maintain JSON compatibility.
+  - Implement Karigar addition and removal handlers in `AddDesignViewModel.kt` and re-assignment handlers in `DesignDetailViewModel.kt`.
+  - Add a styled InputChip list selector card to the `AddDesignScreen.kt` layout for assigning Karigars on creation.
+  - Integrate an "Assigned Karigars" card in `DesignDetailScreen.kt` with a pencil edit button triggering a list management AlertDialog overlay to add or delete Karigars directly.
+
+### 2. Surgical Technical Modifications
+
+- **Modified Files:**
+  - `CHANGELOG.md` (Added session log entry)
+  - `app/src/main/java/com/example/biap/data/Design.kt` (Added karigars property to model)
+  - `app/src/main/java/com/example/biap/ui/design/AddDesignViewModel.kt` (State and addition/deletion methods)
+  - `app/src/main/java/com/example/biap/ui/design/AddDesignScreen.kt` (Added Karigars chip input field card)
+  - `app/src/main/java/com/example/biap/ui/design/DesignDetailViewModel.kt` (Added updateKarigars repository handler)
+  - `app/src/main/java/com/example/biap/ui/design/DesignDetailScreen.kt` (Added Assigned Karigars chip view card and manage-karigars dialog overlay)
+- **New Files:** None.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+
+- **Execution Commands & Diagnostics:**
+  - Verified Kotlin compilation via `.\gradlew.bat compileDebugKotlin` task bcd7f83e-34ea-4da0-b29f-917437ddf6eb/task-871.
+  - Verified unit test suite execution.
+- **Resulting App State:** Karigars can be assigned during creation, viewed as SuggestionChips in detail pages, and dynamically re-assigned via a dialog overlay.
+
+---
+
 ## [2026-06-19 20:20:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
 
 ### 1. Intent, Roles, & Context

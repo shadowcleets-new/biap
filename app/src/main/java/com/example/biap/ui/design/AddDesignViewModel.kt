@@ -20,6 +20,7 @@ data class AddDesignUiState(
     val availableSizes: List<String> = listOf("S", "M", "L", "XL", "XXL"),
     val customFields: Map<String, String> = emptyMap(),
     val globalCustomFields: Set<String> = emptySet(),
+    val karigars: List<String> = emptyList(),
     val isSaved: Boolean = false
 )
 
@@ -121,10 +122,30 @@ class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
             category = state.category.trim(),
             imagePath = state.imagePath,
             sizeInventories = state.sizes,
-            customFields = state.customFields.filterKeys { it.isNotBlank() }
+            customFields = state.customFields.filterKeys { it.isNotBlank() },
+            karigars = state.karigars
         )
 
         repository.addOrUpdateDesign(newDesign)
         _uiState.update { it.copy(isSaved = true) }
     }
+
+    fun addKarigar(name: String) {
+        if (name.isBlank()) return
+        val trimmed = name.trim()
+        _uiState.update { current ->
+            if (current.karigars.contains(trimmed)) {
+                current
+            } else {
+                current.copy(karigars = current.karigars + trimmed)
+            }
+        }
+    }
+
+    fun removeKarigar(name: String) {
+        _uiState.update { current ->
+            current.copy(karigars = current.karigars - name)
+        }
+    }
 }
+

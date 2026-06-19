@@ -366,6 +366,82 @@ fun AddDesignScreen(
                 }
             }
 
+            // Assigned Karigars
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Assigned Karigars / Tailors", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Mention the karigars who worked on this design.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    var newKarigarName by remember { mutableStateOf("") }
+
+                    OutlinedTextField(
+                        value = newKarigarName,
+                        onValueChange = { if (it.length <= 50) newKarigarName = it },
+                        label = { Text("Karigar Name (e.g. Master Salim)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        trailingIcon = {
+                            IconButton(
+                                onClick = {
+                                    if (newKarigarName.isNotBlank()) {
+                                        viewModel.addKarigar(newKarigarName.trim())
+                                        newKarigarName = ""
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Add Karigar")
+                            }
+                        }
+                    )
+
+                    if (state.karigars.isEmpty()) {
+                        Text(
+                            "No Karigars assigned yet.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            state.karigars.forEach { karigar ->
+                                InputChip(
+                                    selected = false,
+                                    onClick = {},
+                                    label = { Text(karigar, fontWeight = FontWeight.Medium) },
+                                    trailingIcon = {
+                                        Icon(
+                                            Icons.Default.Clear,
+                                            contentDescription = "Remove Karigar",
+                                            modifier = Modifier
+                                                .size(18.dp)
+                                                .clickable { viewModel.removeKarigar(karigar) }
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Custom Attributes & Global Fields
             // Custom Attributes & Global Fields
             Card(

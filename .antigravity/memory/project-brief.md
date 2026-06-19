@@ -27,4 +27,6 @@ biap is a native Android Business Intelligence application designed to provide r
 - [x] Configure PickVisualMedia API for safe, zero-permission gallery photo selection.
 - [x] Establish PerformanceManager and rememberPerformanceProfile system for battery/hardware-aware animation throttling.
 - [x] Introduce defensive input text boundaries, length restrictions, and character digit sanitization.
+- [x] Add Karigars (artisans/tailors) assignment field on creation and dynamic re-assignment on details view.
+
 

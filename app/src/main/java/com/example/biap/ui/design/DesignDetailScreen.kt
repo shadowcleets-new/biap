@@ -8,9 +8,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -267,6 +271,147 @@ fun DesignDetailScreen(
                                 }
                             }
                         }
+                    }
+
+                    // Assigned Karigars Section
+                    var showEditKarigarsDialog by remember { mutableStateOf(false) }
+
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Assigned Karigars", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                IconButton(onClick = { showEditKarigarsDialog = true }) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Edit Karigars",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+
+                            if (design.karigars.isEmpty()) {
+                                Text(
+                                    "No Karigars assigned to this design.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState())
+                                        .padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    design.karigars.forEach { karigar ->
+                                        SuggestionChip(
+                                            onClick = {},
+                                            label = { Text(karigar, fontWeight = FontWeight.Medium) },
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (showEditKarigarsDialog) {
+                        var tempKarigars by remember(design.karigars) { mutableStateOf(design.karigars) }
+                        var newKarigarInput by remember { mutableStateOf("") }
+
+                        AlertDialog(
+                            onDismissRequest = { showEditKarigarsDialog = false },
+                            title = { Text("Manage Karigars", fontWeight = FontWeight.Bold) },
+                            text = {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    OutlinedTextField(
+                                        value = newKarigarInput,
+                                        onValueChange = { if (it.length <= 50) newKarigarInput = it },
+                                        label = { Text("Karigar Name") },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        trailingIcon = {
+                                            IconButton(
+                                                onClick = {
+                                                    val trimmed = newKarigarInput.trim()
+                                                    if (trimmed.isNotBlank() && !tempKarigars.contains(trimmed)) {
+                                                        tempKarigars = tempKarigars + trimmed
+                                                        newKarigarInput = ""
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.Add, contentDescription = "Add Karigar")
+                                            }
+                                        }
+                                    )
+
+                                    if (tempKarigars.isEmpty()) {
+                                        Text(
+                                            "No Karigars in list.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    } else {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .horizontalScroll(rememberScrollState())
+                                                .padding(vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            tempKarigars.forEach { karigar ->
+                                                InputChip(
+                                                    selected = false,
+                                                    onClick = {},
+                                                    label = { Text(karigar) },
+                                                    trailingIcon = {
+                                                        Icon(
+                                                            Icons.Default.Clear,
+                                                            contentDescription = "Remove",
+                                                            modifier = Modifier
+                                                                .size(18.dp)
+                                                                .clickable { tempKarigars = tempKarigars - karigar }
+                                                        )
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        viewModel.updateKarigars(tempKarigars)
+                                        showEditKarigarsDialog = false
+                                    }
+                                ) {
+                                    Text("Save Changes")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showEditKarigarsDialog = false }) {
+                                    Text("Cancel")
+                                }
+                            }
+                        )
                     }
 
                     // Custom Attributes (Specifications)

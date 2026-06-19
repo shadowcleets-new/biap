@@ -1,4 +1,4 @@
-﻿package com.example.biap.ui.design
+package com.example.biap.ui.design
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -38,5 +38,13 @@ class DesignDetailViewModel(
 
     fun deleteDesign() {
         repository.deleteDesign(designId)
+    }
+
+    fun updateKarigars(karigars: List<String>) {
+        val current = _uiState.value
+        if (current is DesignDetailUiState.Success) {
+            val updatedDesign = current.design.copy(karigars = karigars)
+            repository.addOrUpdateDesign(updatedDesign)
+        }
     }
 }

@@ -1,4 +1,4 @@
-﻿package com.example.biap.data
+package com.example.biap.data
 
 import kotlinx.serialization.Serializable
 
@@ -16,7 +16,8 @@ data class Design(
     val category: String,
     val imagePath: String? = null,
     val sizeInventories: List<SizeInventory> = emptyList(),
-    val customFields: Map<String, String> = emptyMap()
+    val customFields: Map<String, String> = emptyMap(),
+    val karigars: List<String> = emptyList()
 )
 
 @Serializable
