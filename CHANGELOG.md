@@ -1,5 +1,35 @@
 # Chronos Changelog
 
+## [2026-06-19 19:46:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
+
+### 1. Intent, Roles, & Context
+
+- **The Problem:** Integrate dynamic option selection to add design photos from both the device's image gallery and capturing new photos using the camera app directly.
+- **Specialist Personas Invoked:** Android Architect, Media Permissions Expert.
+- **The Strategy:**
+  - Create a custom FileProvider and paths XML configuration inside `AndroidManifest.xml` and `res/xml/` to grant camera photo file-saving permissions.
+  - Implement a dialog source selector within `AddDesignScreen.kt` triggered when clicking the image placeholder block.
+  - Declare a camera launcher (`TakePicture` contract) alongside the existing gallery content picker launcher (`GetContent` contract) to copy Captured images safely to internal files directory.
+
+### 2. Surgical Technical Modifications
+
+- **Modified Files:**
+  - `CHANGELOG.md` (Updated header & added new session log)
+  - `app/src/main/AndroidManifest.xml` (Declared FileProvider tag and authorities)
+  - `app/src/main/java/com/example/biap/ui/design/AddDesignScreen.kt` (Implemented launchers, selectors, dialog overlays, and getTempUri cached file creator)
+- **New Files:**
+  - `app/src/main/res/xml/file_paths.xml`
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+
+- **Execution Commands & Diagnostics:**
+  - Verified Kotlin compilation via `.\gradlew.bat compileDebugKotlin` task bcd7f83e-34ea-4da0-b29f-917437ddf6eb/task-636.
+  - Verified full test suite execution via `.\gradlew.bat test` task bcd7f83e-34ea-4da0-b29f-917437ddf6eb/task-640.
+- **Resulting App State:** Users can launch gallery picking or camera capture, and all chosen images are successfully loaded and copied locally.
+
+---
+
 ## [2026-06-19 19:42:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
 
 ### 1. Intent, Roles, & Context
