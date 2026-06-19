@@ -8,6 +8,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -217,39 +218,75 @@ fun AddDesignScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    val standardSizes = listOf("S", "M", "L", "XL", "XXL")
+                    var showCustomSizeDialog by remember { mutableStateOf(false) }
+                    var newSizeInput by remember { mutableStateOf("") }
 
-                    standardSizes.forEach { size ->
-                        val inventory = state.sizes.find { it.size == size }
-                        val isEnabled = inventory != null
-
-                        var stockText by remember(inventory) { mutableStateOf(inventory?.stock?.toString() ?: "") }
-                        var priceText by remember(inventory) { mutableStateOf(inventory?.price?.toString() ?: "") }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
+                    Text("Configure Size Scale", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        state.availableSizes.forEach { size ->
+                            val isEnabled = state.sizes.any { it.size == size }
                             FilterChip(
                                 selected = isEnabled,
                                 onClick = {
-                                    val currentStock = stockText.toIntOrNull() ?: 0
-                                    val currentPrice = priceText.toDoubleOrNull() ?: 0.0
-                                    viewModel.updateSizeInventory(size, currentStock, currentPrice, !isEnabled)
+                                    if (isEnabled) {
+                                        viewModel.updateSizeInventory(size, 0, 0.0, false)
+                                    } else {
+                                        viewModel.updateSizeInventory(size, 0, 0.0, true)
+                                    }
                                 },
-                                label = { Text(size, fontWeight = FontWeight.Bold) },
-                                modifier = Modifier.width(64.dp)
+                                label = { Text(size, fontWeight = FontWeight.Bold) }
                             )
+                        }
 
-                            OutlinedTextField(
-                                value = stockText,
-                                onValueChange = { newValue ->
-                                    if (newValue.isEmpty() || newValue.toIntOrNull() != null) {
-                                        stockText = newValue
-                                        if (isEnabled) {
+                        InputChip(
+                            selected = false,
+                            onClick = { showCustomSizeDialog = true },
+                            label = { Text("+ Custom") }
+                        )
+                    }
+
+                    val enabledSizes = state.availableSizes.filter { size -> state.sizes.any { it.size == size } }
+                    
+                    if (enabledSizes.isEmpty()) {
+                        Text(
+                            "Select sizes above to configure stock and unique pricing.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    } else {
+                        enabledSizes.forEach { size ->
+                            val inventory = state.sizes.find { it.size == size }
+                            var stockText by remember(inventory) { mutableStateOf(inventory?.stock?.toString() ?: "") }
+                            var priceText by remember(inventory) { mutableStateOf(inventory?.price?.toString() ?: "") }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(56.dp)
+                                        .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(size, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                }
+
+                                OutlinedTextField(
+                                    value = stockText,
+                                    onValueChange = { newValue ->
+                                        if (newValue.isEmpty() || newValue.toIntOrNull() != null) {
+                                            stockText = newValue
                                             viewModel.updateSizeInventory(
                                                 size,
                                                 newValue.toIntOrNull() ?: 0,
@@ -257,21 +294,18 @@ fun AddDesignScreen(
                                                 true
                                             )
                                         }
-                                    }
-                                },
-                                label = { Text("Stock") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
-                                enabled = isEnabled,
-                                shape = RoundedCornerShape(8.dp)
-                            )
+                                    },
+                                    label = { Text("Stock") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
 
-                            OutlinedTextField(
-                                value = priceText,
-                                onValueChange = { newValue ->
-                                    if (newValue.isEmpty() || newValue.toDoubleOrNull() != null) {
-                                        priceText = newValue
-                                        if (isEnabled) {
+                                OutlinedTextField(
+                                    value = priceText,
+                                    onValueChange = { newValue ->
+                                        if (newValue.isEmpty() || newValue.toDoubleOrNull() != null) {
+                                            priceText = newValue
                                             viewModel.updateSizeInventory(
                                                 size,
                                                 stockText.toIntOrNull() ?: 0,
@@ -279,16 +313,52 @@ fun AddDesignScreen(
                                                 true
                                             )
                                         }
-                                    }
-                                },
-                                label = { Text("Price") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                modifier = Modifier.weight(1f),
-                                enabled = isEnabled,
-                                shape = RoundedCornerShape(8.dp),
-                                prefix = { Text("₹") }
-                            )
+                                    },
+                                    label = { Text("Price") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    prefix = { Text("₹") }
+                                )
+                            }
                         }
+                    }
+
+                    if (showCustomSizeDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showCustomSizeDialog = false },
+                            title = { Text("Add Custom Size", fontWeight = FontWeight.Bold) },
+                            text = {
+                                OutlinedTextField(
+                                    value = newSizeInput,
+                                    onValueChange = { newSizeInput = it },
+                                    label = { Text("Size Label (e.g. 3XL, 6XL, 42)") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        if (newSizeInput.isNotBlank()) {
+                                            val normalizedSize = newSizeInput.trim().uppercase()
+                                            viewModel.addAvailableSize(normalizedSize)
+                                            viewModel.updateSizeInventory(normalizedSize, 0, 0.0, true)
+                                            newSizeInput = ""
+                                            showCustomSizeDialog = false
+                                        }
+                                    }
+                                ) {
+                                    Text("Add")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showCustomSizeDialog = false }) {
+                                    Text("Cancel")
+                                }
+                            }
+                        )
                     }
                 }
             }

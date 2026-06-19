@@ -1,4 +1,4 @@
-﻿package com.example.biap.ui.design
+package com.example.biap.ui.design
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -17,6 +17,7 @@ data class AddDesignUiState(
     val category: String = "Salwar Kameez",
     val imagePath: String? = null,
     val sizes: List<SizeInventory> = emptyList(),
+    val availableSizes: List<String> = listOf("S", "M", "L", "XL", "XXL"),
     val customFields: Map<String, String> = emptyMap(),
     val globalCustomFields: Set<String> = emptySet(),
     val isSaved: Boolean = false
@@ -65,6 +66,17 @@ class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
                 updated.add(SizeInventory(size, stock, price))
             }
             current.copy(sizes = updated)
+        }
+    }
+    fun addAvailableSize(size: String) {
+        if (size.isBlank()) return
+        val trimmed = size.trim().uppercase()
+        _uiState.update { current ->
+            if (current.availableSizes.contains(trimmed)) {
+                current
+            } else {
+                current.copy(availableSizes = current.availableSizes + trimmed)
+            }
         }
     }
 

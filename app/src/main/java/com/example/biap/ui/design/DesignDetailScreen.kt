@@ -3,6 +3,7 @@ package com.example.biap.ui.design
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -189,48 +190,79 @@ fun DesignDetailScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             } else {
-                                design.sizeInventories.sortedBy { it.size }.forEach { inv ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        // Size Badge
-                                        Box(
-                                            modifier = Modifier
-                                                .background(
-                                                    MaterialTheme.colorScheme.primaryContainer,
-                                                    RoundedCornerShape(8.dp)
-                                                )
-                                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                                        ) {
-                                            Text(
-                                                text = inv.size,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                val sortedInventories = design.sizeInventories.sortedBy { it.size }
+                                var selectedSizeIndex by remember(design) { mutableStateOf(0) }
+                                
+                                if (selectedSizeIndex >= sortedInventories.size) {
+                                    selectedSizeIndex = 0
+                                }
+                                
+                                val activeInventory = sortedInventories.getOrNull(selectedSizeIndex)
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState())
+                                        .padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    sortedInventories.forEachIndexed { index, inv ->
+                                        val isSelected = selectedSizeIndex == index
+                                        InputChip(
+                                            selected = isSelected,
+                                            onClick = { selectedSizeIndex = index },
+                                            label = { Text(inv.size, fontWeight = FontWeight.Bold) },
+                                            colors = InputChipDefaults.inputChipColors(
+                                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                                             )
-                                        }
-
-                                        // Price
-                                        Text(
-                                            text = "₹${inv.price}",
-                                            fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.bodyLarge
                                         )
+                                    }
+                                }
 
-                                        // Stock Count
-                                        val stockColor = when {
-                                            inv.stock == 0 -> MaterialTheme.colorScheme.error
-                                            inv.stock <= 5 -> Color(0xFFFF9800) // Orange
-                                            else -> Color(0xFF4CAF50) // Green
+                                Spacer(Modifier.height(8.dp))
+
+                                if (activeInventory != null) {
+                                    val stockColor = when {
+                                        activeInventory.stock == 0 -> MaterialTheme.colorScheme.error
+                                        activeInventory.stock <= 5 -> Color(0xFFFF9800) // Orange
+                                        else -> Color(0xFF4CAF50) // Green
+                                    }
+
+                                    Card(
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text("Price", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text(
+                                                    text = "₹${activeInventory.price}",
+                                                    fontWeight = FontWeight.Bold,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+
+                                            Column(horizontalAlignment = Alignment.End) {
+                                                Text("Availability", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text(
+                                                    text = if (activeInventory.stock == 0) "Out of Stock" else "${activeInventory.stock} items",
+                                                    fontWeight = FontWeight.Bold,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    color = stockColor
+                                                )
+                                            }
                                         }
-                                        Text(
-                                            text = "${inv.stock} items",
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = stockColor
-                                        )
                                     }
                                 }
                             }
