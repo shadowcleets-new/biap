@@ -33,4 +33,10 @@ private class FakeMyModelRepository : DataRepository {
   override fun deleteDesign(designId: String) {}
   override fun addGlobalCustomField(field: String) {}
   override fun removeGlobalCustomField(field: String) {}
+
+  override val authManager: com.example.biap.util.AuthManager
+    get() = throw UnsupportedOperationException("AuthManager not supported in tests")
+  override val isSyncing: StateFlow<Boolean> = MutableStateFlow(false)
+  override fun syncWithGoogleDrive() {}
+  override fun signOut(onComplete: () -> Unit) { onComplete() }
 }

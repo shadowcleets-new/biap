@@ -22,10 +22,17 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,10 +75,108 @@ fun MainScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
+    val authManager = viewModel.authManager
+    val currentUser by authManager.currentUser.collectAsStateWithLifecycle()
+    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                authManager.handleSignInResult(account)
+                viewModel.syncWithGoogleDrive()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    var showMenu by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Product Portfolio", fontWeight = FontWeight.Bold) }
+                title = { Text("Product Portfolio", fontWeight = FontWeight.Bold) },
+                actions = {
+                    if (currentUser != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (isSyncing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                IconButton(onClick = { viewModel.syncWithGoogleDrive() }) {
+                                    Icon(Icons.Default.Sync, contentDescription = "Sync Now")
+                                }
+                            }
+                            Box {
+                                IconButton(onClick = { showMenu = true }) {
+                                    if (currentUser?.photoUrl != null) {
+                                        Image(
+                                            painter = rememberAsyncImagePainter(currentUser!!.photoUrl),
+                                            contentDescription = "Profile",
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(CircleShape)
+                                        )
+                                    } else {
+                                        Icon(Icons.Default.AccountCircle, contentDescription = "Profile", modifier = Modifier.size(32.dp))
+                                    }
+                                }
+                                DropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Signed in as:\n${currentUser?.email}") },
+                                        onClick = {},
+                                        enabled = false
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Sync with Drive") },
+                                        onClick = {
+                                            showMenu = false
+                                            viewModel.syncWithGoogleDrive()
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Sign Out") },
+                                        onClick = {
+                                            showMenu = false
+                                            viewModel.signOut {}
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = { googleSignInLauncher.launch(authManager.getSignInIntent()) },
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Cloud,
+                                contentDescription = "Cloud Backup",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Cloud Sync", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             )
         },
         floatingActionButton = {

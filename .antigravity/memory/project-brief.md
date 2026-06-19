@@ -28,5 +28,7 @@ biap is a native Android Business Intelligence application designed to provide r
 - [x] Establish PerformanceManager and rememberPerformanceProfile system for battery/hardware-aware animation throttling.
 - [x] Introduce defensive input text boundaries, length restrictions, and character digit sanitization.
 - [x] Add Karigars (artisans/tailors) assignment field on creation and dynamic re-assignment on details view.
+- [x] Implement complete inline edit mode in DesignDetailScreen supporting size configurations, image editing, name, category, custom attributes, and Karigars.
+- [x] Integrate Google Sign-in authentication and background database encryption and synchronization with Google Drive's appDataFolder.
 
 

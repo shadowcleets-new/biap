@@ -47,4 +47,8 @@ class DesignDetailViewModel(
             repository.addOrUpdateDesign(updatedDesign)
         }
     }
+
+    fun updateDesign(design: Design) {
+        repository.addOrUpdateDesign(design)
+    }
 }

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "453845089135",
+    "project_id": "biap-android-2026",
+    "storage_bucket": "biap-android-2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:453845089135:android:055754c949b47eed7bc69a",
+        "android_client_info": {
+          "package_name": "com.example.biap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7rpoUTJBwRtexqey8oGIAOOtR0APouQg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

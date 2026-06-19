@@ -55,6 +55,17 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
   fun deleteDesign(id: String) {
     dataRepository.deleteDesign(id)
   }
+
+  val authManager get() = dataRepository.authManager
+  val isSyncing: StateFlow<Boolean> = dataRepository.isSyncing
+
+  fun syncWithGoogleDrive() {
+    dataRepository.syncWithGoogleDrive()
+  }
+
+  fun signOut(onComplete: () -> Unit) {
+    dataRepository.signOut(onComplete)
+  }
 }
 
 sealed interface MainScreenUiState {

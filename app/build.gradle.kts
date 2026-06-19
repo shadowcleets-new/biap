@@ -2,6 +2,7 @@ plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
+  alias(libs.plugins.google.services)
 }
 
 android {
@@ -84,6 +85,8 @@ dependencies {
   implementation(libs.coil.compose)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.androidx.material.icons.extended)
+  implementation(libs.okhttp)
+  implementation(libs.play.services.auth)
 }
 
 
