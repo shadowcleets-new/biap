@@ -13,3 +13,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Antigravity/Graphify Metadata
+.ai-context/
+graphify-out/
+
