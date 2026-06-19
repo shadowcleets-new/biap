@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.rememberAsyncImagePainter
@@ -54,11 +55,23 @@ fun AddDesignScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
+    var showSourceSelector by remember { mutableStateOf(false) }
+    var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
+
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             val localPath = copyUriToInternalStorage(context, uri)
+            viewModel.onImageSelected(localPath)
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success: Boolean ->
+        if (success && tempPhotoUri != null) {
+            val localPath = copyUriToInternalStorage(context, tempPhotoUri!!)
             viewModel.onImageSelected(localPath)
         }
     }
@@ -119,7 +132,7 @@ fun AddDesignScreen(
                             )
                         )
                     )
-                    .clickable { imagePickerLauncher.launch("image/*") },
+                    .clickable { showSourceSelector = true },
                 contentAlignment = Alignment.Center
             ) {
                 if (state.imagePath != null) {
@@ -455,6 +468,48 @@ fun AddDesignScreen(
                     }
                 }
             }
+            if (showSourceSelector) {
+                AlertDialog(
+                    onDismissRequest = { showSourceSelector = false },
+                    title = { Text("Select Image Source", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(
+                                onClick = {
+                                    showSourceSelector = false
+                                    imagePickerLauncher.launch("image/*")
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Choose from Gallery")
+                            }
+                            
+                            Button(
+                                onClick = {
+                                    showSourceSelector = false
+                                    try {
+                                        val uri = getTempUri(context)
+                                        tempPhotoUri = uri
+                                        cameraLauncher.launch(uri)
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Take Photo with Camera")
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showSourceSelector = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -471,4 +526,9 @@ fun copyUriToInternalStorage(context: Context, uri: Uri): String? {
         e.printStackTrace()
         null
     }
+}
+
+fun getTempUri(context: Context): Uri {
+    val file = File(context.cacheDir, "temp_camera_${System.currentTimeMillis()}.jpg")
+    return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
 }
