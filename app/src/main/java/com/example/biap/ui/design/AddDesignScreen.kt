@@ -1,4 +1,4 @@
-﻿package com.example.biap.ui.design
+package com.example.biap.ui.design
 
 import android.content.Context
 import android.net.Uri
@@ -281,6 +281,7 @@ fun AddDesignScreen(
             }
 
             // Custom Attributes & Global Fields
+            // Custom Attributes & Global Fields
             Card(
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -289,27 +290,70 @@ fun AddDesignScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text("Attributes (Custom Fields)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("3-Piece Attributes & Custom Fields", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
-                    // Render existing custom fields (including preloaded global ones)
-                    state.customFields.forEach { (key, value) ->
-                        val isGlobal = state.globalCustomFields.contains(key)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = value,
-                                onValueChange = { viewModel.updateCustomFieldValue(key, it) },
-                                label = { Text(if (isGlobal) "$key (Global)" else key) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
+                    val attributeTabs = listOf("Top (Kameez)", "Bottom (Salwar)", "Dupatta", "General")
+                    var selectedTab by remember { mutableStateOf(0) }
+
+                    TabRow(selectedTabIndex = selectedTab) {
+                        attributeTabs.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTab == index,
+                                onClick = { selectedTab = index },
+                                text = { Text(title) }
                             )
+                        }
+                    }
 
-                            if (!isGlobal) {
-                                IconButton(onClick = { viewModel.removeCustomField(key) }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Remove")
+                    val prefix = when (selectedTab) {
+                        0 -> "Top - "
+                        1 -> "Bottom - "
+                        2 -> "Dupatta - "
+                        else -> ""
+                    }
+
+                    val filteredFields = state.customFields.filter { (key, _) ->
+                        if (selectedTab < 3) {
+                            key.startsWith(prefix)
+                        } else {
+                            !key.startsWith("Top - ") && !key.startsWith("Bottom - ") && !key.startsWith("Dupatta - ")
+                        }
+                    }
+
+                    if (filteredFields.isEmpty()) {
+                        Text(
+                            "No attributes set in this category.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    } else {
+                        filteredFields.forEach { (key, value) ->
+                            val isGlobal = state.globalCustomFields.contains(key)
+                            val cleanLabel = if (selectedTab < 3) key.removePrefix(prefix) else key
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = value,
+                                    onValueChange = { viewModel.updateCustomFieldValue(key, it) },
+                                    label = { Text(if (isGlobal) "$cleanLabel (Global)" else cleanLabel) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+
+                                val defaultFields = setOf(
+                                    "Top - Fabric", "Top - Work", "Top - Color",
+                                    "Bottom - Fabric", "Bottom - Work", "Bottom - Color",
+                                    "Dupatta - Fabric", "Dupatta - Work", "Dupatta - Color"
+                                )
+                                if (!defaultFields.contains(key)) {
+                                    IconButton(onClick = { viewModel.removeCustomField(key) }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Remove")
+                                    }
                                 }
                             }
                         }
@@ -317,19 +361,34 @@ fun AddDesignScreen(
 
                     HorizontalDivider()
 
-                    // Form to add a new custom field
                     var newKey by remember { mutableStateOf("") }
                     var isGlobalToggle by remember { mutableStateOf(false) }
+                    var selectedScopeIndex by remember { mutableStateOf(0) }
+                    val scopes = listOf("Top", "Bottom", "Dupatta", "General")
 
                     Text("Add New Custom Field", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
 
                     OutlinedTextField(
                         value = newKey,
                         onValueChange = { newKey = it },
-                        label = { Text("Field Name (e.g. Fabric, Work)") },
+                        label = { Text("Field Name (e.g. Sleeve Style, Lining)") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
+
+                    Text("Apply Field To:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        scopes.forEachIndexed { idx, scopeName ->
+                            FilterChip(
+                                selected = selectedScopeIndex == idx,
+                                onClick = { selectedScopeIndex = idx },
+                                label = { Text(scopeName) }
+                            )
+                        }
+                    }
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -353,7 +412,13 @@ fun AddDesignScreen(
                     Button(
                         onClick = {
                             if (newKey.isNotBlank()) {
-                                viewModel.addCustomField(newKey, isGlobalToggle)
+                                val scopedKey = when (selectedScopeIndex) {
+                                    0 -> "Top - ${newKey.trim()}"
+                                    1 -> "Bottom - ${newKey.trim()}"
+                                    2 -> "Dupatta - ${newKey.trim()}"
+                                    else -> newKey.trim()
+                                }
+                                viewModel.addCustomField(scopedKey, isGlobalToggle)
                                 newKey = ""
                                 isGlobalToggle = false
                             }

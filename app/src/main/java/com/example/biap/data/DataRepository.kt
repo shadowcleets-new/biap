@@ -1,4 +1,4 @@
-﻿package com.example.biap.data
+package com.example.biap.data
 
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +25,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     override val biData: StateFlow<BusinessIntelligenceData> = _biData.asStateFlow()
 
     private fun loadData(): BusinessIntelligenceData {
-        return if (file.exists()) {
+        val loaded = if (file.exists()) {
             try {
                 val content = file.readText()
                 json.decodeFromString<BusinessIntelligenceData>(content)
@@ -35,6 +35,21 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             }
         } else {
             BusinessIntelligenceData()
+        }
+
+        val defaultGlobals = setOf(
+            "Top - Fabric", "Top - Work", "Top - Color",
+            "Bottom - Fabric", "Bottom - Work", "Bottom - Color",
+            "Dupatta - Fabric", "Dupatta - Work", "Dupatta - Color"
+        )
+        val currentGlobals = loaded.globalCustomFields
+        val missingGlobals = defaultGlobals - currentGlobals
+        return if (missingGlobals.isNotEmpty()) {
+            val updated = loaded.copy(globalCustomFields = currentGlobals + defaultGlobals)
+            saveData(updated)
+            updated
+        } else {
+            loaded
         }
     }
 

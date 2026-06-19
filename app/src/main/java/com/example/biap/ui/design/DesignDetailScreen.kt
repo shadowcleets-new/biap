@@ -1,4 +1,4 @@
-﻿package com.example.biap.ui.design
+package com.example.biap.ui.design
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -236,7 +236,7 @@ fun DesignDetailScreen(
                         }
                     }
 
-                    // Custom Attributes
+                    // Custom Attributes (Specifications)
                     if (design.customFields.isNotEmpty()) {
                         Card(
                             shape = RoundedCornerShape(16.dp),
@@ -250,22 +250,60 @@ fun DesignDetailScreen(
                             ) {
                                 Text("Specifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
-                                design.customFields.forEach { (key, value) ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(
-                                            text = key,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                val specTabs = listOf("Top (Kameez)", "Bottom (Salwar)", "Dupatta", "General")
+                                var selectedSpecTab by remember { mutableStateOf(0) }
+
+                                TabRow(selectedTabIndex = selectedSpecTab) {
+                                    specTabs.forEachIndexed { index, title ->
+                                        Tab(
+                                            selected = selectedSpecTab == index,
+                                            onClick = { selectedSpecTab = index },
+                                            text = { Text(title) }
                                         )
-                                        Text(
-                                            text = value.ifBlank { "Not Specified" },
-                                            fontWeight = FontWeight.SemiBold
-                                        )
+                                    }
+                                }
+
+                                val prefix = when (selectedSpecTab) {
+                                    0 -> "Top - "
+                                    1 -> "Bottom - "
+                                    2 -> "Dupatta - "
+                                    else -> ""
+                                }
+
+                                val filteredSpecs = design.customFields.filter { (key, _) ->
+                                    if (selectedSpecTab < 3) {
+                                        key.startsWith(prefix)
+                                    } else {
+                                        !key.startsWith("Top - ") && !key.startsWith("Bottom - ") && !key.startsWith("Dupatta - ")
+                                    }
+                                }
+
+                                if (filteredSpecs.isEmpty()) {
+                                    Text(
+                                        "No specifications under this category.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(vertical = 12.dp)
+                                    )
+                                } else {
+                                    filteredSpecs.forEach { (key, value) ->
+                                        val cleanLabel = if (selectedSpecTab < 3) key.removePrefix(prefix) else key
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = cleanLabel,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = value.ifBlank { "Not Specified" },
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
                                     }
                                 }
                             }
