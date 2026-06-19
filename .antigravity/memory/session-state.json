@@ -1,0 +1,18 @@
+{
+  "session_start": "2026-06-19T13:47:28Z",
+  "framework": "Antigravity 2.0",
+  "standards": {
+    "anti_bloat": "Active",
+    "autonomous_agency": "Full Authority with Circuit Breakers",
+    "icrs": "Infinite Cognitive Role Synthesis Enabled",
+    "code_style": "Region Folding & Surgical Diffs",
+    "artifact_standard": "Task Lists & Browser Verification",
+    "adaptive_fidelity": "Hardware-Aware Native UX",
+    "defensive_engineering": "Zero-Gap Permutation Matrix",
+    "persistence": "Chronos Changelog & Memory Bank"
+  },
+  "safety_limits": {
+    "max_self_correction": 2,
+    "rollback_cmd": "git checkout -- <modified_files>"
+  }
+}
