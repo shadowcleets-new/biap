@@ -1,5 +1,35 @@
 # Chronos Changelog
 
+## [2026-06-19 20:07:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
+
+### 1. Intent, Roles, & Context
+
+- **The Problem:** Replace fixed hardcoded size scales (S, M, L, XL, XXL) with a fully dynamic size configuration matrix to prevent UI bloat and support custom sizes (e.g. 3XL all the way to 6XL+).
+- **Specialist Personas Invoked:** Android Architect, UI/UX Designer, Motion Specialist.
+- **The Strategy:**
+  - Create dynamic size list configurations in `AddDesignUiState` and add size addition methods in `AddDesignViewModel.kt`.
+  - Update `AddDesignScreen.kt` to present a horizontal scroll of size filter chips along with an "+ Custom" input dialog, and render text inputs *only* for currently enabled active sizes.
+  - Revamp `DesignDetailScreen.kt` to display a horizontal, scrollable pill chip list for sizes, loading a high-density pricing and availability details card when clicked.
+
+### 2. Surgical Technical Modifications
+
+- **Modified Files:**
+  - `CHANGELOG.md` (Updated header & added new session log)
+  - `app/src/main/java/com/example/biap/ui/design/AddDesignScreen.kt` (Dynamic size chips horizontal layout, custom size prompt, and clean conditional input rendering)
+  - `app/src/main/java/com/example/biap/ui/design/AddDesignViewModel.kt` (Added availableSizes list and addAvailableSize modifier)
+  - `app/src/main/java/com/example/biap/ui/design/DesignDetailScreen.kt` (Replaced vertical list with scrollable InputChips row and dynamic price card)
+- **New Files:** None.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+
+- **Execution Commands & Diagnostics:**
+  - Verified Kotlin compilation via `.\gradlew.bat compileDebugKotlin` task bcd7f83e-34ea-4da0-b29f-917437ddf6eb/task-704.
+  - Verified full test suite execution via `.\gradlew.bat test` task bcd7f83e-34ea-4da0-b29f-917437ddf6eb/task-704 test suite execution.
+- **Resulting App State:** Adding, selecting, and viewing sizes is completely dynamic; UI density is highly optimized.
+
+---
+
 ## [2026-06-19 19:46:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
 
 ### 1. Intent, Roles, & Context
