@@ -253,12 +253,15 @@ fun DesignDetailScreen(
                                 val specTabs = listOf("Top (Kameez)", "Bottom (Salwar)", "Dupatta", "General")
                                 var selectedSpecTab by remember { mutableStateOf(0) }
 
-                                TabRow(selectedTabIndex = selectedSpecTab) {
+                                ScrollableTabRow(
+                                    selectedTabIndex = selectedSpecTab,
+                                    edgePadding = 0.dp
+                                ) {
                                     specTabs.forEachIndexed { index, title ->
                                         Tab(
                                             selected = selectedSpecTab == index,
                                             onClick = { selectedSpecTab = index },
-                                            text = { Text(title) }
+                                            text = { Text(title, maxLines = 1) }
                                         )
                                     }
                                 }

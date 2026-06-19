@@ -295,12 +295,15 @@ fun AddDesignScreen(
                     val attributeTabs = listOf("Top (Kameez)", "Bottom (Salwar)", "Dupatta", "General")
                     var selectedTab by remember { mutableStateOf(0) }
 
-                    TabRow(selectedTabIndex = selectedTab) {
+                    ScrollableTabRow(
+                        selectedTabIndex = selectedTab,
+                        edgePadding = 0.dp
+                    ) {
                         attributeTabs.forEachIndexed { index, title ->
                             Tab(
                                 selected = selectedTab == index,
                                 onClick = { selectedTab = index },
-                                text = { Text(title) }
+                                text = { Text(title, maxLines = 1) }
                             )
                         }
                     }
