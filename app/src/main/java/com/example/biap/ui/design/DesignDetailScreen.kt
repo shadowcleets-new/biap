@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -255,13 +256,29 @@ fun DesignDetailScreen(
 
                                 ScrollableTabRow(
                                     selectedTabIndex = selectedSpecTab,
-                                    edgePadding = 0.dp
+                                    edgePadding = 0.dp,
+                                    indicator = {},
+                                    divider = {}
                                 ) {
                                     specTabs.forEachIndexed { index, title ->
+                                        val isSelected = selectedSpecTab == index
                                         Tab(
-                                            selected = selectedSpecTab == index,
+                                            selected = isSelected,
                                             onClick = { selectedSpecTab = index },
-                                            text = { Text(title, maxLines = 1) }
+                                            text = {
+                                                Text(
+                                                    text = title,
+                                                    maxLines = 1,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            },
+                                            modifier = Modifier
+                                                .padding(horizontal = 4.dp, vertical = 6.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                                                )
                                         )
                                     }
                                 }

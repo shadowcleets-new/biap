@@ -297,13 +297,29 @@ fun AddDesignScreen(
 
                     ScrollableTabRow(
                         selectedTabIndex = selectedTab,
-                        edgePadding = 0.dp
+                        edgePadding = 0.dp,
+                        indicator = {},
+                        divider = {}
                     ) {
                         attributeTabs.forEachIndexed { index, title ->
+                            val isSelected = selectedTab == index
                             Tab(
-                                selected = selectedTab == index,
+                                selected = isSelected,
                                 onClick = { selectedTab = index },
-                                text = { Text(title, maxLines = 1) }
+                                text = {
+                                    Text(
+                                        text = title,
+                                        maxLines = 1,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                modifier = Modifier
+                                    .padding(horizontal = 4.dp, vertical = 6.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                                    )
                             )
                         }
                     }

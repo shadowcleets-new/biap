@@ -1,12 +1,20 @@
-﻿package com.example.biap.ui.main
+package com.example.biap.ui.main
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -14,9 +22,11 @@ import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -33,6 +43,7 @@ import com.example.biap.DesignDetail
 import com.example.biap.data.BusinessIntelligenceData
 import com.example.biap.data.DefaultDataRepository
 import com.example.biap.data.Design
+import com.example.biap.theme.GeminiTheme
 import java.io.File
 
 @Composable
@@ -109,13 +120,24 @@ internal fun MainScreenContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(24.dp)
             ) {
-                Icon(
-                    Icons.Default.Inventory,
-                    contentDescription = "Empty stock",
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
-                Spacer(Modifier.height(16.dp))
+                Box(
+                    modifier = Modifier
+                        .size(96.dp)
+                        .background(
+                            brush = if (isSystemInDarkTheme()) GeminiTheme.darkGlowBrush else GeminiTheme.lightGlowBrush,
+                            shape = CircleShape,
+                            alpha = 0.12f
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Inventory,
+                        contentDescription = "Empty stock",
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(Modifier.height(20.dp))
                 Text(
                     "No designs added yet",
                     style = MaterialTheme.typography.titleMedium,
@@ -156,11 +178,42 @@ fun DesignCard(design: Design, onClick: () -> Unit) {
         else -> "₹${prices.minOrNull()} - ₹${prices.maxOrNull()}"
     }
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
+        label = "scale"
+    )
+
+    val isDark = isSystemInDarkTheme()
+    val borderBrush = Brush.linearGradient(
+        colors = if (isDark) {
+            listOf(
+                Color(0xFF9EC5FF).copy(alpha = 0.2f),
+                Color(0xFFC5A3FF).copy(alpha = 0.2f),
+                Color(0xFF80DEEA).copy(alpha = 0.2f)
+            )
+        } else {
+            listOf(
+                Color(0xFF1A73E8).copy(alpha = 0.15f),
+                Color(0xFF9C27B0).copy(alpha = 0.15f),
+                Color(0xFF00E5FF).copy(alpha = 0.15f)
+            )
+        }
+    )
+
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, borderBrush),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .scale(scale)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick
+            ),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column {
@@ -168,13 +221,22 @@ fun DesignCard(design: Design, onClick: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(140.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .background(
                         Brush.linearGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.surfaceVariant,
-                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-                            )
+                            colors = if (isDark) {
+                                listOf(
+                                    Color(0xFF9EC5FF).copy(alpha = 0.12f),
+                                    Color(0xFFC5A3FF).copy(alpha = 0.12f),
+                                    Color(0xFF80DEEA).copy(alpha = 0.12f)
+                                )
+                            } else {
+                                listOf(
+                                    Color(0xFF1A73E8).copy(alpha = 0.08f),
+                                    Color(0xFF9C27B0).copy(alpha = 0.08f),
+                                    Color(0xFF00E5FF).copy(alpha = 0.08f)
+                                )
+                            }
                         )
                     ),
                 contentAlignment = Alignment.Center
@@ -190,7 +252,8 @@ fun DesignCard(design: Design, onClick: () -> Unit) {
                     Icon(
                         Icons.Default.Inventory,
                         contentDescription = "No photo",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        modifier = Modifier.size(32.dp),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                     )
                 }
             }
