@@ -60,7 +60,7 @@ fun AddDesignScreen(
     var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
             val localPath = copyUriToInternalStorage(context, uri)
@@ -184,7 +184,7 @@ fun AddDesignScreen(
 
                     OutlinedTextField(
                         value = state.name,
-                        onValueChange = { viewModel.onNameChange(it) },
+                        onValueChange = { if (it.length <= 80) viewModel.onNameChange(it) },
                         label = { Text("Design Name / Code") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -193,7 +193,7 @@ fun AddDesignScreen(
 
                     OutlinedTextField(
                         value = state.category,
-                        onValueChange = { viewModel.onCategoryChange(it) },
+                        onValueChange = { if (it.length <= 80) viewModel.onCategoryChange(it) },
                         label = { Text("Category (e.g. Salwar Kameez)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -285,11 +285,12 @@ fun AddDesignScreen(
                                 OutlinedTextField(
                                     value = stockText,
                                     onValueChange = { newValue ->
-                                        if (newValue.isEmpty() || newValue.toIntOrNull() != null) {
-                                            stockText = newValue
+                                        val digitsOnly = newValue.filter { it.isDigit() }
+                                        if (digitsOnly.length <= 6) {
+                                            stockText = digitsOnly
                                             viewModel.updateSizeInventory(
                                                 size,
-                                                newValue.toIntOrNull() ?: 0,
+                                                digitsOnly.toIntOrNull() ?: 0,
                                                 priceText.toDoubleOrNull() ?: 0.0,
                                                 true
                                             )
@@ -304,12 +305,14 @@ fun AddDesignScreen(
                                 OutlinedTextField(
                                     value = priceText,
                                     onValueChange = { newValue ->
-                                        if (newValue.isEmpty() || newValue.toDoubleOrNull() != null) {
-                                            priceText = newValue
+                                        val dotCount = newValue.count { it == '.' }
+                                        val sanitized = newValue.filter { it.isDigit() || it == '.' }
+                                        if (dotCount <= 1 && sanitized.length <= 9) {
+                                            priceText = sanitized
                                             viewModel.updateSizeInventory(
                                                 size,
                                                 stockText.toIntOrNull() ?: 0,
-                                                newValue.toDoubleOrNull() ?: 0.0,
+                                                sanitized.toDoubleOrNull() ?: 0.0,
                                                 true
                                             )
                                         }
@@ -331,7 +334,7 @@ fun AddDesignScreen(
                             text = {
                                 OutlinedTextField(
                                     value = newSizeInput,
-                                    onValueChange = { newSizeInput = it },
+                                    onValueChange = { if (it.length <= 10) newSizeInput = it },
                                     label = { Text("Size Label (e.g. 3XL, 6XL, 42)") },
                                     singleLine = true,
                                     shape = RoundedCornerShape(12.dp),
@@ -441,7 +444,7 @@ fun AddDesignScreen(
                             ) {
                                 OutlinedTextField(
                                     value = value,
-                                    onValueChange = { viewModel.updateCustomFieldValue(key, it) },
+                                    onValueChange = { if (it.length <= 200) viewModel.updateCustomFieldValue(key, it) },
                                     label = { Text(if (isGlobal) "$cleanLabel (Global)" else cleanLabel) },
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(12.dp)
@@ -472,7 +475,7 @@ fun AddDesignScreen(
 
                     OutlinedTextField(
                         value = newKey,
-                        onValueChange = { newKey = it },
+                        onValueChange = { if (it.length <= 50) newKey = it },
                         label = { Text("Field Name (e.g. Sleeve Style, Lining)") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
@@ -547,7 +550,11 @@ fun AddDesignScreen(
                             Button(
                                 onClick = {
                                     showSourceSelector = false
-                                    imagePickerLauncher.launch("image/*")
+                                    imagePickerLauncher.launch(
+                                        androidx.activity.result.PickVisualMediaRequest(
+                                            ActivityResultContracts.PickVisualMedia.ImageOnly
+                                        )
+                                    )
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp)

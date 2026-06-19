@@ -1,5 +1,36 @@
 # Chronos Changelog
 
+## [2026-06-19 20:20:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
+
+### 1. Intent, Roles, & Context
+
+- **The Problem:** Adhere to Android's latest safety and privacy standards, implement adaptive performance profiling for battery-saving and low-end hardware, and enforce strict input validation to avoid system crashes.
+- **Specialist Personas Invoked:** Android Safety and Security Auditor, Performance Engineer, Defensive Software Engineer.
+- **The Strategy:**
+  - Create `PerformanceManager.kt` to dynamically observe system power save mode (with broadcast receiver) and CPU cores (concurrency check) to yield a performance profile.
+  - Make visual scale spring animations conditional on the active performance profile, avoiding animation overhead when in low power or low-end device states.
+  - Replace the gallery file picker with the privacy-centric `PickVisualMedia` API to ensure the app conforms to modern Android media privacy policies.
+  - Implement defensive input validation: limit input lengths on name, category, labels, and keys, and strictly sanitize/limit stock and price digits to prevent integer/double overflow crashes.
+
+### 2. Surgical Technical Modifications
+
+- **Modified Files:**
+  - `CHANGELOG.md` (Added session log entry)
+  - `app/src/main/java/com/example/biap/ui/main/MainScreen.kt` (Adaptive press scale animation using performance profile)
+  - `app/src/main/java/com/example/biap/ui/design/AddDesignScreen.kt` (Updated gallery launcher to PickVisualMedia, integrated strict text length/digit limits and input validation sanitization)
+- **New Files:**
+  - `app/src/main/java/com/example/biap/ui/PerformanceManager.kt` (Performance Profile definition and BroadcastReceiver state-flow provider)
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+
+- **Execution Commands & Diagnostics:**
+  - Verified Kotlin compilation via `.\gradlew.bat compileDebugKotlin` task bcd7f83e-34ea-4da0-b29f-917437ddf6eb/task-710.
+  - Verified full test suite execution via `.\gradlew.bat test` task.
+- **Resulting App State:** The app dynamically throttles visual dynamics in low power mode, selects photos via privacy-safe APIs, and is immune to numerical/input text overflow bugs.
+
+---
+
 ## [2026-06-19 20:07:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
 
 ### 1. Intent, Roles, & Context

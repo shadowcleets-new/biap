@@ -49,6 +49,8 @@ import com.example.biap.data.DefaultDataRepository
 import com.example.biap.data.Design
 import com.example.biap.theme.GeminiTheme
 import java.io.File
+import com.example.biap.ui.rememberPerformanceProfile
+import com.example.biap.ui.PerformanceProfile
 
 @Composable
 fun defaultMainScreenViewModel(): MainScreenViewModel {
@@ -202,11 +204,17 @@ fun DesignCard(design: Design, onClick: () -> Unit) {
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
+    val profile = rememberPerformanceProfile()
+    val animatedScale by animateFloatAsState(
         targetValue = if (isPressed) 0.95f else 1f,
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
         label = "scale"
     )
+    val scale = if (profile == PerformanceProfile.LOW_POWER) {
+        if (isPressed) 0.95f else 1f
+    } else {
+        animatedScale
+    }
 
     val isDark = isSystemInDarkTheme()
     val borderBrush = Brush.linearGradient(

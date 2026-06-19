@@ -24,3 +24,7 @@ biap is a native Android Business Intelligence application designed to provide r
 - [x] Rename project to 'biap' (refactor packaging, directories, and configuration).
 - [x] Implement design upload, size-specific pricing and stock tracking.
 - [x] Implement structured 3-piece custom and global attributes (Top, Bottom, Dupatta, General).
+- [x] Configure PickVisualMedia API for safe, zero-permission gallery photo selection.
+- [x] Establish PerformanceManager and rememberPerformanceProfile system for battery/hardware-aware animation throttling.
+- [x] Introduce defensive input text boundaries, length restrictions, and character digit sanitization.
+
