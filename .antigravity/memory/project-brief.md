@@ -6,7 +6,7 @@ biap is a native Android Business Intelligence application designed to provide r
 ## 2. Architectural Overview
 - **Platform:** Native Android (Kotlin)
 - **UI Framework:** Jetpack Compose
-- **Build System:** Gradle (Kotlin DSL, AGP 9)
+- **Build System:** Gradle (Kotlin DSL, AGP 9.2.1, Gradle Wrapper 9.4.1)
 - **Minimum SDK:** Android 24+
 - **Target SDK:** Android 36
 
