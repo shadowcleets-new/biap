@@ -18,7 +18,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Inventory
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,6 +64,7 @@ fun MainScreen(
     viewModel: MainScreenViewModel = defaultMainScreenViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -87,11 +92,22 @@ fun MainScreen(
             }
             is MainScreenUiState.Success -> {
                 val data = (state as MainScreenUiState.Success).data
-                MainScreenContent(
-                    data = data,
-                    onItemClick = onItemClick,
-                    modifier = Modifier.padding(paddingValues)
-                )
+                Column(
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .fillMaxSize()
+                ) {
+                    SearchBarField(
+                        query = searchQuery,
+                        onQueryChange = { viewModel.updateSearchQuery(it) }
+                    )
+                    MainScreenContent(
+                        data = data,
+                        query = searchQuery,
+                        onItemClick = onItemClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
             is MainScreenUiState.Error -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -108,6 +124,7 @@ fun MainScreen(
 @Composable
 internal fun MainScreenContent(
     data: BusinessIntelligenceData,
+    query: String,
     onItemClick: (NavKey) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -131,7 +148,7 @@ internal fun MainScreenContent(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.Inventory,
+                        if (query.isNotEmpty()) Icons.Default.SearchOff else Icons.Default.Inventory,
                         contentDescription = "Empty stock",
                         modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.primary
@@ -139,17 +156,22 @@ internal fun MainScreenContent(
                 }
                 Spacer(Modifier.height(20.dp))
                 Text(
-                    "No designs added yet",
+                    text = if (query.isNotEmpty()) "No results found" else "No designs added yet",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Tap the + button to upload design photos, set prices by size, and add custom fields.",
+                    text = if (query.isNotEmpty()) {
+                        "We couldn't find anything matching \"$query\". Check for typos or search by category, size, or material."
+                    } else {
+                        "Tap the + button to upload design photos, set prices by size, and add custom fields."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.width(280.dp),
-                    onTextLayout = {}
+                    onTextLayout = {},
+                    textAlign = TextAlign.Center
                 )
             }
         }
@@ -297,4 +319,47 @@ fun DesignCard(design: Design, onClick: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+fun SearchBarField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isDark = isSystemInDarkTheme()
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        placeholder = { Text("Search by name, fabric, color, size...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) },
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        leadingIcon = {
+            Icon(
+                Icons.Default.Search,
+                contentDescription = "Search",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(
+                        Icons.Default.Clear,
+                        contentDescription = "Clear search",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        singleLine = true,
+        shape = RoundedCornerShape(24.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+        )
+    )
 }
