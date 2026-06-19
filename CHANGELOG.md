@@ -1,5 +1,36 @@
 # Chronos Changelog
 
+## [2026-06-19 19:37:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
+
+### 1. Intent, Roles, & Context
+
+- **The Problem:** Refactor standard portfolio grid and screen layout tabs to implement Material 3 Expressive and Android 17 characteristics (spring touch animation dynamics, custom glowing gradients, and pill capsule selection chips).
+- **Specialist Personas Invoked:** Android Architect, UI Motion Designer, UI/UX Specialist.
+- **The Strategy:**
+  - Enhance `DesignCard` in `MainScreen.kt` by wrapping it in an organic spring touch interaction scale curve (shrinking to 95% on press and bouncing back via spring physics).
+  - Implement dynamic glowing border brushes and container overlays using opacity-mapped color gradients from the Google Gemini theme.
+  - Refactor empty state representations with a stylized glowing background circle layout.
+  - Replace tab rows in `AddDesignScreen.kt` and `DesignDetailScreen.kt` with modern custom capsule segment chips (pill-shaped selected states) by suppressing standard line indicators.
+
+### 2. Surgical Technical Modifications
+
+- **Modified Files:**
+  - `CHANGELOG.md` (Updated header & added new session log)
+  - `app/src/main/java/com/example/biap/ui/main/MainScreen.kt` (DesignCard organic animation, glow gradients, and empty state visual styling)
+  - `app/src/main/java/com/example/biap/ui/design/AddDesignScreen.kt` (Refactored tab row into capsule segment chips)
+  - `app/src/main/java/com/example/biap/ui/design/DesignDetailScreen.kt` (Refactored tab row into capsule segment chips)
+- **New Files:** None.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+
+- **Execution Commands & Diagnostics:**
+  - Verified successful compilation via `.\gradlew.bat compileDebugKotlin` task bcd7f83e-34ea-4da0-b29f-917437ddf6eb/task-521.
+  - Verified successful execution of all unit tests via `.\gradlew.bat test` task bcd7f83e-34ea-4da0-b29f-917437ddf6eb/task-540.
+- **Resulting App State:** Premium Bento grid cards are fully interactive with spring dynamics; tab rows utilize modern pill layouts.
+
+---
+
 ## [2026-06-19 19:05:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
 
 ### 1. Intent, Roles, & Context
