@@ -39,6 +39,11 @@ import coil3.compose.rememberAsyncImagePainter
 import com.example.biap.data.DefaultDataRepository
 import com.example.biap.data.Design
 import com.example.biap.data.SizeInventory
+import com.example.biap.util.FileUtils
+import com.example.biap.util.SizeUtils
+import com.example.biap.theme.AtelierSpacing
+import com.example.biap.theme.horizontalFadingEdges
+import kotlinx.coroutines.launch
 import java.io.File
 
 @Composable
@@ -73,12 +78,16 @@ fun DesignDetailScreen(
     var showSourceSelector by remember { mutableStateOf(false) }
     var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
 
+    val scope = rememberCoroutineScope()
+
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            val localPath = copyUriToInternalStorage(context, uri)
-            editImagePath = localPath
+            scope.launch {
+                val localPath = FileUtils.copyUriToInternalStorage(context, uri)
+                editImagePath = localPath
+            }
         }
     }
 
@@ -86,8 +95,10 @@ fun DesignDetailScreen(
         contract = ActivityResultContracts.TakePicture()
     ) { success: Boolean ->
         if (success && tempPhotoUri != null) {
-            val localPath = copyUriToInternalStorage(context, tempPhotoUri!!)
-            editImagePath = localPath
+            scope.launch {
+                val localPath = FileUtils.copyUriToInternalStorage(context, tempPhotoUri!!)
+                editImagePath = localPath
+            }
         }
     }
 
@@ -372,21 +383,32 @@ fun DesignDetailScreen(
                                 
                                 var showCustomSizeDialog by remember { mutableStateOf(false) }
                                 var newSizeInput by remember { mutableStateOf("") }
-                                val availableSizes = remember { mutableStateListOf("S", "M", "L", "XL", "XXL") }
+                                var sizeToRemove by remember { mutableStateOf<String?>(null) }
+                                val availableSizes = remember { mutableStateListOf(*SizeUtils.sortSizes(listOf("S", "M", "L", "XL", "XXL")).toTypedArray()) }
+                                val sizeCache = remember { mutableMapOf<String, SizeInventory>() }
                                 
                                 LaunchedEffect(editSizes) {
+                                    var addedAny = false
                                     editSizes.forEach {
                                         if (!availableSizes.contains(it.size)) {
                                             availableSizes.add(it.size)
+                                            addedAny = true
                                         }
+                                    }
+                                    if (addedAny) {
+                                        val sorted = SizeUtils.sortSizes(availableSizes.toList())
+                                        availableSizes.clear()
+                                        availableSizes.addAll(sorted)
                                     }
                                 }
 
+                                val editSizesScrollState = rememberScrollState()
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        .horizontalFadingEdges(editSizesScrollState)
+                                        .horizontalScroll(editSizesScrollState),
+                                    horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     availableSizes.forEach { size ->
@@ -394,21 +416,34 @@ fun DesignDetailScreen(
                                         FilterChip(
                                             selected = isEnabled,
                                             onClick = {
-                                                val updated = editSizes.toMutableList()
                                                 if (isEnabled) {
-                                                    updated.removeAll { it.size == size }
+                                                    val inventory = editSizes.find { it.size == size }
+                                                    if (inventory != null) {
+                                                        sizeCache[size] = inventory
+                                                    }
+                                                    if (inventory != null && (inventory.stock > 0 || inventory.price > 0L)) {
+                                                        sizeToRemove = size
+                                                    } else {
+                                                        val updated = editSizes.toMutableList()
+                                                        updated.removeAll { it.size == size }
+                                                        editSizes = updated
+                                                    }
                                                 } else {
-                                                    updated.add(SizeInventory(size, 0, 0.0))
+                                                    val cached = sizeCache[size]
+                                                    val updated = editSizes.toMutableList()
+                                                    updated.add(cached ?: SizeInventory(size, 0, 0L))
+                                                    editSizes = updated
                                                 }
-                                                editSizes = updated
                                             },
-                                            label = { Text(size, fontWeight = FontWeight.Bold) }
+                                            label = { Text(size, fontWeight = FontWeight.Bold) },
+                                            modifier = Modifier.minimumInteractiveComponentSize()
                                         )
                                     }
                                     InputChip(
                                         selected = false,
                                         onClick = { showCustomSizeDialog = true },
-                                        label = { Text("+ Custom") }
+                                        label = { Text("+ Custom") },
+                                        modifier = Modifier.minimumInteractiveComponentSize()
                                     )
                                 }
 
@@ -420,9 +455,19 @@ fun DesignDetailScreen(
                                         modifier = Modifier.padding(vertical = 12.dp)
                                     )
                                 } else {
-                                    editSizes.sortedBy { it.size }.forEach { inv ->
+                                    editSizes.sortedBy { SizeUtils.getSizeSortWeight(it.size) }.forEach { inv ->
                                         var stockText by remember(inv) { mutableStateOf(inv.stock.toString()) }
-                                        var priceText by remember(inv) { mutableStateOf(inv.price.toString()) }
+                                        var priceText by remember { 
+                                            val initialText = if (inv.price == 0L) "" else (inv.price / 100.0).toString()
+                                            mutableStateOf(initialText) 
+                                        }
+
+                                        LaunchedEffect(inv.price) {
+                                            val parsedCents = FileUtils.parsePriceToCents(priceText)
+                                            if (parsedCents != inv.price) {
+                                                priceText = if (inv.price == 0L) "" else (inv.price / 100.0).toString()
+                                            }
+                                        }
 
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
@@ -467,12 +512,16 @@ fun DesignDetailScreen(
                                                     val dotCount = newValue.count { it == '.' }
                                                     val sanitized = newValue.filter { it.isDigit() || it == '.' }
                                                     if (dotCount <= 1 && sanitized.length <= 9) {
-                                                        priceText = sanitized
-                                                        val updated = editSizes.toMutableList()
-                                                        val idx = updated.indexOfFirst { it.size == inv.size }
-                                                        if (idx >= 0) {
-                                                            updated[idx] = inv.copy(price = sanitized.toDoubleOrNull() ?: 0.0)
-                                                            editSizes = updated
+                                                        val dotIndex = sanitized.indexOf('.')
+                                                        if (dotIndex == -1 || sanitized.length - dotIndex - 1 <= 2) {
+                                                            priceText = sanitized
+                                                            val parsedCents = FileUtils.parsePriceToCents(sanitized)
+                                                            val updated = editSizes.toMutableList()
+                                                            val idx = updated.indexOfFirst { it.size == inv.size }
+                                                            if (idx >= 0) {
+                                                                updated[idx] = inv.copy(price = parsedCents)
+                                                                editSizes = updated
+                                                            }
                                                         }
                                                     }
                                                 },
@@ -487,6 +536,10 @@ fun DesignDetailScreen(
                                 }
 
                                 if (showCustomSizeDialog) {
+                                    val normInput = newSizeInput.trim().uppercase()
+                                    val sizeExists = remember(newSizeInput, availableSizes) {
+                                        normInput.isNotEmpty() && availableSizes.contains(normInput)
+                                    }
                                     AlertDialog(
                                         onDismissRequest = { showCustomSizeDialog = false },
                                         title = { Text("Add Custom Size", fontWeight = FontWeight.Bold) },
@@ -497,32 +550,78 @@ fun DesignDetailScreen(
                                                 label = { Text("Size Label (e.g. 3XL)") },
                                                 singleLine = true,
                                                 shape = RoundedCornerShape(12.dp),
+                                                isError = sizeExists,
+                                                supportingText = if (sizeExists) {
+                                                    { Text("This size is already configured!", color = MaterialTheme.colorScheme.error) }
+                                                } else null,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
                                         },
                                         confirmButton = {
                                             Button(
                                                 onClick = {
-                                                    if (newSizeInput.isNotBlank()) {
+                                                    if (newSizeInput.isNotBlank() && !sizeExists) {
                                                         val norm = newSizeInput.trim().uppercase()
                                                         if (!availableSizes.contains(norm)) {
                                                             availableSizes.add(norm)
+                                                            val sorted = SizeUtils.sortSizes(availableSizes.toList())
+                                                            availableSizes.clear()
+                                                            availableSizes.addAll(sorted)
                                                         }
                                                         val updated = editSizes.toMutableList()
                                                         if (!updated.any { it.size == norm }) {
-                                                            updated.add(SizeInventory(norm, 0, 0.0))
+                                                            updated.add(SizeInventory(norm, 0, 0L))
                                                             editSizes = updated
                                                         }
                                                         newSizeInput = ""
                                                         showCustomSizeDialog = false
                                                     }
-                                                }
+                                                },
+                                                enabled = newSizeInput.isNotBlank() && !sizeExists,
+                                                modifier = Modifier.minimumInteractiveComponentSize()
                                             ) {
                                                 Text("Add")
                                             }
                                         },
                                         dismissButton = {
-                                            TextButton(onClick = { showCustomSizeDialog = false }) {
+                                            TextButton(
+                                                onClick = { showCustomSizeDialog = false },
+                                                modifier = Modifier.minimumInteractiveComponentSize()
+                                            ) {
+                                                Text("Cancel")
+                                            }
+                                        }
+                                    )
+                                }
+
+                                if (sizeToRemove != null) {
+                                    AlertDialog(
+                                        onDismissRequest = { sizeToRemove = null },
+                                        title = { Text("Remove Size $sizeToRemove?") },
+                                        text = { Text("This will clear the price and stock values configured for this size. Are you sure you want to remove it?") },
+                                        confirmButton = {
+                                            TextButton(
+                                                onClick = {
+                                                    val inventory = editSizes.find { it.size == sizeToRemove }
+                                                    if (inventory != null) {
+                                                        sizeCache[sizeToRemove!!] = inventory
+                                                    }
+                                                    val updated = editSizes.toMutableList()
+                                                    updated.removeAll { it.size == sizeToRemove }
+                                                    editSizes = updated
+                                                    sizeToRemove = null
+                                                },
+                                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                                modifier = Modifier.minimumInteractiveComponentSize()
+                                            ) {
+                                                Text("Remove")
+                                            }
+                                        },
+                                        dismissButton = {
+                                            TextButton(
+                                                onClick = { sizeToRemove = null },
+                                                modifier = Modifier.minimumInteractiveComponentSize()
+                                            ) {
                                                 Text("Cancel")
                                             }
                                         }
@@ -550,7 +649,7 @@ fun DesignDetailScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 } else {
-                                    val sortedInventories = design.sizeInventories.sortedBy { it.size }
+                                    val sortedInventories = design.sizeInventories.sortedBy { SizeUtils.getSizeSortWeight(it.size) }
                                     var selectedSizeIndex by remember(design) { mutableStateOf(0) }
                                     
                                     if (selectedSizeIndex >= sortedInventories.size) {

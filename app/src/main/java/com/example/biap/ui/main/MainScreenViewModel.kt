@@ -39,7 +39,12 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
           sizeInv.stock > 0 && sizeInv.size.equals(query, ignoreCase = true)
         }
 
-        matchesBasic || matchesAttributes || matchesSize
+        // 4. Search by assigned karigar names (case-insensitive)
+        val matchesKarigars = design.karigars.any { karigar ->
+          karigar.contains(query, ignoreCase = true)
+        }
+
+        matchesBasic || matchesAttributes || matchesSize || matchesKarigars
       }
       Success(data.copy(designs = filteredDesigns))
     }
@@ -58,13 +63,26 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
 
   val authManager get() = dataRepository.authManager
   val isSyncing: StateFlow<Boolean> = dataRepository.isSyncing
+  val syncStatus: StateFlow<com.example.biap.data.SyncStatus> = dataRepository.syncStatus
 
   fun syncWithGoogleDrive() {
     dataRepository.syncWithGoogleDrive()
   }
 
+  fun resetSyncStatus() {
+    dataRepository.resetSyncStatus()
+  }
+
   fun signOut(onComplete: () -> Unit) {
     dataRepository.signOut(onComplete)
+  }
+
+  suspend fun hasGuestData(): Boolean {
+    return dataRepository.hasGuestData()
+  }
+
+  suspend fun mergeGuestData(): Boolean {
+    return dataRepository.mergeGuestData()
   }
 }
 

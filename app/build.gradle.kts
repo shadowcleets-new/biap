@@ -3,6 +3,8 @@ plugins {
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.google.services)
+  kotlin("android")
+  kotlin("kapt")
 }
 
 android {
@@ -87,6 +89,19 @@ dependencies {
   implementation(libs.androidx.material.icons.extended)
   implementation(libs.okhttp)
   implementation(libs.play.services.auth)
+
+  // Room Database
+  implementation(libs.androidx.room.runtime)
+  implementation(libs.androidx.room.ktx)
+  "kapt"(libs.androidx.room.compiler)
+
+  // WorkManager & Security
+  implementation(libs.androidx.work.runtime.ktx)
+  implementation(libs.androidx.security.crypto)
+}
+
+kotlin {
+    jvmToolchain(17)
 }
 
 

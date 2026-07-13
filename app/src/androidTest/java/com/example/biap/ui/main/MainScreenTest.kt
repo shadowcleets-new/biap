@@ -1,26 +1,40 @@
-﻿package com.example.biap.ui.main
+package com.example.biap.ui.main
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import com.example.biap.data.BusinessIntelligenceData
+import com.example.biap.data.Design
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
-/** UI tests for [com.example.biap.ui.main.MainScreen]. */
+/** UI tests for [com.example.biap.ui.main.MainScreenContent]. */
 class MainScreenTest {
 
-  @get:Rule val composeTestRule = createAndroidComposeRule<ComponentActivity>()
+    @get:Rule val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
-  @Before
-  fun setup() {
-    composeTestRule.setContent { MainScreen(FAKE_DATA) }
-  }
+    @Before
+    fun setup() {
+        composeTestRule.setContent {
+            MainScreenContent(
+                data = FAKE_BI_DATA,
+                query = "",
+                onItemClick = {}
+            )
+        }
+    }
 
-  @Test
-  fun firstItem_exists() {
-    FAKE_DATA.forEach { composeTestRule.onNodeWithText("Hello $it!").assertExists() }
-  }
+    @Test
+    fun firstItem_exists() {
+        FAKE_BI_DATA.designs.forEach { composeTestRule.onNodeWithText(it.name).assertExists() }
+    }
 }
 
-private val FAKE_DATA = listOf("Sample1", "Sample2", "Sample3")
+private val FAKE_BI_DATA = BusinessIntelligenceData(
+    designs = listOf(
+        Design(id = "1", name = "Sample1", category = "Category1"),
+        Design(id = "2", name = "Sample2", category = "Category2"),
+        Design(id = "3", name = "Sample3", category = "Category3")
+    )
+)

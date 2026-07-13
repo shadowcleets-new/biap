@@ -37,6 +37,10 @@ private class FakeMyModelRepository : DataRepository {
   override val authManager: com.example.biap.util.AuthManager
     get() = throw UnsupportedOperationException("AuthManager not supported in tests")
   override val isSyncing: StateFlow<Boolean> = MutableStateFlow(false)
+  override val syncStatus: StateFlow<com.example.biap.data.SyncStatus> = MutableStateFlow(com.example.biap.data.SyncStatus.Idle)
   override fun syncWithGoogleDrive() {}
+  override fun resetSyncStatus() {}
   override fun signOut(onComplete: () -> Unit) { onComplete() }
+  override suspend fun hasGuestData(): Boolean = false
+  override suspend fun mergeGuestData(): Boolean = false
 }

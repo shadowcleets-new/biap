@@ -16,11 +16,11 @@ class GoogleDriveSyncManager {
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
-     * Search for the bi_data.json.enc file in the appDataFolder on Google Drive.
+     * Search for a file by name in the appDataFolder on Google Drive.
      * Returns the file ID if found, or null if not found.
      */
-    suspend fun searchFile(accessToken: String): String? = withContext(Dispatchers.IO) {
-        val url = "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='bi_data.json.enc'&fields=files(id,name)"
+    suspend fun searchFile(accessToken: String, fileName: String = "bi_data.json.enc"): String? = withContext(Dispatchers.IO) {
+        val url = "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='$fileName'&fields=files(id,name)"
         val request = Request.Builder()
             .url(url)
             .header("Authorization", "Bearer $accessToken")
@@ -45,7 +45,7 @@ class GoogleDriveSyncManager {
 
     /**
      * Download the file content from Google Drive by its file ID.
-     * Returns the raw encrypted string content.
+     * Returns the raw string content.
      */
     suspend fun downloadFile(accessToken: String, fileId: String): String? = withContext(Dispatchers.IO) {
         val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media"
@@ -68,11 +68,16 @@ class GoogleDriveSyncManager {
     }
 
     /**
-     * Upload the encrypted data to Google Drive.
-     * If fileId is null, it creates the file metadata first, then uploads the media.
+     * Upload data to Google Drive.
+     * If existingFileId is null, it creates the file metadata first, then uploads the media.
      * Returns the file ID on success, or null on failure.
      */
-    suspend fun uploadFile(accessToken: String, encryptedContent: String, existingFileId: String?): String? = withContext(Dispatchers.IO) {
+    suspend fun uploadFile(
+        accessToken: String,
+        content: String,
+        existingFileId: String?,
+        fileName: String = "bi_data.json.enc"
+    ): String? = withContext(Dispatchers.IO) {
         var fileId = existingFileId
 
         if (fileId == null) {
@@ -80,7 +85,7 @@ class GoogleDriveSyncManager {
             val url = "https://www.googleapis.com/drive/v3/files"
             val metadataJson = """
                 {
-                  "name": "bi_data.json.enc",
+                  "name": "$fileName",
                   "parents": ["appDataFolder"]
                 }
             """.trimIndent()
@@ -108,7 +113,7 @@ class GoogleDriveSyncManager {
 
         // Step 2: Upload media content to the file ID
         val uploadUrl = "https://www.googleapis.com/upload/drive/v3/files/$targetFileId?uploadType=media"
-        val mediaBody = encryptedContent.toRequestBody("application/octet-stream".toMediaType())
+        val mediaBody = content.toRequestBody("application/octet-stream".toMediaType())
         val uploadRequest = Request.Builder()
             .url(uploadUrl)
             .header("Authorization", "Bearer $accessToken")

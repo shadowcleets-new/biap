@@ -11,56 +11,64 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
+
+import androidx.compose.material3.ColorScheme
 
 private val DarkColorScheme = darkColorScheme(
-    primary = GeminiDarkPrimary,
-    onPrimary = GeminiDarkOnPrimary,
-    primaryContainer = GeminiDarkPrimaryContainer,
-    onPrimaryContainer = GeminiDarkOnPrimaryContainer,
-    secondary = GeminiDarkSecondary,
-    onSecondary = GeminiDarkOnSecondary,
-    tertiary = GeminiDarkTertiary,
-    onTertiary = GeminiDarkOnTertiary,
-    background = GeminiDarkBackground,
-    onBackground = GeminiDarkOnBackground,
-    surface = GeminiDarkSurface,
-    onSurface = GeminiDarkOnSurface,
-    surfaceVariant = GeminiDarkSurfaceVariant,
-    onSurfaceVariant = GeminiDarkOnSurfaceVariant,
-    outline = GeminiDarkOutline
+    primary = HeritageDarkPrimary,
+    onPrimary = HeritageDarkOnPrimary,
+    primaryContainer = HeritageDarkPrimaryContainer,
+    onPrimaryContainer = HeritageDarkOnPrimaryContainer,
+    secondary = HeritageDarkSecondary,
+    onSecondary = HeritageDarkOnSecondary,
+    tertiary = HeritageDarkTertiary,
+    onTertiary = HeritageDarkOnTertiary,
+    background = HeritageDarkBackground,
+    onBackground = HeritageDarkOnBackground,
+    surface = HeritageDarkSurface,
+    onSurface = HeritageDarkOnSurface,
+    surfaceVariant = HeritageDarkSurfaceVariant,
+    onSurfaceVariant = HeritageDarkOnSurfaceVariant,
+    outline = HeritageDarkOutline
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = GeminiLightPrimary,
-    onPrimary = GeminiLightOnPrimary,
-    primaryContainer = GeminiLightPrimaryContainer,
-    onPrimaryContainer = GeminiLightOnPrimaryContainer,
-    secondary = GeminiLightSecondary,
-    onSecondary = GeminiLightOnSecondary,
-    tertiary = GeminiLightTertiary,
-    onTertiary = GeminiLightOnTertiary,
-    background = GeminiLightBackground,
-    onBackground = GeminiLightOnBackground,
-    surface = GeminiLightSurface,
-    onSurface = GeminiLightOnSurface,
-    surfaceVariant = GeminiLightSurfaceVariant,
-    onSurfaceVariant = GeminiLightOnSurfaceVariant,
-    outline = GeminiLightOutline
+    primary = HeritageLightPrimary,
+    onPrimary = HeritageLightOnPrimary,
+    primaryContainer = HeritageLightPrimaryContainer,
+    onPrimaryContainer = HeritageLightOnPrimaryContainer,
+    secondary = HeritageLightSecondary,
+    onSecondary = HeritageLightOnSecondary,
+    tertiary = HeritageLightTertiary,
+    onTertiary = HeritageLightOnTertiary,
+    background = HeritageLightBackground,
+    onBackground = HeritageLightOnBackground,
+    surface = HeritageLightSurface,
+    onSurface = HeritageLightOnSurface,
+    surfaceVariant = HeritageLightSurfaceVariant,
+    onSurfaceVariant = HeritageLightOnSurfaceVariant,
+    outline = HeritageLightOutline
 )
 
-object GeminiTheme {
+val ColorScheme.warning: Color
+    @Composable
+    get() = if (isSystemInDarkTheme()) HeritageDarkWarning else HeritageLightWarning
+
+object AtelierTheme {
     val lightGlowBrush = Brush.linearGradient(
         colors = listOf(
-            Color(0xFF1A73E8), // Google Blue
-            Color(0xFF9C27B0), // Violet / Purple
-            Color(0xFF00E5FF)  // Light Cyan
+            Color(0xFF1C1B18), // Warm Charcoal
+            Color(0xFF8C7A5C), // Muted Bronze
+            Color(0xFFD1CFC7)  // Light Outline Grey
         )
     )
     val darkGlowBrush = Brush.linearGradient(
         colors = listOf(
-            Color(0xFF9EC5FF), // Soft Blue
-            Color(0xFFC5A3FF), // Soft Purple
-            Color(0xFF80DEEA)  // Soft Cyan
+            Color(0xFFF5F2E9), // Canvas Cream
+            Color(0xFFB8A78A), // Soft Bronze Accent
+            Color(0xFF3C3D40)  // Muted Charcoal
         )
     )
 }
@@ -68,8 +76,8 @@ object GeminiTheme {
 @Composable
 fun BiapTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
+  // Set dynamic color override to false to protect premium brand identity
+  dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
   val colorScheme =
@@ -84,3 +92,11 @@ fun BiapTheme(
 
   MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }
+
+
+object AtelierShapes {
+    val CornerSmall = RoundedCornerShape(8.dp)
+    val CornerMedium = RoundedCornerShape(12.dp)
+    val CornerLarge = RoundedCornerShape(16.dp)
+}
+

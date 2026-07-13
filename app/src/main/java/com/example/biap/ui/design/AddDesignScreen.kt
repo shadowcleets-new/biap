@@ -2,6 +2,7 @@ package com.example.biap.ui.design
 
 import android.content.Context
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -11,9 +12,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,16 +37,21 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.rememberAsyncImagePainter
 import com.example.biap.data.DefaultDataRepository
 import com.example.biap.data.SizeInventory
+import com.example.biap.theme.AtelierShapes
+import com.example.biap.theme.AtelierSpacing
+import com.example.biap.theme.horizontalFadingEdges
+import com.example.biap.util.FileUtils
 import java.io.File
 
 @Composable
 fun defaultAddDesignViewModel(): AddDesignViewModel {
     val context = LocalContext.current.applicationContext
-    return viewModel { AddDesignViewModel(DefaultDataRepository(context)) }
+    return viewModel { AddDesignViewModel(DefaultDataRepository.getInstance(context)) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,16 +63,22 @@ fun AddDesignScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var showSourceSelector by remember { mutableStateOf(false) }
-    var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var tempPhotoUriString by rememberSaveable { mutableStateOf<String?>(null) }
+    val tempPhotoUri = remember(tempPhotoUriString) {
+        tempPhotoUriString?.let { Uri.parse(it) }
+    }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            val localPath = copyUriToInternalStorage(context, uri)
-            viewModel.onImageSelected(localPath)
+            scope.launch {
+                val localPath = FileUtils.copyUriToInternalStorage(context, uri)
+                viewModel.onImageSelected(localPath)
+            }
         }
     }
 
@@ -72,9 +86,53 @@ fun AddDesignScreen(
         contract = ActivityResultContracts.TakePicture()
     ) { success: Boolean ->
         if (success && tempPhotoUri != null) {
-            val localPath = copyUriToInternalStorage(context, tempPhotoUri!!)
-            viewModel.onImageSelected(localPath)
+            scope.launch {
+                val localPath = FileUtils.copyUriToInternalStorage(context, tempPhotoUri)
+                viewModel.onImageSelected(localPath)
+            }
         }
+    }
+
+    var showUnsavedChangesDialog by remember { mutableStateOf(false) }
+
+    val isFormDirty = remember(state) {
+        state.name.isNotEmpty() ||
+        state.imagePath != null ||
+        state.sizes.isNotEmpty() ||
+        state.karigars.isNotEmpty() ||
+        state.customFields.values.any { it.isNotEmpty() }
+    }
+
+    BackHandler {
+        if (isFormDirty) {
+            showUnsavedChangesDialog = true
+        } else {
+            onBack()
+        }
+    }
+
+    if (showUnsavedChangesDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedChangesDialog = false },
+            title = { Text("Discard Design?") },
+            text = { Text("You have unsaved changes that will be lost. Are you sure you want to discard them?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showUnsavedChangesDialog = false
+                        onBack()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Discard")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedChangesDialog = false }) {
+                    Text("Keep Editing")
+                }
+            }
+        )
     }
 
     LaunchedEffect(state.isSaved) {
@@ -88,7 +146,13 @@ fun AddDesignScreen(
             TopAppBar(
                 title = { Text("Add New Design", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        if (isFormDirty) {
+                            showUnsavedChangesDialog = true
+                        } else {
+                            onBack()
+                        }
+                    }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -96,14 +160,14 @@ fun AddDesignScreen(
                     Button(
                         onClick = { viewModel.saveDesign() },
                         enabled = state.name.isNotBlank(),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = AtelierShapes.CornerMedium,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     ) {
                         Icon(Icons.Default.Done, contentDescription = "Save", modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
+                        Spacer(Modifier.width(AtelierSpacing.Micro))
                         Text("Save")
                     }
                 }
@@ -116,15 +180,15 @@ fun AddDesignScreen(
                 .padding(paddingValues)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(AtelierSpacing.Base),
+            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Large)
         ) {
             // Image Selector
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(AtelierShapes.CornerLarge)
                     .background(
                         Brush.linearGradient(
                             listOf(
@@ -138,7 +202,7 @@ fun AddDesignScreen(
             ) {
                 if (state.imagePath != null) {
                     Image(
-                        painter = rememberAsyncImagePainter(File(state.imagePath!!)),
+                        painter = rememberAsyncImagePainter(FileUtils.resolveImageFile(context, state.imagePath)),
                         contentDescription = "Design Image",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -146,9 +210,9 @@ fun AddDesignScreen(
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(12.dp)
+                            .padding(AtelierSpacing.Cozy)
                             .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                            .padding(8.dp)
+                            .padding(AtelierSpacing.Compact)
                     ) {
                         Icon(
                             Icons.Default.PhotoCamera,
@@ -165,7 +229,7 @@ fun AddDesignScreen(
                             modifier = Modifier.size(40.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(AtelierSpacing.Compact))
                         Text("Upload Design Photo", fontWeight = FontWeight.Medium)
                     }
                 }
@@ -173,12 +237,12 @@ fun AddDesignScreen(
 
             // Design Details
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = AtelierShapes.CornerLarge,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    modifier = Modifier.padding(AtelierSpacing.Base),
+                    verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Base)
                 ) {
                     Text("Basic Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
@@ -188,7 +252,7 @@ fun AddDesignScreen(
                         label = { Text("Design Name / Code") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                        shape = AtelierShapes.CornerMedium
                     )
 
                     OutlinedTextField(
@@ -197,19 +261,19 @@ fun AddDesignScreen(
                         label = { Text("Category (e.g. Salwar Kameez)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                        shape = AtelierShapes.CornerMedium
                     )
                 }
             }
 
             // Size Stock and Pricing Matrix
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = AtelierShapes.CornerLarge,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(AtelierSpacing.Base),
+                    verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
                 ) {
                     Text("Sizes, Stock & Prices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
@@ -220,12 +284,17 @@ fun AddDesignScreen(
 
                     var showCustomSizeDialog by remember { mutableStateOf(false) }
                     var newSizeInput by remember { mutableStateOf("") }
+                    var sizeToRemove by remember { mutableStateOf<String?>(null) }
 
                     Text("Configure Size Scale", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     
+                    val sizeScaleScrollState = rememberScrollState()
                     Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalFadingEdges(sizeScaleScrollState)
+                            .horizontalScroll(sizeScaleScrollState),
+                        horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         state.availableSizes.forEach { size ->
@@ -234,19 +303,54 @@ fun AddDesignScreen(
                                 selected = isEnabled,
                                 onClick = {
                                     if (isEnabled) {
-                                        viewModel.updateSizeInventory(size, 0, 0.0, false)
+                                        val inventory = state.sizes.find { it.size == size }
+                                        if (inventory != null && (inventory.stock > 0 || inventory.price > 0L)) {
+                                            sizeToRemove = size
+                                        } else {
+                                            viewModel.updateSizeInventory(size, 0, 0L, false)
+                                        }
                                     } else {
-                                        viewModel.updateSizeInventory(size, 0, 0.0, true)
+                                        viewModel.updateSizeInventory(size, 0, 0L, true)
                                     }
                                 },
-                                label = { Text(size, fontWeight = FontWeight.Bold) }
+                                label = { Text(size, fontWeight = FontWeight.Bold) },
+                                modifier = Modifier.minimumInteractiveComponentSize()
                             )
                         }
 
                         InputChip(
                             selected = false,
                             onClick = { showCustomSizeDialog = true },
-                            label = { Text("+ Custom") }
+                            label = { Text("+ Custom") },
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                        )
+                    }
+
+                    if (sizeToRemove != null) {
+                        AlertDialog(
+                            onDismissRequest = { sizeToRemove = null },
+                            title = { Text("Remove Size $sizeToRemove?") },
+                            text = { Text("This will clear the price and stock values configured for this size. Are you sure you want to remove it?") },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        sizeToRemove?.let { viewModel.updateSizeInventory(it, 0, 0L, false) }
+                                        sizeToRemove = null
+                                    },
+                                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                    modifier = Modifier.minimumInteractiveComponentSize()
+                                ) {
+                                    Text("Remove")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(
+                                    onClick = { sizeToRemove = null },
+                                    modifier = Modifier.minimumInteractiveComponentSize()
+                                ) {
+                                    Text("Cancel")
+                                }
+                            }
                         )
                     }
 
@@ -257,26 +361,40 @@ fun AddDesignScreen(
                             "Select sizes above to configure stock and unique pricing.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 12.dp)
+                            modifier = Modifier.padding(vertical = AtelierSpacing.Cozy)
                         )
                     } else {
                         enabledSizes.forEach { size ->
                             val inventory = state.sizes.find { it.size == size }
                             var stockText by remember(inventory) { mutableStateOf(inventory?.stock?.toString() ?: "") }
-                            var priceText by remember(inventory) { mutableStateOf(inventory?.price?.toString() ?: "") }
+                            
+                            // Safe price text field with decimal buffer and cents storage
+                            var priceText by remember { 
+                                val initialText = if (inventory == null || inventory.price == 0L) "" else (inventory.price / 100.0).toString()
+                                mutableStateOf(initialText) 
+                            }
+                            
+                            LaunchedEffect(inventory?.price) {
+                                val currentPrice = inventory?.price ?: 0L
+                                val parsedDouble = priceText.toDoubleOrNull() ?: 0.0
+                                val parsedCents = (parsedDouble * 100).toLong()
+                                if (parsedCents != currentPrice) {
+                                    priceText = if (currentPrice == 0L) "" else (currentPrice / 100.0).toString()
+                                }
+                            }
 
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    .padding(vertical = AtelierSpacing.Micro),
+                                horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .width(56.dp)
-                                        .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(8.dp))
-                                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                                        .background(MaterialTheme.colorScheme.primaryContainer, AtelierShapes.CornerSmall)
+                                        .padding(horizontal = AtelierSpacing.Compact, vertical = AtelierSpacing.Compact),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(size, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -288,10 +406,11 @@ fun AddDesignScreen(
                                         val digitsOnly = newValue.filter { it.isDigit() }
                                         if (digitsOnly.length <= 6) {
                                             stockText = digitsOnly
+                                            val parsedCents = FileUtils.parsePriceToCents(priceText)
                                             viewModel.updateSizeInventory(
                                                 size,
                                                 digitsOnly.toIntOrNull() ?: 0,
-                                                priceText.toDoubleOrNull() ?: 0.0,
+                                                parsedCents,
                                                 true
                                             )
                                         }
@@ -299,7 +418,7 @@ fun AddDesignScreen(
                                     label = { Text("Stock") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(8.dp)
+                                    shape = AtelierShapes.CornerSmall
                                 )
 
                                 OutlinedTextField(
@@ -308,19 +427,23 @@ fun AddDesignScreen(
                                         val dotCount = newValue.count { it == '.' }
                                         val sanitized = newValue.filter { it.isDigit() || it == '.' }
                                         if (dotCount <= 1 && sanitized.length <= 9) {
-                                            priceText = sanitized
-                                            viewModel.updateSizeInventory(
-                                                size,
-                                                stockText.toIntOrNull() ?: 0,
-                                                sanitized.toDoubleOrNull() ?: 0.0,
-                                                true
-                                            )
+                                            val dotIndex = sanitized.indexOf('.')
+                                            if (dotIndex == -1 || sanitized.length - dotIndex - 1 <= 2) {
+                                                priceText = sanitized
+                                                val parsedCents = FileUtils.parsePriceToCents(sanitized)
+                                                viewModel.updateSizeInventory(
+                                                    size,
+                                                    stockText.toIntOrNull() ?: 0,
+                                                    parsedCents,
+                                                    true
+                                                )
+                                            }
                                         }
                                     },
                                     label = { Text("Price") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = AtelierShapes.CornerSmall,
                                     prefix = { Text("₹") }
                                 )
                             }
@@ -328,6 +451,10 @@ fun AddDesignScreen(
                     }
 
                     if (showCustomSizeDialog) {
+                        val normInput = newSizeInput.trim().uppercase()
+                        val sizeExists = remember(newSizeInput, state.availableSizes) {
+                            normInput.isNotEmpty() && state.availableSizes.contains(normInput)
+                        }
                         AlertDialog(
                             onDismissRequest = { showCustomSizeDialog = false },
                             title = { Text("Add Custom Size", fontWeight = FontWeight.Bold) },
@@ -337,21 +464,26 @@ fun AddDesignScreen(
                                     onValueChange = { if (it.length <= 10) newSizeInput = it },
                                     label = { Text("Size Label (e.g. 3XL, 6XL, 42)") },
                                     singleLine = true,
-                                    shape = RoundedCornerShape(12.dp),
+                                    shape = AtelierShapes.CornerSmall,
+                                    isError = sizeExists,
+                                    supportingText = if (sizeExists) {
+                                        { Text("This size is already configured!", color = MaterialTheme.colorScheme.error) }
+                                    } else null,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             },
                             confirmButton = {
                                 Button(
                                     onClick = {
-                                        if (newSizeInput.isNotBlank()) {
+                                        if (newSizeInput.isNotBlank() && !sizeExists) {
                                             val normalizedSize = newSizeInput.trim().uppercase()
                                             viewModel.addAvailableSize(normalizedSize)
-                                            viewModel.updateSizeInventory(normalizedSize, 0, 0.0, true)
+                                            viewModel.updateSizeInventory(normalizedSize, 0, 0L, true)
                                             newSizeInput = ""
                                             showCustomSizeDialog = false
                                         }
-                                    }
+                                    },
+                                    enabled = newSizeInput.isNotBlank() && !sizeExists
                                 ) {
                                     Text("Add")
                                 }
@@ -368,12 +500,12 @@ fun AddDesignScreen(
 
             // Assigned Karigars
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = AtelierShapes.CornerLarge,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(AtelierSpacing.Base),
+                    verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
                 ) {
                     Text("Assigned Karigars / Tailors", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
@@ -390,7 +522,18 @@ fun AddDesignScreen(
                         label = { Text("Karigar Name (e.g. Master Salim)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = AtelierShapes.CornerMedium,
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                if (newKarigarName.isNotBlank()) {
+                                    viewModel.addKarigar(newKarigarName.trim())
+                                    newKarigarName = ""
+                                }
+                            }
+                        ),
                         trailingIcon = {
                             IconButton(
                                 onClick = {
@@ -398,7 +541,8 @@ fun AddDesignScreen(
                                         viewModel.addKarigar(newKarigarName.trim())
                                         newKarigarName = ""
                                     }
-                                }
+                                },
+                                modifier = Modifier.minimumInteractiveComponentSize()
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = "Add Karigar")
                             }
@@ -410,15 +554,17 @@ fun AddDesignScreen(
                             "No Karigars assigned yet.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 4.dp)
+                            modifier = Modifier.padding(vertical = AtelierSpacing.Micro)
                         )
                     } else {
+                        val karigarsScrollState = rememberScrollState()
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                .horizontalFadingEdges(karigarsScrollState)
+                                .horizontalScroll(karigarsScrollState)
+                                .padding(vertical = AtelierSpacing.Micro),
+                            horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             state.karigars.forEach { karigar ->
@@ -434,7 +580,8 @@ fun AddDesignScreen(
                                                 .size(18.dp)
                                                 .clickable { viewModel.removeKarigar(karigar) }
                                         )
-                                    }
+                                    },
+                                    modifier = Modifier.minimumInteractiveComponentSize()
                                 )
                             }
                         }
@@ -445,12 +592,12 @@ fun AddDesignScreen(
             // Custom Attributes & Global Fields
             // Custom Attributes & Global Fields
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = AtelierShapes.CornerLarge,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    modifier = Modifier.padding(AtelierSpacing.Base),
+                    verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Base)
                 ) {
                     Text("3-Piece Attributes & Custom Fields", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
@@ -459,7 +606,7 @@ fun AddDesignScreen(
 
                     ScrollableTabRow(
                         selectedTabIndex = selectedTab,
-                        edgePadding = 0.dp,
+                        edgePadding = AtelierSpacing.None,
                         indicator = {},
                         divider = {}
                     ) {
@@ -477,7 +624,7 @@ fun AddDesignScreen(
                                     )
                                 },
                                 modifier = Modifier
-                                    .padding(horizontal = 4.dp, vertical = 6.dp)
+                                    .padding(horizontal = AtelierSpacing.Micro, vertical = 6.dp)
                                     .clip(CircleShape)
                                     .background(
                                         if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
@@ -506,7 +653,7 @@ fun AddDesignScreen(
                             "No attributes set in this category.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 12.dp)
+                            modifier = Modifier.padding(vertical = AtelierSpacing.Cozy)
                         )
                     } else {
                         filteredFields.forEach { (key, value) ->
@@ -516,14 +663,14 @@ fun AddDesignScreen(
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
                             ) {
                                 OutlinedTextField(
                                     value = value,
                                     onValueChange = { if (it.length <= 200) viewModel.updateCustomFieldValue(key, it) },
                                     label = { Text(if (isGlobal) "$cleanLabel (Global)" else cleanLabel) },
                                     modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp)
+                                    shape = AtelierShapes.CornerMedium
                                 )
 
                                 val defaultFields = setOf(
@@ -532,7 +679,10 @@ fun AddDesignScreen(
                                     "Dupatta - Fabric", "Dupatta - Work", "Dupatta - Color"
                                 )
                                 if (!defaultFields.contains(key)) {
-                                    IconButton(onClick = { viewModel.removeCustomField(key) }) {
+                                    IconButton(
+                                        onClick = { viewModel.removeCustomField(key) },
+                                        modifier = Modifier.minimumInteractiveComponentSize()
+                                    ) {
                                         Icon(Icons.Default.Clear, contentDescription = "Remove")
                                     }
                                 }
@@ -554,19 +704,20 @@ fun AddDesignScreen(
                         onValueChange = { if (it.length <= 50) newKey = it },
                         label = { Text("Field Name (e.g. Sleeve Style, Lining)") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = AtelierShapes.CornerMedium
                     )
 
                     Text("Apply Field To:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
                     ) {
                         scopes.forEachIndexed { idx, scopeName ->
                             FilterChip(
                                 selected = selectedScopeIndex == idx,
                                 onClick = { selectedScopeIndex = idx },
-                                label = { Text(scopeName) }
+                                label = { Text(scopeName) },
+                                modifier = Modifier.minimumInteractiveComponentSize()
                             )
                         }
                     }
@@ -586,7 +737,8 @@ fun AddDesignScreen(
                         }
                         Switch(
                             checked = isGlobalToggle,
-                            onCheckedChange = { isGlobalToggle = it }
+                            onCheckedChange = { isGlobalToggle = it },
+                            modifier = Modifier.minimumInteractiveComponentSize()
                         )
                     }
 
@@ -604,15 +756,15 @@ fun AddDesignScreen(
                                 isGlobalToggle = false
                             }
                         },
-                        modifier = Modifier.align(Alignment.End),
-                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.align(Alignment.End).minimumInteractiveComponentSize(),
+                        shape = AtelierShapes.CornerMedium,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     ) {
                         Icon(Icons.Default.Add, contentDescription = "Add")
-                        Spacer(Modifier.width(4.dp))
+                        Spacer(Modifier.width(AtelierSpacing.Micro))
                         Text("Add Field")
                     }
                 }
@@ -622,7 +774,7 @@ fun AddDesignScreen(
                     onDismissRequest = { showSourceSelector = false },
                     title = { Text("Select Image Source", fontWeight = FontWeight.Bold) },
                     text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)) {
                             Button(
                                 onClick = {
                                     showSourceSelector = false
@@ -632,8 +784,8 @@ fun AddDesignScreen(
                                         )
                                     )
                                 },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
+                                modifier = Modifier.fillMaxWidth().minimumInteractiveComponentSize(),
+                                shape = AtelierShapes.CornerMedium
                             ) {
                                 Text("Choose from Gallery")
                             }
@@ -643,21 +795,24 @@ fun AddDesignScreen(
                                     showSourceSelector = false
                                     try {
                                         val uri = getTempUri(context)
-                                        tempPhotoUri = uri
+                                        tempPhotoUriString = uri.toString()
                                         cameraLauncher.launch(uri)
                                     } catch (e: Exception) {
                                         e.printStackTrace()
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
+                                modifier = Modifier.fillMaxWidth().minimumInteractiveComponentSize(),
+                                shape = AtelierShapes.CornerMedium
                             ) {
                                 Text("Take Photo with Camera")
                             }
                         }
                     },
                     confirmButton = {
-                        TextButton(onClick = { showSourceSelector = false }) {
+                        TextButton(
+                            onClick = { showSourceSelector = false },
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                        ) {
                             Text("Cancel")
                         }
                     }
@@ -667,19 +822,7 @@ fun AddDesignScreen(
     }
 }
 
-fun copyUriToInternalStorage(context: Context, uri: Uri): String? {
-    return try {
-        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-        val file = File(context.filesDir, "img_${System.currentTimeMillis()}.jpg")
-        file.outputStream().use { outputStream ->
-            inputStream.copyTo(outputStream)
-        }
-        file.absolutePath
-    } catch (e: Exception) {
-        e.printStackTrace()
-        null
-    }
-}
+// FileUtils.copyUriToInternalStorage is used asynchronously
 
 fun getTempUri(context: Context): Uri {
     val file = File(context.cacheDir, "temp_camera_${System.currentTimeMillis()}.jpg")

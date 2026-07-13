@@ -2,36 +2,40 @@ package com.example.biap.theme
  
 import androidx.compose.ui.graphics.Color
  
-// Light Theme Brand Colors (Pixel/Gemini inspired)
-val GeminiLightPrimary = Color(0xFF1A73E8)     // Google Brand Blue
-val GeminiLightOnPrimary = Color(0xFFFFFFFF)
-val GeminiLightPrimaryContainer = Color(0xFFD3E2FD) // Soft dynamic light blue
-val GeminiLightOnPrimaryContainer = Color(0xFF041E49)
-val GeminiLightSecondary = Color(0xFF9C27B0)   // Vibrant Violet Accent
-val GeminiLightOnSecondary = Color(0xFFFFFFFF)
-val GeminiLightTertiary = Color(0xFF007A87)    // Cyan/Teal focus
-val GeminiLightOnTertiary = Color(0xFFFFFFFF)
-val GeminiLightBackground = Color(0xFFF7F9FC)  // Soft light gray-blue background
-val GeminiLightOnBackground = Color(0xFF1F1F1F)
-val GeminiLightSurface = Color(0xFFFFFFFF)
-val GeminiLightOnSurface = Color(0xFF1F1F1F)
-val GeminiLightSurfaceVariant = Color(0xFFE8EAED)
-val GeminiLightOnSurfaceVariant = Color(0xFF444746)
-val GeminiLightOutline = Color(0xFF747775)
+// Heritage Theme Brand Colors (Contemporary Heritage luxury warm palette)
+val HeritageLightPrimary = Color(0xFF1C1B18)     // Warm Charcoal
+val HeritageLightOnPrimary = Color(0xFFFFFFFF)
+val HeritageLightPrimaryContainer = Color(0xFFF5F2E9) // Canvas Cream
+val HeritageLightOnPrimaryContainer = Color(0xFF1C1B18)
+val HeritageLightSecondary = Color(0xFF79684C)   // Muted Bronze (adjusted for >4.5:1 contrast)
+val HeritageLightOnSecondary = Color(0xFFFFFFFF)
+val HeritageLightTertiary = Color(0xFF5C5B57)    // Dark Charcoal Gray
+val HeritageLightOnTertiary = Color(0xFFFFFFFF)
+val HeritageLightBackground = Color(0xFFFBF9F4)  // Warm Cream Background
+val HeritageLightOnBackground = Color(0xFF1C1B18)
+val HeritageLightSurface = Color(0xFFFFFFFF)     // Pure Ivory Surface
+val HeritageLightOnSurface = Color(0xFF1C1B18)
+val HeritageLightSurfaceVariant = Color(0xFFF5F2E9)
+val HeritageLightOnSurfaceVariant = Color(0xFF444340)
+val HeritageLightOutline = Color(0xFF6C6A64)      // Dust Grey for WCAG contrast compliance (>4.5:1)
 
-// Dark Theme Brand Colors (Pixel/Gemini inspired)
-val GeminiDarkPrimary = Color(0xFF9EC5FF)      // Soft dynamic light blue
-val GeminiDarkOnPrimary = Color(0xFF00325B)
-val GeminiDarkPrimaryContainer = Color(0xFF0F1B2E) // Deep steel navy
-val GeminiDarkOnPrimaryContainer = Color(0xFFD3E2FD)
-val GeminiDarkSecondary = Color(0xFFC5A3FF)    // Soft Violet
-val GeminiDarkOnSecondary = Color(0xFF32004B)
-val GeminiDarkTertiary = Color(0xFF80DEEA)     // Light Cyan
-val GeminiDarkOnTertiary = Color(0xFF00363D)
-val GeminiDarkBackground = Color(0xFF0F111A)   // Deep charcoal-blue
-val GeminiDarkOnBackground = Color(0xFFE2E2E9)
-val GeminiDarkSurface = Color(0xFF181B26)      // Slate Navy Surface
-val GeminiDarkOnSurface = Color(0xFFE2E2E9)
-val GeminiDarkSurfaceVariant = Color(0xFF2C2F3D)
-val GeminiDarkOnSurfaceVariant = Color(0xFFC2C7D0)
-val GeminiDarkOutline = Color(0xFF8C9199)
+val HeritageDarkPrimary = Color(0xFFF5F2E9)      // Canvas Cream
+val HeritageDarkOnPrimary = Color(0xFF121314)
+val HeritageDarkPrimaryContainer = Color(0xFF1F2022) // Deep charcoal surface
+val HeritageDarkOnPrimaryContainer = Color(0xFFF5F2E9)
+val HeritageDarkSecondary = Color(0xFFB8A78A)    // Soft Bronze Accent
+val HeritageDarkOnSecondary = Color(0xFF121314)
+val HeritageDarkTertiary = Color(0xFF8D8C8A)     // Light Slate Gray
+val HeritageDarkOnTertiary = Color(0xFF121314)
+val HeritageDarkBackground = Color(0xFF121314)   // Midnight Slate Background
+val HeritageDarkOnBackground = Color(0xFFF5F2E9)
+val HeritageDarkSurface = Color(0xFF18191B)      // Dark Obsidian Surface
+val HeritageDarkOnSurface = Color(0xFFF5F2E9)
+val HeritageDarkSurfaceVariant = Color(0xFF1F2022)
+val HeritageDarkOnSurfaceVariant = Color(0xFFD1CFC7)
+val HeritageDarkOutline = Color(0xFF8D8C8A)      // Compliance outline (>3:1)
+
+// Warning Colors (WCAG 2.1 AA compliant)
+val HeritageLightWarning = Color(0xFFC65100)
+val HeritageDarkWarning = Color(0xFFFFB74D)
+

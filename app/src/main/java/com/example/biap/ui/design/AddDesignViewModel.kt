@@ -11,13 +11,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
+import com.example.biap.util.SizeUtils
+
 
 data class AddDesignUiState(
     val name: String = "",
     val category: String = "Salwar Kameez",
     val imagePath: String? = null,
     val sizes: List<SizeInventory> = emptyList(),
-    val availableSizes: List<String> = listOf("S", "M", "L", "XL", "XXL"),
+    val availableSizes: List<String> = SizeUtils.sortSizes(listOf("S", "M", "L", "XL", "XXL")),
     val customFields: Map<String, String> = emptyMap(),
     val globalCustomFields: Set<String> = emptySet(),
     val karigars: List<String> = emptyList(),
@@ -27,6 +29,7 @@ data class AddDesignUiState(
 class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
     private val _uiState = MutableStateFlow(AddDesignUiState())
     val uiState: StateFlow<AddDesignUiState> = _uiState.asStateFlow()
+    private val sizeCache = mutableMapOf<String, SizeInventory>()
 
     init {
         viewModelScope.launch {
@@ -59,12 +62,22 @@ class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
         _uiState.update { it.copy(imagePath = path) }
     }
 
-    fun updateSizeInventory(size: String, stock: Int, price: Double, enabled: Boolean) {
+    fun updateSizeInventory(size: String, stock: Int, price: Long, enabled: Boolean) {
         _uiState.update { current ->
             val updated = current.sizes.toMutableList()
+            val existing = updated.find { it.size == size }
             updated.removeAll { it.size == size }
             if (enabled) {
-                updated.add(SizeInventory(size, stock, price))
+                val cached = sizeCache[size]
+                val finalStock = if (stock == 0 && price == 0L && cached != null) cached.stock else stock
+                val finalPrice = if (stock == 0 && price == 0L && cached != null) cached.price else price
+                val newItem = SizeInventory(size, finalStock, finalPrice)
+                updated.add(newItem)
+                if (finalStock > 0 || finalPrice > 0L) {
+                    sizeCache[size] = newItem
+                }
+            } else {
+                existing?.let { sizeCache[size] = it }
             }
             current.copy(sizes = updated)
         }
@@ -76,7 +89,7 @@ class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
             if (current.availableSizes.contains(trimmed)) {
                 current
             } else {
-                current.copy(availableSizes = current.availableSizes + trimmed)
+                current.copy(availableSizes = SizeUtils.sortSizes(current.availableSizes + trimmed))
             }
         }
     }

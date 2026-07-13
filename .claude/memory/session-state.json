@@ -1,0 +1,27 @@
+{
+  "project": "biap — Atelier ERP (Android, Jetpack Compose)",
+  "purpose": "Portfolio + inventory app for an Indian ethnic-wear atelier: dress designs with photos, per-size stock & pricing (Long paise), karigar (artisan) assignment, custom Top/Bottom/Dupatta fields, Google Sign-In with encrypted Google Drive backup sync.",
+  "updated": "2026-07-10",
+  "git": {
+    "head": "c8ed6c7 feat(auth): Google Sign-in + encrypted Drive backup",
+    "uncommitted": "~1851 insertions across 21 modified files PLUS untracked: data/room/*, util/{DriveSyncWorker,FileUtils,OrphanImageCleanupWorker,SizeUtils}.kt, theme/{Spacing,FadingEdges}.kt, ui/PerformanceManager.kt, SplashScreen.kt, TASKLIST.md, MEGA_BLUEPRINT.md — 9 changelog sessions (Jun 20-28) exist only in the working tree"
+  },
+  "architecture": {
+    "ui": "Single activity → Navigation 3 back stack (Splash → Main → AddDesign / DesignDetail). ViewModels combine repository biData StateFlow with screen state. PerformanceProfile (power-save / ≤4 cores) gates animations.",
+    "data": "DataRepository interface → DefaultDataRepository singleton → Room (AppDatabase v3, DesignDao, 5 entities incl. deletion tombstones). Per-Google-account DB files (md5-suffixed); unsuffixed = guest. Corruption recovery via .bak, post-write local backups.",
+    "sync": "WorkManager DriveSyncWorker → performSyncInternal: AES-256-GCM encrypt whole-dataset JSON → Drive appDataFolder (bi_data.json.enc), LWW merge on updatedAt + tombstones. Sync key = random 256-bit in EncryptedSharedPreferences, ALSO uploaded plaintext as sync_key.txt on Drive.",
+    "theme": "Contemporary Heritage palette (charcoal/cream/bronze), Serif display type, AtelierSpacing/AtelierShapes tokens, dynamic color off.",
+    "build": "AGP 9.2.1, Kotlin 2.1.0 (downgraded from 2.3.20), Compose BOM 2026.03.01, Room 2.8.4 via kapt, minSdk 24 / target 36. Tests: 2 unit classes + 1 Compose UI test."
+  },
+  "top_risks": [
+    "ALL recent work uncommitted — one git checkout/reset (incl. CLAUDE.md circuit-breaker rollback) destroys 9 sessions of work; TASKLIST.md & MEGA_BLUEPRINT.md untracked",
+    "Sync can wipe local data: performSyncInternal merges against _biData snapshot that may be empty right after account switch, then importData wipes+rewrites all tables",
+    "Sync key stored plaintext on same Drive as encrypted backup; remote key unconditionally replaces local; two-device first-sync race → divergent keys → endless retry",
+    "Price display bug in DesignDetailScreen view mode: renders raw paise (₹150000 instead of ₹1,500)",
+    "DesignDetailScreen constructs a second DefaultDataRepository instead of getInstance (disjoint state) and loads images without resolveImageFile",
+    "'Discard Guest Data' button doesn't delete anything; dialog re-nags every visit",
+    "Old Drive backups with Double prices can't decode after price Double→Long change → permanent sync retry loop",
+    "No INTERNET permission declared in own manifest (relies on library manifest merge); allowBackup=true with backup rules present but not wired"
+  ],
+  "next_steps_stated_in_docs": "Search clear-button/match counter, category filter chips, image compression, multi-module split (:core:database/:core:sync/:core:auth/:feature:*), DI (Hilt/Koin), sync & DB test suites, client measurement cards, tailor workload tracker"
+}

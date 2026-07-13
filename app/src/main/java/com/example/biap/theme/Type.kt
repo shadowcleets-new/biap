@@ -9,49 +9,49 @@ import androidx.compose.ui.unit.sp
 // Set of Material typography styles to match Google Apps (Google Sans system font)
 val Typography = Typography(
     displayLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 57.sp,
         lineHeight = 64.sp,
         letterSpacing = (-0.25).sp
     ),
     displayMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 45.sp,
         lineHeight = 52.sp,
         letterSpacing = 0.sp
     ),
     displaySmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 36.sp,
         lineHeight = 44.sp,
         letterSpacing = 0.sp
     ),
     headlineLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 32.sp,
         lineHeight = 40.sp,
         letterSpacing = 0.sp
     ),
     headlineMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 28.sp,
         lineHeight = 36.sp,
         letterSpacing = 0.sp
     ),
     headlineSmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 24.sp,
         lineHeight = 32.sp,
         letterSpacing = 0.sp
     ),
     titleLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Medium,
         fontSize = 22.sp,
         lineHeight = 28.sp,
