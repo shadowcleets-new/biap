@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,7 +50,7 @@ import java.io.File
 @Composable
 fun defaultDesignDetailViewModel(designId: String): DesignDetailViewModel {
     val context = LocalContext.current.applicationContext
-    return viewModel { DesignDetailViewModel(designId, DefaultDataRepository(context)) }
+    return viewModel { DesignDetailViewModel(designId, DefaultDataRepository.getInstance(context)) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,7 +77,12 @@ fun DesignDetailScreen(
     var showEditKarigarsDialog by remember { mutableStateOf(false) }
 
     var showSourceSelector by remember { mutableStateOf(false) }
-    var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var tempPhotoUriString by rememberSaveable { mutableStateOf<String?>(null) }
+    val tempPhotoUri = remember(tempPhotoUriString) {
+        tempPhotoUriString?.let { Uri.parse(it) }
+    }
+    var editBaseUpdatedAt by rememberSaveable { mutableStateOf(0L) }
+    var showConflictDialog by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
 
@@ -172,6 +178,7 @@ fun DesignDetailScreen(
             // Sync with actual design when edit mode is activated
             LaunchedEffect(isEditing) {
                 if (isEditing) {
+                    editBaseUpdatedAt = design.updatedAt
                     editName = design.name
                     editCategory = design.category
                     editImagePath = design.imagePath
@@ -179,6 +186,39 @@ fun DesignDetailScreen(
                     editCustomFields = design.customFields
                     editKarigars = design.karigars
                 }
+            }
+
+            if (showConflictDialog) {
+                AlertDialog(
+                    onDismissRequest = { showConflictDialog = false },
+                    title = { Text("Design Changed During Edit") },
+                    text = { Text("This design was updated by a sync while you were editing. Save anyway and overwrite those changes?") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showConflictDialog = false
+                                val updated = design.copy(
+                                    name = editName.trim(),
+                                    category = editCategory.trim(),
+                                    imagePath = editImagePath,
+                                    sizeInventories = editSizes,
+                                    customFields = editCustomFields.filterKeys { it.isNotBlank() },
+                                    karigars = editKarigars
+                                )
+                                viewModel.updateDesign(updated)
+                                isEditing = false
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Overwrite")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showConflictDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
 
             Scaffold(
@@ -204,16 +244,20 @@ fun DesignDetailScreen(
                                 IconButton(
                                     onClick = {
                                         if (editName.isNotBlank()) {
-                                            val updated = design.copy(
-                                                name = editName.trim(),
-                                                category = editCategory.trim(),
-                                                imagePath = editImagePath,
-                                                sizeInventories = editSizes,
-                                                customFields = editCustomFields.filterKeys { it.isNotBlank() },
-                                                karigars = editKarigars
-                                            )
-                                            viewModel.updateDesign(updated)
-                                            isEditing = false
+                                            if (design.updatedAt != editBaseUpdatedAt) {
+                                                showConflictDialog = true
+                                            } else {
+                                                val updated = design.copy(
+                                                    name = editName.trim(),
+                                                    category = editCategory.trim(),
+                                                    imagePath = editImagePath,
+                                                    sizeInventories = editSizes,
+                                                    customFields = editCustomFields.filterKeys { it.isNotBlank() },
+                                                    karigars = editKarigars
+                                                )
+                                                viewModel.updateDesign(updated)
+                                                isEditing = false
+                                            }
                                         }
                                     },
                                     enabled = editName.isNotBlank()
@@ -273,7 +317,7 @@ fun DesignDetailScreen(
                         val imagePathToUse = if (isEditing) editImagePath else design.imagePath
                         if (imagePathToUse != null) {
                             Image(
-                                painter = rememberAsyncImagePainter(File(imagePathToUse)),
+                                painter = rememberAsyncImagePainter(FileUtils.resolveImageFile(context, imagePathToUse)),
                                 contentDescription = if (isEditing) "Edit Photo" else design.name,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
@@ -650,12 +694,12 @@ fun DesignDetailScreen(
                                     )
                                 } else {
                                     val sortedInventories = design.sizeInventories.sortedBy { SizeUtils.getSizeSortWeight(it.size) }
-                                    var selectedSizeIndex by remember(design) { mutableStateOf(0) }
-                                    
-                                    if (selectedSizeIndex >= sortedInventories.size) {
-                                        selectedSizeIndex = 0
-                                    }
-                                    
+                                    // Keyed on the design ID (not the object) so a background sync
+                                    // refresh does not reset the user's selection; clamped as a
+                                    // value instead of writing state during composition (BUG-16).
+                                    var selectedSizeIndexRaw by remember(design.id) { mutableStateOf(0) }
+                                    val selectedSizeIndex = selectedSizeIndexRaw.coerceIn(0, (sortedInventories.size - 1).coerceAtLeast(0))
+
                                     val activeInventory = sortedInventories.getOrNull(selectedSizeIndex)
 
                                     Row(
@@ -669,7 +713,7 @@ fun DesignDetailScreen(
                                             val isSelected = selectedSizeIndex == index
                                             InputChip(
                                                 selected = isSelected,
-                                                onClick = { selectedSizeIndex = index },
+                                                onClick = { selectedSizeIndexRaw = index },
                                                 label = { Text(inv.size, fontWeight = FontWeight.Bold) },
                                                 colors = InputChipDefaults.inputChipColors(
                                                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -705,7 +749,7 @@ fun DesignDetailScreen(
                                                 Column {
                                                     Text("Price", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     Text(
-                                                        text = "₹${activeInventory.price}",
+                                                        text = "₹${FileUtils.formatPrice(activeInventory.price)}",
                                                         fontWeight = FontWeight.Bold,
                                                         style = MaterialTheme.typography.titleMedium,
                                                         color = MaterialTheme.colorScheme.primary
@@ -1095,7 +1139,7 @@ fun DesignDetailScreen(
                                             showSourceSelector = false
                                             try {
                                                 val uri = getTempUri(context)
-                                                tempPhotoUri = uri
+                                                tempPhotoUriString = uri.toString()
                                                 cameraLauncher.launch(uri)
                                             } catch (e: Exception) {
                                                 e.printStackTrace()

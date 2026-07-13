@@ -2,6 +2,8 @@ package com.example.biap.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -10,11 +12,11 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
-
-import androidx.compose.material3.ColorScheme
+import com.example.biap.ui.PerformanceProfile
+import com.example.biap.ui.rememberPerformanceProfile
 
 private val DarkColorScheme = darkColorScheme(
     primary = HeritageDarkPrimary,
@@ -52,31 +54,24 @@ private val LightColorScheme = lightColorScheme(
     outline = HeritageLightOutline
 )
 
+// BUG-20 fix: derive the warning color from the APPLIED scheme, not the system setting.
 val ColorScheme.warning: Color
-    @Composable
-    get() = if (isSystemInDarkTheme()) HeritageDarkWarning else HeritageLightWarning
+    get() = if (background.luminance() < 0.5f) HeritageDarkWarning else HeritageLightWarning
 
 object AtelierTheme {
+    // BUG-28 fix: brushes reference the palette constants so a palette change propagates.
     val lightGlowBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFF1C1B18), // Warm Charcoal
-            Color(0xFF8C7A5C), // Muted Bronze
-            Color(0xFFD1CFC7)  // Light Outline Grey
-        )
+        colors = listOf(HeritageLightPrimary, HeritageLightSecondary, HeritageGlowGreyLight)
     )
     val darkGlowBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFFF5F2E9), // Canvas Cream
-            Color(0xFFB8A78A), // Soft Bronze Accent
-            Color(0xFF3C3D40)  // Muted Charcoal
-        )
+        colors = listOf(HeritageDarkPrimary, HeritageDarkSecondary, HeritageGlowCharcoalDark)
     )
 }
 
 @Composable
 fun BiapTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
-  // Set dynamic color override to false to protect premium brand identity
+  // Dynamic color stays OFF to protect the Contemporary Heritage brand identity.
   dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
@@ -90,13 +85,15 @@ fun BiapTheme(
       else -> LightColorScheme
     }
 
-  MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+  MaterialTheme(
+    colorScheme = colorScheme,
+    typography = Typography,
+    content = content
+  )
 }
-
 
 object AtelierShapes {
     val CornerSmall = RoundedCornerShape(8.dp)
     val CornerMedium = RoundedCornerShape(12.dp)
     val CornerLarge = RoundedCornerShape(16.dp)
 }
-

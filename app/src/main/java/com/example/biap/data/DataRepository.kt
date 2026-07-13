@@ -27,8 +27,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -62,6 +64,7 @@ interface DataRepository {
     // Guest merge operations
     suspend fun hasGuestData(): Boolean
     suspend fun mergeGuestData(): Boolean
+    suspend fun clearGuestData(): Boolean
 }
 
 class DefaultDataRepository(private val context: Context) : DataRepository {
@@ -94,7 +97,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     private var driveFileId: String? = null
 
     private var currentDb: AppDatabase? = null
-    private var currentDao: DesignDao? = null
+    private val currentDaoFlow = MutableStateFlow<DesignDao?>(null)
     private var dbCollectionJob: Job? = null
 
     init {
@@ -105,14 +108,14 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                     dbCollectionJob?.cancelAndJoin()
                     currentDb?.close()
                     currentDb = null
-                    currentDao = null
+                    currentDaoFlow.value = null
                     driveFileId = null
 
                     val suffix = getDatabaseSuffix(account?.id)
                     val db = openDatabaseForUser(suffix)
                     currentDb = db
                     val dao = db.designDao()
-                    currentDao = dao
+                    currentDaoFlow.value = dao
 
                     // Populate defaults if globals table is empty (one-off check on opening database)
                     val defaultGlobals = listOf(
@@ -236,6 +239,32 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         }
     }
 
+    /**
+     * Waits briefly for the active account's DAO (it is null for a moment during
+     * account switches). BUG-02 fix: writes no longer silently vanish in that window.
+     */
+    private suspend fun awaitDao(timeoutMs: Long = 5_000): DesignDao? =
+        withTimeoutOrNull(timeoutMs) { currentDaoFlow.filterNotNull().first() }
+
+    /**
+     * BUG-01 fix: sync snapshots are read from the database, never from the UI StateFlow
+     * (which can be empty right after an account switch and would nuke the merge).
+     */
+    private suspend fun snapshotFromDao(dao: DesignDao): BusinessIntelligenceData {
+        val designs = dao.getAllDesignsOnce()
+        val globals = dao.getAllGlobalCustomFields()
+        val deletedDesigns = dao.getAllDeletedDesignsOnce()
+        val deletedFields = dao.getAllDeletedCustomFieldsOnce()
+        return BusinessIntelligenceData(
+            designs = designs.map { it.toDomain() },
+            globalCustomFields = globals.map { it.field }.toSet(),
+            globalCustomFieldsMetadata = globals.associate { it.field to it.updatedAt },
+            deletedDesignIds = deletedDesigns.map { it.designId }.toSet(),
+            deletedDesigns = deletedDesigns.associate { it.designId to it.deletedAt },
+            deletedCustomFields = deletedFields.associate { it.field to it.deletedAt }
+        )
+    }
+
     private fun triggerLocalBackup() {
         val account = authManager.currentUser.value
         val suffix = getDatabaseSuffix(account?.id)
@@ -325,123 +354,94 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     suspend fun performSyncInternal(token: String, googleId: String): ListenableWorker.Result = withContext(Dispatchers.IO) {
         try {
-            // Wait up to 5 seconds for database initialization
-            var count = 0
-            while (currentDao == null && count < 50) {
-                kotlinx.coroutines.delay(100)
-                count++
-            }
-            val dao = currentDao ?: return@withContext ListenableWorker.Result.failure()
+            val dao = awaitDao(timeoutMs = 10_000) ?: return@withContext ListenableWorker.Result.failure()
 
-            // Option B Automated Cryptography Key Management
-            var localKey = EncryptionUtils.getOrGenerateLocalSyncKey(context)
-            val driveKeyFileId = driveSyncManager.searchFile(token, "sync_key.txt")
-            if (driveKeyFileId != null) {
-                val driveKey = driveSyncManager.downloadFile(token, driveKeyFileId)
-                if (!driveKey.isNullOrBlank()) {
-                    EncryptionUtils.saveLocalSyncKey(context, driveKey)
-                    localKey = driveKey
-                }
-            } else {
+            // Guard: the open database must belong to the account this sync was requested for.
+            if (authManager.currentUser.value?.id != googleId) {
+                return@withContext ListenableWorker.Result.failure()
+            }
+
+            // --- Key management: validated and race-safe (BUG-05) ---
+            val localKey = EncryptionUtils.getOrGenerateLocalSyncKey(context)
+            var keyFileId = driveSyncManager.searchFile(token, "sync_key.txt")
+            if (keyFileId == null) {
                 driveSyncManager.uploadFile(token, localKey, null, "sync_key.txt")
+                // Re-read so two devices racing here converge on the same files[0] winner.
+                keyFileId = driveSyncManager.searchFile(token, "sync_key.txt")
+            }
+            var candidateKey = localKey
+            if (keyFileId != null) {
+                val remoteKey = driveSyncManager.downloadFile(token, keyFileId)?.trim()
+                if (!remoteKey.isNullOrBlank() && EncryptionUtils.isValidKey(remoteKey)) {
+                    candidateKey = remoteKey
+                }
             }
 
             val fileId = driveSyncManager.searchFile(token, "bi_data.json.enc")
             driveFileId = fileId
-            if (fileId != null) {
-                // Download and decrypt remote JSON using localKey
-                val encryptedContent = driveSyncManager.downloadFile(token, fileId)
-                if (!encryptedContent.isNullOrBlank()) {
-                    val decryptedJson = EncryptionUtils.decryptWithKey(encryptedContent, localKey)
-                    val remoteData = json.decodeFromString<BusinessIntelligenceData>(decryptedJson)
-                    
-                    // 1. Merge deleted designs map using Last-Write-Wins (LWW)
-                    val localData = _biData.value
-                    val localDeleted = localData.deletedDesigns + localData.deletedDesignIds.associateWith { 0L }
-                    val remoteDeleted = remoteData.deletedDesigns + remoteData.deletedDesignIds.associateWith { 0L }
-                    
-                    val mergedDeleted = (localDeleted.keys + remoteDeleted.keys)
-                        .associateWith { id ->
-                            maxOf(localDeleted[id] ?: 0L, remoteDeleted[id] ?: 0L)
-                        }
-                    
-                    // Merge active designs using LWW based on updatedAt
-                    val allDesigns = (localData.designs + remoteData.designs)
-                        .groupBy { it.id }
-                        .mapValues { (_, designsList) ->
-                            designsList.maxByOrNull { it.updatedAt }!!
-                        }
-                    
-                    // Filter out designs whose updatedAt is older or equal to their deletion timestamp
-                    val mergedDesigns = allDesigns.values.filter { design ->
-                        val deletedAt = mergedDeleted[design.id] ?: -1L
-                        design.updatedAt > deletedAt
-                    }
-                    
-                    // Prune tombstones for designs that are recreated/updated later
-                    val finalDeleted = mergedDeleted.filter { (id, deletedAt) ->
-                        val design = allDesigns[id]
-                        design == null || deletedAt >= design.updatedAt
-                    }
-                    
-                    // 2. Merge custom fields using LWW
-                    val localDeletedFields = localData.deletedCustomFields
-                    val remoteDeletedFields = remoteData.deletedCustomFields
-                    val mergedDeletedFields = (localDeletedFields.keys + remoteDeletedFields.keys)
-                        .associateWith { field ->
-                            maxOf(localDeletedFields[field] ?: 0L, remoteDeletedFields[field] ?: 0L)
-                        }
+            val localData = snapshotFromDao(dao)
 
-                    val localFields = localData.globalCustomFieldsMetadata.toMutableMap()
-                    localData.globalCustomFields.forEach { field -> localFields.putIfAbsent(field, 0L) }
-                    val remoteFields = remoteData.globalCustomFieldsMetadata.toMutableMap()
-                    remoteData.globalCustomFields.forEach { field -> remoteFields.putIfAbsent(field, 0L) }
-
-                    val allFields = (localFields.keys + remoteFields.keys)
-                        .associateWith { field ->
-                            maxOf(localFields[field] ?: 0L, remoteFields[field] ?: 0L)
-                        }
-
-                    val mergedFields = allFields.filter { (field, updatedAt) ->
-                        val deletedAt = mergedDeletedFields[field] ?: -1L
-                        updatedAt > deletedAt
-                    }
-
-                    val finalDeletedFields = mergedDeletedFields.filter { (field, deletedAt) ->
-                        val updatedAt = allFields[field]
-                        updatedAt == null || deletedAt >= updatedAt
-                    }
-
-                    val mergedData = BusinessIntelligenceData(
-                        designs = mergedDesigns,
-                        globalCustomFields = mergedFields.keys,
-                        globalCustomFieldsMetadata = mergedFields,
-                        deletedDesignIds = finalDeleted.keys,
-                        deletedDesigns = finalDeleted,
-                        deletedCustomFields = finalDeletedFields
-                    )
-                    
-                    // Transactionally import merged data into Room
-                    dao.importData(mergedData)
-                    
-                    // Upload merged back to drive using localKey
-                    val reEncrypted = EncryptionUtils.encryptWithKey(json.encodeToString(mergedData), localKey)
-                    driveSyncManager.uploadFile(token, reEncrypted, fileId, "bi_data.json.enc")
-                    
-                    triggerLocalBackup()
-                    ListenableWorker.Result.success()
-                } else {
-                    ListenableWorker.Result.failure()
-                }
-            } else {
-                // Upload local database to drive using localKey
-                val localData = _biData.value
-                val encrypted = EncryptionUtils.encryptWithKey(json.encodeToString(localData), localKey)
-                val newFileId = driveSyncManager.uploadFile(token, encrypted, null, "bi_data.json.enc")
-                driveFileId = newFileId
+            if (fileId == null) {
+                // First upload for this Drive.
+                val encrypted = EncryptionUtils.encryptWithKey(json.encodeToString(localData), candidateKey)
+                driveFileId = driveSyncManager.uploadFile(token, encrypted, null, "bi_data.json.enc")
+                EncryptionUtils.saveLocalSyncKey(context, candidateKey)
                 triggerLocalBackup()
-                ListenableWorker.Result.success()
+                return@withContext ListenableWorker.Result.success()
             }
+
+            val encryptedContent = driveSyncManager.downloadFile(token, fileId)
+            if (encryptedContent.isNullOrBlank()) {
+                // Self-heal a zero-byte artifact left by an interrupted upload (BUG-06).
+                val encrypted = EncryptionUtils.encryptWithKey(json.encodeToString(localData), candidateKey)
+                driveSyncManager.uploadFile(token, encrypted, fileId, "bi_data.json.enc")
+                EncryptionUtils.saveLocalSyncKey(context, candidateKey)
+                triggerLocalBackup()
+                return@withContext ListenableWorker.Result.success()
+            }
+
+            // Decrypt: candidate (remote) key first, then the local key (BUG-05).
+            var usedKey = candidateKey
+            var decryptedJson = try {
+                EncryptionUtils.decryptWithKey(encryptedContent, candidateKey)
+            } catch (e: Exception) {
+                null
+            }
+            if (decryptedJson == null && candidateKey != localKey) {
+                decryptedJson = try {
+                    EncryptionUtils.decryptWithKey(encryptedContent, localKey)
+                } catch (e: Exception) {
+                    null
+                }
+                if (decryptedJson != null) {
+                    usedKey = localKey
+                    if (keyFileId != null) {
+                        // The escrowed key is wrong for the real payload; repair it.
+                        driveSyncManager.uploadFile(token, localKey, keyFileId, "sync_key.txt")
+                    }
+                }
+            }
+
+            val remoteData = if (decryptedJson != null) LegacyBackupDecoder.decode(decryptedJson) else null
+
+            if (remoteData == null) {
+                // Unreadable payload (legacy key scheme or corruption): quarantine it,
+                // then start fresh from the local snapshot (BUG-03 terminal case).
+                driveSyncManager.renameFile(token, fileId, "bi_data.json.enc.unreadable_${System.currentTimeMillis()}")
+                val encrypted = EncryptionUtils.encryptWithKey(json.encodeToString(localData), usedKey)
+                driveFileId = driveSyncManager.uploadFile(token, encrypted, null, "bi_data.json.enc")
+                EncryptionUtils.saveLocalSyncKey(context, usedKey)
+                triggerLocalBackup()
+                return@withContext ListenableWorker.Result.success()
+            }
+
+            val mergedData = SyncMerger.merge(localData, remoteData)
+            dao.importData(mergedData)
+            val reEncrypted = EncryptionUtils.encryptWithKey(json.encodeToString(mergedData), usedKey)
+            driveSyncManager.uploadFile(token, reEncrypted, fileId, "bi_data.json.enc")
+            EncryptionUtils.saveLocalSyncKey(context, usedKey)
+            triggerLocalBackup()
+            ListenableWorker.Result.success()
         } catch (e: Exception) {
             e.printStackTrace()
             ListenableWorker.Result.retry()
@@ -463,7 +463,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     override fun addOrUpdateDesign(design: Design) {
         repositoryScope.launch {
-            val dao = currentDao ?: return@launch
+            val dao = awaitDao() ?: return@launch
             val designWithTime = design.copy(updatedAt = System.currentTimeMillis())
             dao.insertDesignWithInventories(
                 designWithTime.toEntity(),
@@ -476,7 +476,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     override fun deleteDesign(designId: String) {
         repositoryScope.launch {
-            val dao = currentDao ?: return@launch
+            val dao = awaitDao() ?: return@launch
             dao.deleteDesignAndInventories(designId)
             dao.insertDeletedDesign(DeletedDesignEntity(designId, System.currentTimeMillis()))
             triggerLocalBackup()
@@ -487,7 +487,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         if (field.isBlank()) return
         val trimmed = field.trim()
         repositoryScope.launch {
-            val dao = currentDao ?: return@launch
+            val dao = awaitDao() ?: return@launch
             dao.insertGlobalCustomFields(listOf(GlobalCustomFieldEntity(trimmed, System.currentTimeMillis())))
             dao.deleteDeletedCustomFieldTombstone(trimmed)
             triggerLocalBackup()
@@ -496,7 +496,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     override fun removeGlobalCustomField(field: String) {
         repositoryScope.launch {
-            val dao = currentDao ?: return@launch
+            val dao = awaitDao() ?: return@launch
             dao.deleteGlobalCustomField(field)
             dao.insertDeletedCustomField(DeletedCustomFieldEntity(field, System.currentTimeMillis()))
             triggerLocalBackup()
@@ -504,62 +504,85 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     }
 
     override suspend fun hasGuestData(): Boolean = withContext(Dispatchers.IO) {
+        // Only meaningful while signed in: in guest mode "bi_database.db" IS the active DB.
+        if (authManager.currentUser.value == null) return@withContext false
         val dbFile = context.getDatabasePath("bi_database.db")
         if (!dbFile.exists()) return@withContext false
+        var guestDb: AppDatabase? = null
         try {
-            val db = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db")
-                .fallbackToDestructiveMigration()
-                .build()
-            val paths = db.designDao().getAllImagePaths()
-            db.close()
-            paths.isNotEmpty()
+            guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db").build()
+            guestDb.designDao().getAllDesignsOnce().isNotEmpty()
         } catch (e: Exception) {
             e.printStackTrace()
             false
+        } finally {
+            guestDb?.close()
         }
     }
 
     override suspend fun mergeGuestData(): Boolean = withContext(Dispatchers.IO) {
+        if (authManager.currentUser.value == null) return@withContext false
         val dbFile = context.getDatabasePath("bi_database.db")
         if (!dbFile.exists()) return@withContext false
         dbLock.withLock {
-            val activeDao = currentDao ?: return@withContext false
+            val activeDao = awaitDao() ?: return@withContext false
+            var guestDb: AppDatabase? = null
             try {
-                val guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db")
-                    .fallbackToDestructiveMigration()
-                    .build()
+                guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db").build()
                 val guestDao = guestDb.designDao()
 
-                val designs = guestDao.getAllDesignsFlow().first()
-                val globals = guestDao.getAllGlobalCustomFieldsFlow().first()
-                val deletedDesigns = guestDao.getAllDeletedDesignsFlow().first()
-                val deletedCustomFields = guestDao.getAllDeletedCustomFieldsFlow().first()
+                val designs = guestDao.getAllDesignsOnce()
+                val globals = guestDao.getAllGlobalCustomFields()
+                val deletedDesigns = guestDao.getAllDeletedDesignsOnce()
+                val deletedCustomFields = guestDao.getAllDeletedCustomFieldsOnce()
 
                 for (designWithInv in designs) {
-                    val designEntity = designWithInv.design
-                    val invEntities = designWithInv.inventories
-                    val updatedDesign = designEntity.copy(updatedAt = System.currentTimeMillis())
+                    val updatedDesign = designWithInv.design.copy(updatedAt = System.currentTimeMillis())
                     activeDao.insertDesign(updatedDesign)
-                    activeDao.insertInventories(invEntities.map { it.copy(id = 0) })
+                    activeDao.insertInventories(designWithInv.inventories.map { it.copy(id = 0) })
                 }
-
                 activeDao.insertGlobalCustomFields(globals.map { it.copy(updatedAt = System.currentTimeMillis()) })
-                activeDao.insertDeletedDesigns(deletedDesigns.map { it.copy(deletedAt = System.currentTimeMillis()) })
-                activeDao.insertDeletedCustomFields(deletedCustomFields.map { it.copy(deletedAt = System.currentTimeMillis()) })
+                // Preserve ORIGINAL tombstone timestamps (BUG-13): restamping to "now" would
+                // out-vote legitimately newer edits from other devices in the next LWW merge.
+                activeDao.insertDeletedDesigns(deletedDesigns)
+                activeDao.insertDeletedCustomFields(deletedCustomFields)
 
                 guestDao.deleteAllDesigns()
                 guestDao.deleteAllInventories()
                 guestDao.deleteAllGlobalCustomFields()
                 guestDao.deleteAllDeletedDesigns()
                 guestDao.deleteAllDeletedCustomFields()
-
-                guestDb.close()
                 triggerLocalBackup()
                 true
             } catch (e: Exception) {
                 e.printStackTrace()
                 false
+            } finally {
+                guestDb?.close()
             }
+        }
+    }
+
+    override suspend fun clearGuestData(): Boolean = withContext(Dispatchers.IO) {
+        // Only valid while signed in: in guest mode "bi_database.db" IS the active database.
+        if (authManager.currentUser.value == null) return@withContext false
+        val dbFile = context.getDatabasePath("bi_database.db")
+        if (!dbFile.exists()) return@withContext true
+        var guestDb: AppDatabase? = null
+        try {
+            guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db").build()
+            val dao = guestDb.designDao()
+            dao.deleteAllDesigns()
+            dao.deleteAllInventories()
+            dao.deleteAllGlobalCustomFields()
+            dao.deleteAllDeletedDesigns()
+            dao.deleteAllDeletedCustomFields()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        } finally {
+            guestDb?.close()
         }
     }
 }

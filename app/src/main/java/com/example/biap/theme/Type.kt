@@ -6,7 +6,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// Set of Material typography styles to match Google Apps (Google Sans system font)
+// Contemporary Heritage typography: Serif (editorial luxury) for display/headline/titleLarge,
+// SansSerif for body, labels and dense UI text.
 val Typography = Typography(
     displayLarge = TextStyle(
         fontFamily = FontFamily.Serif,

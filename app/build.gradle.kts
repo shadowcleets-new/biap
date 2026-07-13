@@ -18,9 +18,21 @@ android {
         versionName = "1.0"
     }
 
+    // signingConfigs intentionally absent: the owner has not supplied a release keystore.
+    // When available, uncomment and fill from a local (git-ignored) keystore.properties:
+    // signingConfigs {
+    //     create("release") {
+    //         storeFile = file("<owner-supplied>.keystore")
+    //         storePassword = "<owner-supplied>"
+    //         keyAlias = "<owner-supplied>"
+    //         keyPassword = "<owner-supplied>"
+    //     }
+    // }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -98,10 +110,6 @@ dependencies {
   // WorkManager & Security
   implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.androidx.security.crypto)
-}
-
-kotlin {
-    jvmToolchain(17)
 }
 
 

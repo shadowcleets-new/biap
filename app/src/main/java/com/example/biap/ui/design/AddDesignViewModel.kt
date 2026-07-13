@@ -16,7 +16,7 @@ import com.example.biap.util.SizeUtils
 
 data class AddDesignUiState(
     val name: String = "",
-    val category: String = "Salwar Kameez",
+    val category: String = AddDesignViewModel.DEFAULT_CATEGORY,
     val imagePath: String? = null,
     val sizes: List<SizeInventory> = emptyList(),
     val availableSizes: List<String> = SizeUtils.sortSizes(listOf("S", "M", "L", "XL", "XXL")),
@@ -27,6 +27,10 @@ data class AddDesignUiState(
 )
 
 class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
+    companion object {
+        const val DEFAULT_CATEGORY = "Salwar Kameez"
+    }
+
     private val _uiState = MutableStateFlow(AddDesignUiState())
     val uiState: StateFlow<AddDesignUiState> = _uiState.asStateFlow()
     private val sizeCache = mutableMapOf<String, SizeInventory>()
@@ -62,18 +66,18 @@ class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
         _uiState.update { it.copy(imagePath = path) }
     }
 
-    fun updateSizeInventory(size: String, stock: Int, price: Long, enabled: Boolean) {
+    fun updateSizeInventory(size: String, stock: Int, price: Long, enabled: Boolean, restoreFromCache: Boolean = false) {
         _uiState.update { current ->
             val updated = current.sizes.toMutableList()
             val existing = updated.find { it.size == size }
             updated.removeAll { it.size == size }
             if (enabled) {
+                // Restore cached stock/price ONLY on an explicit chip re-enable — never while
+                // the user is typing (BUG-18: clearing both fields to 0 must stay 0).
                 val cached = sizeCache[size]
-                val finalStock = if (stock == 0 && price == 0L && cached != null) cached.stock else stock
-                val finalPrice = if (stock == 0 && price == 0L && cached != null) cached.price else price
-                val newItem = SizeInventory(size, finalStock, finalPrice)
+                val newItem = if (restoreFromCache && cached != null) cached else SizeInventory(size, stock, price)
                 updated.add(newItem)
-                if (finalStock > 0 || finalPrice > 0L) {
+                if (newItem.stock > 0 || newItem.price > 0L) {
                     sizeCache[size] = newItem
                 }
             } else {

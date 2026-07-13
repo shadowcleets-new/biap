@@ -20,7 +20,8 @@ class GoogleDriveSyncManager {
      * Returns the file ID if found, or null if not found.
      */
     suspend fun searchFile(accessToken: String, fileName: String = "bi_data.json.enc"): String? = withContext(Dispatchers.IO) {
-        val url = "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='$fileName'&fields=files(id,name)"
+        val encodedQuery = java.net.URLEncoder.encode("name='$fileName'", "UTF-8")
+        val url = "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=$encodedQuery&fields=files(id,name)"
         val request = Request.Builder()
             .url(url)
             .header("Authorization", "Bearer $accessToken")
@@ -130,5 +131,26 @@ class GoogleDriveSyncManager {
             e.printStackTrace()
         }
         null
+    }
+
+    /**
+     * Renames a Drive file (metadata-only PATCH). Used to quarantine unreadable payloads.
+     */
+    suspend fun renameFile(accessToken: String, fileId: String, newName: String): Boolean = withContext(Dispatchers.IO) {
+        val url = "https://www.googleapis.com/drive/v3/files/$fileId"
+        val body = """{"name": "$newName"}""".toRequestBody("application/json; charset=utf-8".toMediaType())
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $accessToken")
+            .patch(body)
+            .build()
+        try {
+            client.newCall(request).execute().use { response ->
+                return@withContext response.isSuccessful
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        false
     }
 }

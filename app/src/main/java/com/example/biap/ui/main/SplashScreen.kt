@@ -51,18 +51,18 @@ fun SplashScreen(
         if (profile == PerformanceProfile.LOW_POWER) {
             alphaAnim.snapTo(1f)
             scaleAnim.snapTo(1f)
-            delay(300)
+            delay(150)
         } else {
             // Animate the logo fade-in and subtle scale-up
             alphaAnim.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 1200)
+                animationSpec = tween(durationMillis = 600)
             )
             scaleAnim.animateTo(
                 targetValue = 1.0f,
-                animationSpec = tween(durationMillis = 1200)
+                animationSpec = tween(durationMillis = 600)
             )
-            delay(1500)
+            delay(500)
         }
         onSplashComplete()
     }
@@ -137,18 +137,5 @@ fun SplashScreen(
                 textAlign = TextAlign.Center
             )
         }
-
-        // Bottom footer credit
-        Text(
-            text = "DESIGN SYSTEM MOCKED IN STITCH BY GOOGLE",
-            fontFamily = FontFamily.SansSerif,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 9.sp,
-            letterSpacing = 2.sp,
-            color = Color(0xFFF5F2E9).copy(alpha = 0.3f),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 36.dp)
-        )
     }
 }

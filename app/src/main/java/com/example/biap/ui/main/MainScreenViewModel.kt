@@ -84,6 +84,10 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
   suspend fun mergeGuestData(): Boolean {
     return dataRepository.mergeGuestData()
   }
+
+  suspend fun discardGuestData(): Boolean {
+    return dataRepository.clearGuestData()
+  }
 }
 
 sealed interface MainScreenUiState {

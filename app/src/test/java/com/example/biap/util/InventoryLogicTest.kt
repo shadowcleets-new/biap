@@ -34,7 +34,9 @@ class InventoryLogicTest {
         assertEquals(4.0, SizeUtils.getSizeSortWeight("L"), 0.001)
         assertEquals(5.0, SizeUtils.getSizeSortWeight("XL"), 0.001)
         assertEquals(6.0, SizeUtils.getSizeSortWeight("XXL"), 0.001)
-        assertEquals(8.0, SizeUtils.getSizeSortWeight("3XL"), 0.001)
+        assertEquals(6.0, SizeUtils.getSizeSortWeight("2XL"), 0.001)  // alias of XXL
+        assertEquals(7.0, SizeUtils.getSizeSortWeight("3XL"), 0.001)
+        assertEquals(7.0, SizeUtils.getSizeSortWeight("XXXL"), 0.001) // alias of 3XL
         
         // Numerical sizing (standard chest sizes)
         assertEquals(1032.0, SizeUtils.getSizeSortWeight("32"), 0.001)

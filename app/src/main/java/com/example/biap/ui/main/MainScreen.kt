@@ -136,6 +136,30 @@ fun MainScreen(
 
     var showMenu by remember { mutableStateOf(false) }
     var showMergePrompt by remember { mutableStateOf(false) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+    val profile = rememberPerformanceProfile()
+
+    // BUG-14: surface Google's interactive re-approval instead of silently retrying forever.
+    val pendingAuthIntent by authManager.pendingAuthIntent.collectAsStateWithLifecycle()
+    val reauthLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
+        authManager.clearPendingAuthIntent()
+        viewModel.syncWithGoogleDrive()
+    }
+    LaunchedEffect(pendingAuthIntent) {
+        val intent = pendingAuthIntent
+        if (intent != null) {
+            val result = snackbarHostState.showSnackbar(
+                message = "Google Drive needs re-approval to back up your data.",
+                actionLabel = "Approve",
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                reauthLauncher.launch(intent)
+            }
+        }
+    }
 
     LaunchedEffect(currentUser) {
         if (currentUser != null) {
@@ -187,7 +211,10 @@ fun MainScreen(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showMergePrompt = false },
+                    onClick = {
+                        showMergePrompt = false
+                        showDiscardConfirm = true
+                    },
                     modifier = Modifier.minimumInteractiveComponentSize()
                 ) {
                     Text("Discard Guest Data")
@@ -199,10 +226,46 @@ fun MainScreen(
         )
     }
 
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            title = { Text("Delete Offline Designs?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) },
+            text = { Text("This permanently deletes the designs created in the offline guest workspace. This cannot be undone.", style = MaterialTheme.typography.bodyMedium) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardConfirm = false
+                        scope.launch {
+                            val cleared = viewModel.discardGuestData()
+                            snackbarHostState.showSnackbar(
+                                if (cleared) "Offline guest data deleted." else "Could not delete offline guest data."
+                            )
+                        }
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.minimumInteractiveComponentSize()
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDiscardConfirm = false },
+                    modifier = Modifier.minimumInteractiveComponentSize()
+                ) {
+                    Text("Keep")
+                }
+            },
+            shape = AtelierShapes.CornerLarge,
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Product Portfolio", fontWeight = FontWeight.Bold) },
+                title = { Text("Product Portfolio", style = MaterialTheme.typography.titleLarge) },
                 actions = {
                     if (currentUser != null) {
                         Row(
@@ -210,11 +273,19 @@ fun MainScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             if (isSyncing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                                if (profile == PerformanceProfile.LOW_POWER) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                } else {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             } else {
                                 IconButton(onClick = { viewModel.syncWithGoogleDrive() }) {
                                     Icon(Icons.Default.Sync, contentDescription = "Sync Now")
@@ -308,6 +379,9 @@ fun MainScreen(
                         .padding(paddingValues)
                         .fillMaxSize()
                 ) {
+                    if (isSyncing) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
                     SearchBarField(
                         query = searchQuery,
                         onQueryChange = { viewModel.updateSearchQuery(it) }

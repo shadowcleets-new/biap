@@ -17,6 +17,7 @@ class Converters {
         return try {
             json.decodeFromString(value)
         } catch (e: Exception) {
+            android.util.Log.e("Converters", "Corrupt List column, returning empty: $value", e)
             emptyList()
         }
     }
@@ -31,6 +32,7 @@ class Converters {
         return try {
             json.decodeFromString(value)
         } catch (e: Exception) {
+            android.util.Log.e("Converters", "Corrupt Map column, returning empty: $value", e)
             emptyMap()
         }
     }

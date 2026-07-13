@@ -135,4 +135,14 @@ interface DesignDao {
 
     @Query("SELECT imagePath FROM designs WHERE imagePath IS NOT NULL")
     suspend fun getAllImagePaths(): List<String>
+
+    @Transaction
+    @Query("SELECT * FROM designs")
+    suspend fun getAllDesignsOnce(): List<DesignWithInventories>
+
+    @Query("SELECT * FROM deleted_designs")
+    suspend fun getAllDeletedDesignsOnce(): List<DeletedDesignEntity>
+
+    @Query("SELECT * FROM deleted_custom_fields")
+    suspend fun getAllDeletedCustomFieldsOnce(): List<DeletedCustomFieldEntity>
 }

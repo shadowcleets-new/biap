@@ -3,6 +3,7 @@ package com.example.biap.util
 import android.content.Context
 import android.content.Intent
 import com.google.android.gms.auth.GoogleAuthUtil
+import com.google.android.gms.auth.UserRecoverableAuthException
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -33,6 +34,17 @@ class AuthManager(private val context: Context) {
     )
     val currentUser: StateFlow<GoogleSignInAccount?> = _currentUser.asStateFlow()
 
+    /**
+     * Set when Google requires interactive re-approval of Drive access (BUG-14).
+     * MainScreen observes this and offers an "Approve" action that launches the intent.
+     */
+    private val _pendingAuthIntent = MutableStateFlow<Intent?>(null)
+    val pendingAuthIntent: StateFlow<Intent?> = _pendingAuthIntent.asStateFlow()
+
+    fun clearPendingAuthIntent() {
+        _pendingAuthIntent.value = null
+    }
+
     fun getSignInIntent(): Intent {
         return signInClient.signInIntent
     }
@@ -57,6 +69,10 @@ class AuthManager(private val context: Context) {
                 gAccount,
                 "oauth2:https://www.googleapis.com/auth/drive.appdata"
             )
+        } catch (e: UserRecoverableAuthException) {
+            // The user must re-approve access in a system UI; surface it instead of looping.
+            _pendingAuthIntent.value = e.intent
+            null
         } catch (e: Exception) {
             e.printStackTrace()
             null

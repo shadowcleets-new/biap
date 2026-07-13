@@ -1,35 +1,35 @@
 package com.example.biap.util
 
 object SizeUtils {
+    // Canonical ladder: XXL is the canonical spelling of 2XL, 3XL of XXXL.
     private val standardSizes = listOf(
-        "XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", 
+        "XXS", "XS", "S", "M", "L", "XL", "XXL",
         "3XL", "4XL", "5XL", "6XL", "7XL", "8XL", "9XL", "10XL"
     )
+    private val aliases = mapOf("2XL" to "XXL", "XXXL" to "3XL")
 
     /**
-     * Determines a sort weight for sizes so that standard letter sizes
-     * come first (sorted XXS to 10XL), then numeric sizes (sorted numerically),
-     * and custom sizes alphabetically at the end.
+     * Sort weight: standard letter sizes first (index order), numeric sizes at 1000+value
+     * (clamped below the custom band), custom strings alphabetically from 10000.
      */
     fun getSizeSortWeight(size: String): Double {
         val trimmed = size.trim().uppercase()
-        
-        // 1. Check standard sizes first
-        val letterIndex = standardSizes.indexOf(trimmed)
+        val canonical = aliases[trimmed] ?: trimmed
+
+        val letterIndex = standardSizes.indexOf(canonical)
         if (letterIndex != -1) {
             return letterIndex.toDouble()
         }
 
-        // 2. Check if it's numeric (e.g. 32, 34...)
-        val intValue = trimmed.toIntOrNull()
+        val intValue = canonical.toIntOrNull()
         if (intValue != null) {
-            return 1000.0 + intValue
+            // Clamp so absurd numeric sizes can never collide with the custom band at 10000.
+            return 1000.0 + intValue.coerceAtMost(8999)
         }
 
-        // 3. Custom alphabetical sizes
         var alphaScore = 0.0
         var multiplier = 0.1
-        for (char in trimmed.take(5)) {
+        for (char in canonical.take(5)) {
             alphaScore += (char - 'A') * multiplier
             multiplier /= 100.0
         }

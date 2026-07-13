@@ -97,6 +97,7 @@ fun AddDesignScreen(
 
     val isFormDirty = remember(state) {
         state.name.isNotEmpty() ||
+        state.category != AddDesignViewModel.DEFAULT_CATEGORY ||
         state.imagePath != null ||
         state.sizes.isNotEmpty() ||
         state.karigars.isNotEmpty() ||
@@ -310,7 +311,7 @@ fun AddDesignScreen(
                                             viewModel.updateSizeInventory(size, 0, 0L, false)
                                         }
                                     } else {
-                                        viewModel.updateSizeInventory(size, 0, 0L, true)
+                                        viewModel.updateSizeInventory(size, 0, 0L, true, restoreFromCache = true)
                                     }
                                 },
                                 label = { Text(size, fontWeight = FontWeight.Bold) },
@@ -478,7 +479,7 @@ fun AddDesignScreen(
                                         if (newSizeInput.isNotBlank() && !sizeExists) {
                                             val normalizedSize = newSizeInput.trim().uppercase()
                                             viewModel.addAvailableSize(normalizedSize)
-                                            viewModel.updateSizeInventory(normalizedSize, 0, 0L, true)
+                                            viewModel.updateSizeInventory(normalizedSize, 0, 0L, true, restoreFromCache = true)
                                             newSizeInput = ""
                                             showCustomSizeDialog = false
                                         }
