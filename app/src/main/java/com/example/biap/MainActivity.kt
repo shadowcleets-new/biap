@@ -13,7 +13,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -327,6 +326,7 @@ fun PhoneAuthScreen(
     var otpCode by remember { mutableStateOf("") }
     var otpSent by remember { mutableStateOf(false) }
     var verificationId by remember { mutableStateOf("") }
+    var resendToken by remember { mutableStateOf<PhoneAuthProvider.ForceResendingToken?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
@@ -376,7 +376,7 @@ fun PhoneAuthScreen(
                         return@Button
                     }
                     if (!phoneNumber.matches(Regex("^\\+\\d{1,3}\\d{6,14}$"))) {
-                        errorMessage = "Invalid phone format. Use: +91XXXXXXXXXX"
+                        errorMessage = "Invalid format. Use: +91XXXXXXXXXX"
                         return@Button
                     }
 
@@ -385,16 +385,24 @@ fun PhoneAuthScreen(
 
                     val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
                         override fun onVerificationCompleted(credential: com.google.firebase.auth.PhoneAuthCredential) {
+                            isLoading = false
                             auth.signInWithCredential(credential)
                                 .addOnFailureListener {
-                                    errorMessage = "Authentication failed"
-                                    isLoading = false
+                                    errorMessage = "Auto sign-in failed. Enter OTP manually."
                                 }
                         }
 
                         override fun onVerificationFailed(e: com.google.firebase.FirebaseException) {
-                            errorMessage = "Verification failed"
                             isLoading = false
+                            errorMessage = when {
+                                e.message?.contains("reCAPTCHA") == true ->
+                                    "reCAPTCHA verification failed. Check Firebase Console Phone Auth setup."
+                                e.message?.contains("quota") == true ->
+                                    "Request quota exceeded. Try again later."
+                                e.message?.contains("appVerification") == true ->
+                                    "App verification failed. Ensure App Check is configured in Firebase."
+                                else -> "Verification failed: ${e.message?.take(50) ?: "Unknown error"}"
+                            }
                         }
 
                         override fun onCodeSent(
@@ -402,8 +410,10 @@ fun PhoneAuthScreen(
                             token: PhoneAuthProvider.ForceResendingToken
                         ) {
                             verificationId = newVerificationId
+                            resendToken = token
                             otpSent = true
                             isLoading = false
+                            errorMessage = ""
                         }
                     }
 
@@ -433,7 +443,7 @@ fun PhoneAuthScreen(
             }
         } else {
             Text(
-                "Enter the OTP sent to $phoneNumber",
+                "OTP sent to $phoneNumber",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(bottom = 24.dp)
             )
@@ -441,7 +451,7 @@ fun PhoneAuthScreen(
             OutlinedTextField(
                 value = otpCode,
                 onValueChange = { otpCode = it },
-                label = { Text("OTP (6 digits)") },
+                label = { Text("Enter 6-digit OTP") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
@@ -463,7 +473,7 @@ fun PhoneAuthScreen(
             Button(
                 onClick = {
                     if (otpCode.isBlank() || otpCode.length != 6) {
-                        errorMessage = "Invalid OTP format (6 digits required)"
+                        errorMessage = "Enter 6-digit OTP"
                         return@Button
                     }
 
@@ -473,7 +483,7 @@ fun PhoneAuthScreen(
                     val credential = PhoneAuthProvider.getCredential(verificationId, otpCode)
                     auth.signInWithCredential(credential)
                         .addOnFailureListener {
-                            errorMessage = "Invalid OTP"
+                            errorMessage = "Invalid OTP. Try again."
                             isLoading = false
                         }
                 },
@@ -495,7 +505,10 @@ fun PhoneAuthScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            TextButton(onClick = { otpSent = false }, enabled = !isLoading) {
+            TextButton(onClick = {
+                otpSent = false
+                errorMessage = ""
+            }, enabled = !isLoading) {
                 Text("Use different number")
             }
         }
