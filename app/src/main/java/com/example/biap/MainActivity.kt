@@ -3,6 +3,7 @@ package com.example.biap
 import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -12,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -33,26 +35,6 @@ import java.util.concurrent.TimeUnit
 class MainActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
     private lateinit var googleSignInClient: GoogleSignInClient
-    private val googleSignInLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            try {
-                val account = task.getResult(ApiException::class.java)
-                val credential = GoogleAuthProvider.getCredential(account?.idToken, null)
-                auth.signInWithCredential(credential)
-                    .addOnSuccessListener {
-                        // Auth state listener will update UI
-                    }
-                    .addOnFailureListener { e ->
-                        // Generic error message to prevent enumeration
-                    }
-            } catch (e: ApiException) {
-                // Generic error message
-            }
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,7 +59,11 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    BiapApp(auth = auth, googleSignInClient = googleSignInClient)
+                    BiapApp(
+                        auth = auth,
+                        googleSignInClient = googleSignInClient,
+                        activity = this
+                    )
                 }
             }
         }
@@ -85,7 +71,11 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun BiapApp(auth: FirebaseAuth, googleSignInClient: GoogleSignInClient) {
+fun BiapApp(
+    auth: FirebaseAuth,
+    googleSignInClient: GoogleSignInClient,
+    activity: Activity
+) {
     var currentUser by remember { mutableStateOf(auth.currentUser) }
 
     LaunchedEffect(Unit) {
@@ -107,7 +97,8 @@ fun BiapApp(auth: FirebaseAuth, googleSignInClient: GoogleSignInClient) {
     } else {
         AuthNavigationScreen(
             auth = auth,
-            googleSignInClient = googleSignInClient
+            googleSignInClient = googleSignInClient,
+            activity = activity
         )
     }
 }
@@ -115,7 +106,8 @@ fun BiapApp(auth: FirebaseAuth, googleSignInClient: GoogleSignInClient) {
 @Composable
 fun AuthNavigationScreen(
     auth: FirebaseAuth,
-    googleSignInClient: GoogleSignInClient
+    googleSignInClient: GoogleSignInClient,
+    activity: Activity
 ) {
     var authMethod by remember { mutableStateOf<String?>(null) }
 
@@ -126,10 +118,12 @@ fun AuthNavigationScreen(
         )
         "phone" -> PhoneAuthScreen(
             auth = auth,
+            activity = activity,
             onBack = { authMethod = null }
         )
         "google" -> GoogleSignInScreen(
             googleSignInClient = googleSignInClient,
+            auth = auth,
             onBack = { authMethod = null }
         )
         else -> AuthChoiceScreen(
@@ -326,6 +320,7 @@ fun EmailAuthScreen(
 @Composable
 fun PhoneAuthScreen(
     auth: FirebaseAuth,
+    activity: Activity,
     onBack: () -> Unit
 ) {
     var phoneNumber by remember { mutableStateOf("") }
@@ -381,7 +376,7 @@ fun PhoneAuthScreen(
                         return@Button
                     }
                     if (!phoneNumber.matches(Regex("^\\+\\d{1,3}\\d{6,14}$"))) {
-                        errorMessage = "Invalid phone format"
+                        errorMessage = "Invalid phone format. Use: +91XXXXXXXXXX"
                         return@Button
                     }
 
@@ -390,10 +385,11 @@ fun PhoneAuthScreen(
 
                     val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
                         override fun onVerificationCompleted(credential: com.google.firebase.auth.PhoneAuthCredential) {
-                            auth.signInWithCredential(credential).addOnFailureListener {
-                                errorMessage = "Authentication failed"
-                                isLoading = false
-                            }
+                            auth.signInWithCredential(credential)
+                                .addOnFailureListener {
+                                    errorMessage = "Authentication failed"
+                                    isLoading = false
+                                }
                         }
 
                         override fun onVerificationFailed(e: com.google.firebase.FirebaseException) {
@@ -401,16 +397,24 @@ fun PhoneAuthScreen(
                             isLoading = false
                         }
 
-                        override fun onCodeSent(verificationId: String, token: PhoneAuthProvider.ForceResendingToken) {
-                            verificationId
+                        override fun onCodeSent(
+                            newVerificationId: String,
+                            token: PhoneAuthProvider.ForceResendingToken
+                        ) {
+                            verificationId = newVerificationId
                             otpSent = true
                             isLoading = false
                         }
                     }
 
-                    // NOTE: Requires Activity context - implement via callback
-                    errorMessage = "Phone auth requires activity context - implement via launcher"
-                    isLoading = false
+                    val options = PhoneAuthOptions.newBuilder(auth)
+                        .setPhoneNumber(phoneNumber)
+                        .setTimeout(120L, TimeUnit.SECONDS)
+                        .setActivity(activity)
+                        .setCallbacks(callbacks)
+                        .build()
+
+                    PhoneAuthProvider.verifyPhoneNumber(options)
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -459,14 +463,19 @@ fun PhoneAuthScreen(
             Button(
                 onClick = {
                     if (otpCode.isBlank() || otpCode.length != 6) {
-                        errorMessage = "Invalid OTP format"
+                        errorMessage = "Invalid OTP format (6 digits required)"
                         return@Button
                     }
 
                     isLoading = true
                     errorMessage = ""
-                    // TODO: Complete OTP verification with verificationId
-                    isLoading = false
+
+                    val credential = PhoneAuthProvider.getCredential(verificationId, otpCode)
+                    auth.signInWithCredential(credential)
+                        .addOnFailureListener {
+                            errorMessage = "Invalid OTP"
+                            isLoading = false
+                        }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -508,10 +517,39 @@ fun PhoneAuthScreen(
 @Composable
 fun GoogleSignInScreen(
     googleSignInClient: GoogleSignInClient,
+    auth: FirebaseAuth,
     onBack: () -> Unit
 ) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            try {
+                val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                val account = task.getResult(ApiException::class.java)
+
+                if (account?.idToken != null) {
+                    isLoading = true
+                    val credential = GoogleAuthProvider.getCredential(account.idToken, null)
+                    auth.signInWithCredential(credential)
+                        .addOnFailureListener {
+                            errorMessage = "Authentication failed"
+                            isLoading = false
+                        }
+                } else {
+                    errorMessage = "Sign in failed"
+                }
+            } catch (e: ApiException) {
+                errorMessage = "Sign in cancelled"
+                isLoading = false
+            }
+        } else {
+            isLoading = false
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -551,8 +589,7 @@ fun GoogleSignInScreen(
                 isLoading = true
                 errorMessage = ""
                 val signInIntent = googleSignInClient.signInIntent
-                // TODO: Launch via googleSignInLauncher
-                isLoading = false
+                googleSignInLauncher.launch(signInIntent)
             },
             modifier = Modifier
                 .fillMaxWidth()
