@@ -93,9 +93,9 @@ dependencies {
   androidTestImplementation(libs.androidx.test.espresso.core)
 
   // Navigation
-  implementation(libs.androidx.navigation3.ui)
-  implementation(libs.androidx.navigation3.runtime)
-  implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+  implementation(libs.androidx.navigation.compose)
+  implementation(libs.androidx.navigation.runtime.ktx)
+  implementation(libs.androidx.lifecycle.viewmodel.compose)
   implementation(libs.coil.compose)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.androidx.material.icons.extended)
@@ -110,6 +110,18 @@ dependencies {
   // WorkManager & Security
   implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.androidx.security.crypto)
+
+  // DataStore
+  implementation(libs.androidx.datastore.preferences)
+
+  // Firebase
+  val firebaseBom = platform(libs.firebase.bom)
+  implementation(firebaseBom)
+  androidTestImplementation(firebaseBom)
+  implementation(libs.firebase.auth)
+  implementation(libs.firebase.firestore)
+  implementation(libs.firebase.appcheck.playintegrity)
+  debugImplementation(libs.firebase.appcheck.debug)
 }
 
 
