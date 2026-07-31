@@ -9,9 +9,9 @@
               <option name="connection">
                 <ConnectionSetting>
                   <option name="appId" value="com.example.biap" />
-                  <option name="mobileSdkAppId" value="1:453845089135:android:055754c949b47eed7bc69a" />
-                  <option name="projectId" value="biap-android-2026" />
-                  <option name="projectNumber" value="453845089135" />
+                  <option name="mobileSdkAppId" value="1:641571185711:android:05cf6e078240209f3192da" />
+                  <option name="projectId" value="biap-67a71" />
+                  <option name="projectNumber" value="641571185711" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

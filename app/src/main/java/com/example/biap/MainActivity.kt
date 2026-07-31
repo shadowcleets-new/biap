@@ -39,9 +39,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         Firebase.initialize(this)
-        Firebase.appCheck.installAppCheckProviderFactory(
-            PlayIntegrityAppCheckProviderFactory.getInstance()
-        )
+        // TODO: Re-enable App Check after debugging Phone OTP
+        // Firebase.appCheck.installAppCheckProviderFactory(
+        //     PlayIntegrityAppCheckProviderFactory.getInstance()
+        // )
 
         auth = Firebase.auth
 
