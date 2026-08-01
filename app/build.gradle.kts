@@ -8,10 +8,10 @@ plugins {
 }
 
 android {
-    namespace = "com.example.biap"
+    namespace = "com.sc.biap"
     compileSdk = 36
     defaultConfig {
-        applicationId = "com.example.biap"
+        applicationId = "com.sc.biap"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

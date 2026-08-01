@@ -4,11 +4,11 @@
 -keepclassmembers class kotlinx.serialization.json.** {
     *** Companion;
 }
--keepclasseswithmembers class com.example.biap.** {
+-keepclasseswithmembers class com.sc.biap.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
--keep,includedescriptorclasses class com.example.biap.**$$serializer { *; }
--keepclassmembers class com.example.biap.** {
+-keep,includedescriptorclasses class com.sc.biap.**$$serializer { *; }
+-keepclassmembers class com.sc.biap.** {
     *** Companion;
 }
 

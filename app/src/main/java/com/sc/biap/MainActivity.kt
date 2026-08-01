@@ -1,4 +1,4 @@
-package com.example.biap
+package com.sc.biap
 
 import android.app.Activity
 import android.os.Bundle
@@ -20,11 +20,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
-import com.google.firebase.BuildConfig
 import com.google.firebase.Firebase
-import com.google.firebase.appcheck.appCheck
-import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
-import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.PhoneAuthOptions
@@ -42,17 +38,9 @@ class MainActivity : ComponentActivity() {
 
         Firebase.initialize(this)
 
-        // Use DebugAppCheckProviderFactory for development/testing
-        // Use PlayIntegrityAppCheckProviderFactory for production
-        if (BuildConfig.DEBUG) {
-            Firebase.appCheck.installAppCheckProviderFactory(
-                DebugAppCheckProviderFactory.getInstance()
-            )
-        } else {
-            Firebase.appCheck.installAppCheckProviderFactory(
-                PlayIntegrityAppCheckProviderFactory.getInstance()
-            )
-        }
+        // Provider is chosen by build variant via source sets (src/debug, src/release),
+        // not by a runtime flag. See AppCheckInit.kt in each variant.
+        installAppCheck(this)
 
         auth = Firebase.auth
 
