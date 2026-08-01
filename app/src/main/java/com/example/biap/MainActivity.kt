@@ -20,8 +20,10 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
+import com.google.firebase.BuildConfig
 import com.google.firebase.Firebase
 import com.google.firebase.appcheck.appCheck
+import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
@@ -39,10 +41,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         Firebase.initialize(this)
-        // TODO: Re-enable App Check after debugging Phone OTP
-        // Firebase.appCheck.installAppCheckProviderFactory(
-        //     PlayIntegrityAppCheckProviderFactory.getInstance()
-        // )
+
+        // Use DebugAppCheckProviderFactory for development/testing
+        // Use PlayIntegrityAppCheckProviderFactory for production
+        if (BuildConfig.DEBUG) {
+            Firebase.appCheck.installAppCheckProviderFactory(
+                DebugAppCheckProviderFactory.getInstance()
+            )
+        } else {
+            Firebase.appCheck.installAppCheckProviderFactory(
+                PlayIntegrityAppCheckProviderFactory.getInstance()
+            )
+        }
 
         auth = Firebase.auth
 
