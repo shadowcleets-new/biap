@@ -42,9 +42,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.rememberAsyncImagePainter
 import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.data.SizeInventory
+import androidx.compose.material3.ButtonDefaults
 import com.sc.biap.theme.AtelierShapes
 import com.sc.biap.theme.AtelierSpacing
+import com.sc.biap.theme.bodyMediumStrong
 import com.sc.biap.theme.horizontalFadingEdges
+import com.sc.biap.theme.labelLargeStrong
+import com.sc.biap.theme.titleLargeStrong
+import com.sc.biap.theme.titleMediumStrong
 import com.sc.biap.util.FileUtils
 import java.io.File
 
@@ -53,6 +58,13 @@ fun defaultAddDesignViewModel(): AddDesignViewModel {
     val context = LocalContext.current.applicationContext
     return viewModel { AddDesignViewModel(DefaultDataRepository.getInstance(context)) }
 }
+// Artwork and control geometry: intentionally not on the AtelierSpacing scale, which
+// governs layout rhythm rather than the intrinsic size of images, icons and chips.
+private val ImagePickerHeight = 200.dp
+private val OverlayIconSize = 20.dp
+private val EmptyStateIconSize = 40.dp
+private val SizeTokenWidth = 56.dp
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -145,7 +157,7 @@ fun AddDesignScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add New Design", fontWeight = FontWeight.Bold) },
+                title = { Text("Add New Design", style = MaterialTheme.typography.titleLargeStrong) },
                 navigationIcon = {
                     IconButton(onClick = {
                         if (isFormDirty) {
@@ -167,7 +179,7 @@ fun AddDesignScreen(
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     ) {
-                        Icon(Icons.Default.Done, contentDescription = "Save", modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Done, contentDescription = "Save", modifier = Modifier.size(ButtonDefaults.IconSize))
                         Spacer(Modifier.width(AtelierSpacing.Micro))
                         Text("Save")
                     }
@@ -188,7 +200,7 @@ fun AddDesignScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .height(ImagePickerHeight)
                     .clip(AtelierShapes.CornerLarge)
                     .background(
                         Brush.linearGradient(
@@ -219,7 +231,7 @@ fun AddDesignScreen(
                             Icons.Default.PhotoCamera,
                             contentDescription = "Change Photo",
                             tint = Color.White,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(OverlayIconSize)
                         )
                     }
                 } else {
@@ -227,11 +239,11 @@ fun AddDesignScreen(
                         Icon(
                             Icons.Default.PhotoCamera,
                             contentDescription = "Upload Photo",
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(EmptyStateIconSize),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(AtelierSpacing.Compact))
-                        Text("Upload Design Photo", fontWeight = FontWeight.Medium)
+                        Text("Upload Design Photo", style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
@@ -245,7 +257,7 @@ fun AddDesignScreen(
                     modifier = Modifier.padding(AtelierSpacing.Base),
                     verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Base)
                 ) {
-                    Text("Basic Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Basic Details", style = MaterialTheme.typography.titleMediumStrong)
 
                     OutlinedTextField(
                         value = state.name,
@@ -276,7 +288,7 @@ fun AddDesignScreen(
                     modifier = Modifier.padding(AtelierSpacing.Base),
                     verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
                 ) {
-                    Text("Sizes, Stock & Prices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Sizes, Stock & Prices", style = MaterialTheme.typography.titleMediumStrong)
                     Text(
                         "Configure stock and unique pricing per size.",
                         style = MaterialTheme.typography.bodySmall,
@@ -287,7 +299,7 @@ fun AddDesignScreen(
                     var newSizeInput by remember { mutableStateOf("") }
                     var sizeToRemove by remember { mutableStateOf<String?>(null) }
 
-                    Text("Configure Size Scale", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Configure Size Scale", style = MaterialTheme.typography.bodyMediumStrong)
                     
                     val sizeScaleScrollState = rememberScrollState()
                     Row(
@@ -314,7 +326,7 @@ fun AddDesignScreen(
                                         viewModel.updateSizeInventory(size, 0, 0L, true, restoreFromCache = true)
                                     }
                                 },
-                                label = { Text(size, fontWeight = FontWeight.Bold) },
+                                label = { Text(size, style = MaterialTheme.typography.labelLargeStrong) },
                                 modifier = Modifier.minimumInteractiveComponentSize()
                             )
                         }
@@ -393,12 +405,12 @@ fun AddDesignScreen(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .width(56.dp)
+                                        .width(SizeTokenWidth)
                                         .background(MaterialTheme.colorScheme.primaryContainer, AtelierShapes.CornerSmall)
                                         .padding(horizontal = AtelierSpacing.Compact, vertical = AtelierSpacing.Compact),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(size, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    Text(size, style = MaterialTheme.typography.labelLargeStrong, color = MaterialTheme.colorScheme.onPrimaryContainer)
                                 }
 
                                 OutlinedTextField(
@@ -458,7 +470,7 @@ fun AddDesignScreen(
                         }
                         AlertDialog(
                             onDismissRequest = { showCustomSizeDialog = false },
-                            title = { Text("Add Custom Size", fontWeight = FontWeight.Bold) },
+                            title = { Text("Add Custom Size", style = MaterialTheme.typography.titleLargeStrong) },
                             text = {
                                 OutlinedTextField(
                                     value = newSizeInput,
@@ -508,7 +520,7 @@ fun AddDesignScreen(
                     modifier = Modifier.padding(AtelierSpacing.Base),
                     verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
                 ) {
-                    Text("Assigned Karigars / Tailors", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Assigned Karigars / Tailors", style = MaterialTheme.typography.titleMediumStrong)
                     Text(
                         "Mention the karigars who worked on this design.",
                         style = MaterialTheme.typography.bodySmall,
@@ -572,7 +584,7 @@ fun AddDesignScreen(
                                 InputChip(
                                     selected = false,
                                     onClick = {},
-                                    label = { Text(karigar, fontWeight = FontWeight.Medium) },
+                                    label = { Text(karigar, style = MaterialTheme.typography.labelLarge) },
                                     trailingIcon = {
                                         Icon(
                                             Icons.Default.Clear,
@@ -600,7 +612,7 @@ fun AddDesignScreen(
                     modifier = Modifier.padding(AtelierSpacing.Base),
                     verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Base)
                 ) {
-                    Text("3-Piece Attributes & Custom Fields", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("3-Piece Attributes & Custom Fields", style = MaterialTheme.typography.titleMediumStrong)
 
                     val attributeTabs = listOf("Top (Kameez)", "Bottom (Salwar)", "Dupatta", "General")
                     var selectedTab by remember { mutableStateOf(0) }
@@ -620,7 +632,7 @@ fun AddDesignScreen(
                                     Text(
                                         text = title,
                                         maxLines = 1,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        style = if (isSelected) MaterialTheme.typography.labelLargeStrong else MaterialTheme.typography.labelLarge,
                                         color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 },
@@ -698,7 +710,7 @@ fun AddDesignScreen(
                     var selectedScopeIndex by remember { mutableStateOf(0) }
                     val scopes = listOf("Top", "Bottom", "Dupatta", "General")
 
-                    Text("Add New Custom Field", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Add New Custom Field", style = MaterialTheme.typography.bodyMediumStrong)
 
                     OutlinedTextField(
                         value = newKey,
@@ -773,7 +785,7 @@ fun AddDesignScreen(
             if (showSourceSelector) {
                 AlertDialog(
                     onDismissRequest = { showSourceSelector = false },
-                    title = { Text("Select Image Source", fontWeight = FontWeight.Bold) },
+                    title = { Text("Select Image Source", style = MaterialTheme.typography.titleLargeStrong) },
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)) {
                             Button(

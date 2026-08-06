@@ -115,3 +115,32 @@ val Typography = Typography(
         letterSpacing = 0.5.sp
     )
 )
+
+// #region Emphasis tokens
+/**
+ * Emphasised variants of the type scale.
+ *
+ * Material 3 Expressive ships these as first-class tokens (`titleLargeEmphasized` and
+ * friends), but that API is `internal` in material3 1.4.0 stable — see
+ * HAIKU_OPERATION_MANUAL.md 4.4. These extensions are the stable-API equivalent: one
+ * definition of what "emphasised" means per role, so call sites reference a token
+ * instead of bolting `fontWeight = FontWeight.Bold` onto a style ad hoc.
+ *
+ * If the project later moves to material3 1.5.x, these become one-line aliases to the
+ * real Expressive tokens and every call site is already correct.
+ */
+val Typography.titleLargeStrong: TextStyle
+    get() = titleLarge.copy(fontWeight = FontWeight.Bold)
+
+val Typography.titleMediumStrong: TextStyle
+    get() = titleMedium.copy(fontWeight = FontWeight.Bold)
+
+val Typography.titleSmallStrong: TextStyle
+    get() = titleSmall.copy(fontWeight = FontWeight.SemiBold)
+
+val Typography.bodyMediumStrong: TextStyle
+    get() = bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+
+val Typography.labelLargeStrong: TextStyle
+    get() = labelLarge.copy(fontWeight = FontWeight.Bold)
+// #endregion
