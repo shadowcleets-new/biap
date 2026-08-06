@@ -42,6 +42,9 @@ import com.sc.biap.data.Design
 import com.sc.biap.data.SizeInventory
 import com.sc.biap.util.FileUtils
 import com.sc.biap.util.SizeUtils
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.ui.semantics.Role
+import com.sc.biap.theme.AtelierShapes
 import com.sc.biap.theme.AtelierSpacing
 import com.sc.biap.theme.bodyMediumStrong
 import com.sc.biap.theme.headlineSmallStrong
@@ -62,6 +65,14 @@ fun defaultDesignDetailViewModel(designId: String): DesignDetailViewModel {
 
 // Stock at or below this count reads as low rather than healthy.
 private const val LOW_STOCK_THRESHOLD = 5
+
+// Artwork and control geometry: intrinsic sizes, deliberately off the AtelierSpacing
+// scale, which governs layout rhythm rather than how big an image or glyph is.
+private val HeroImageHeight = 280.dp
+private val SizeTokenWidth = 56.dp
+private val EmptyStateIconSize = 40.dp
+private val OverlayIconSize = 20.dp
+private val RemoveIconSize = 18.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -304,15 +315,15 @@ fun DesignDetailScreen(
                         .padding(paddingValues)
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
+                        .padding(AtelierSpacing.Base),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     // Design Image Card
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(280.dp)
-                            .clip(RoundedCornerShape(16.dp))
+                            .height(HeroImageHeight)
+                            .clip(AtelierShapes.CornerLarge)
                             .background(
                                 Brush.linearGradient(
                                     listOf(
@@ -336,15 +347,15 @@ fun DesignDetailScreen(
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
-                                        .padding(12.dp)
+                                        .padding(AtelierSpacing.Cozy)
                                         .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                                        .padding(8.dp)
+                                        .padding(AtelierSpacing.Compact)
                                 ) {
                                     Icon(
                                         Icons.Default.PhotoCamera,
                                         contentDescription = "Change Photo",
                                         tint = Color.White,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(OverlayIconSize)
                                     )
                                 }
                             }
@@ -353,10 +364,10 @@ fun DesignDetailScreen(
                                 Icon(
                                     Icons.Default.PhotoCamera,
                                     contentDescription = "Upload Photo",
-                                    modifier = Modifier.size(40.dp),
+                                    modifier = Modifier.size(EmptyStateIconSize),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(Modifier.height(8.dp))
+                                Spacer(Modifier.height(AtelierSpacing.Compact))
                                 Text("Upload Design Photo", style = MaterialTheme.typography.labelLarge)
                             }
                         }
@@ -365,14 +376,14 @@ fun DesignDetailScreen(
                     // Product Title & Category Card
                     if (isEditing) {
                         Card(
-                            shape = RoundedCornerShape(16.dp),
+                            shape = AtelierShapes.CornerLarge,
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    .padding(AtelierSpacing.Base),
+                                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
                             ) {
                                 Text("Basic Details", style = MaterialTheme.typography.titleMediumStrong)
                                 
@@ -382,7 +393,7 @@ fun DesignDetailScreen(
                                     label = { Text("Design Name / Code") },
                                     modifier = Modifier.fillMaxWidth(),
                                     singleLine = true,
-                                    shape = RoundedCornerShape(12.dp)
+                                    shape = AtelierShapes.CornerMedium
                                 )
 
                                 OutlinedTextField(
@@ -391,20 +402,20 @@ fun DesignDetailScreen(
                                     label = { Text("Category (e.g. Salwar Kameez)") },
                                     modifier = Modifier.fillMaxWidth(),
                                     singleLine = true,
-                                    shape = RoundedCornerShape(12.dp)
+                                    shape = AtelierShapes.CornerMedium
                                 )
                             }
                         }
                     } else {
                         Card(
-                            shape = RoundedCornerShape(16.dp),
+                            shape = AtelierShapes.CornerLarge,
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    .padding(AtelierSpacing.Base),
+                                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
                             ) {
                                 Text(
                                     text = design.name,
@@ -414,7 +425,7 @@ fun DesignDetailScreen(
                                 SuggestionChip(
                                     onClick = {},
                                     label = { Text(design.category) },
-                                    shape = RoundedCornerShape(8.dp)
+                                    shape = AtelierShapes.CornerSmall
                                 )
                             }
                         }
@@ -423,14 +434,14 @@ fun DesignDetailScreen(
                     // Inventory & Pricing Card
                     if (isEditing) {
                         Card(
-                            shape = RoundedCornerShape(16.dp),
+                            shape = AtelierShapes.CornerLarge,
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    .padding(AtelierSpacing.Base),
+                                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
                             ) {
                                 Text("Sizes, Stock & Prices", style = MaterialTheme.typography.titleMediumStrong)
                                 
@@ -505,7 +516,7 @@ fun DesignDetailScreen(
                                         "Select sizes above to configure stock and pricing.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(vertical = 12.dp)
+                                        modifier = Modifier.padding(vertical = AtelierSpacing.Cozy)
                                     )
                                 } else {
                                     editSizes.sortedBy { SizeUtils.getSizeSortWeight(it.size) }.forEach { inv ->
@@ -526,14 +537,14 @@ fun DesignDetailScreen(
                                             verticalAlignment = Alignment.CenterVertically,
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(vertical = 4.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                .padding(vertical = AtelierSpacing.Micro),
+                                            horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
                                         ) {
                                             Box(
                                                 modifier = Modifier
-                                                    .width(56.dp)
-                                                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(8.dp))
-                                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                                    .width(SizeTokenWidth)
+                                                    .background(MaterialTheme.colorScheme.primaryContainer, AtelierShapes.CornerSmall)
+                                                    .padding(horizontal = AtelierSpacing.Compact, vertical = AtelierSpacing.Compact),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(inv.size, style = MaterialTheme.typography.labelLargeStrong, color = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -556,7 +567,7 @@ fun DesignDetailScreen(
                                                 label = { Text("Stock") },
                                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                                 modifier = Modifier.weight(1f),
-                                                shape = RoundedCornerShape(8.dp)
+                                                shape = AtelierShapes.CornerSmall
                                             )
 
                                             OutlinedTextField(
@@ -581,7 +592,7 @@ fun DesignDetailScreen(
                                                 label = { Text("Price") },
                                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                                 modifier = Modifier.weight(1f),
-                                                shape = RoundedCornerShape(8.dp),
+                                                shape = AtelierShapes.CornerSmall,
                                                 prefix = { Text("₹") }
                                             )
                                         }
@@ -602,7 +613,7 @@ fun DesignDetailScreen(
                                                 onValueChange = { if (it.length <= 10) newSizeInput = it },
                                                 label = { Text("Size Label (e.g. 3XL)") },
                                                 singleLine = true,
-                                                shape = RoundedCornerShape(12.dp),
+                                                shape = AtelierShapes.CornerMedium,
                                                 isError = sizeExists,
                                                 supportingText = if (sizeExists) {
                                                     { Text("This size is already configured!", color = MaterialTheme.colorScheme.error) }
@@ -684,14 +695,14 @@ fun DesignDetailScreen(
                         }
                     } else {
                         Card(
-                            shape = RoundedCornerShape(16.dp),
+                            shape = AtelierShapes.CornerLarge,
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    .padding(AtelierSpacing.Base),
+                                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
                             ) {
                                 Text("Inventory & Pricing", style = MaterialTheme.typography.titleMediumStrong)
 
@@ -715,8 +726,8 @@ fun DesignDetailScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .horizontalScroll(rememberScrollState())
-                                            .padding(vertical = 4.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            .padding(vertical = AtelierSpacing.Micro),
+                                        horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
                                     ) {
                                         sortedInventories.forEachIndexed { index, inv ->
                                             val isSelected = selectedSizeIndex == index
@@ -732,7 +743,7 @@ fun DesignDetailScreen(
                                         }
                                     }
 
-                                    Spacer(Modifier.height(8.dp))
+                                    Spacer(Modifier.height(AtelierSpacing.Compact))
 
                                     if (activeInventory != null) {
                                         val stockColor = when {
@@ -743,7 +754,7 @@ fun DesignDetailScreen(
                                         }
 
                                         Card(
-                                            shape = RoundedCornerShape(12.dp),
+                                            shape = AtelierShapes.CornerMedium,
                                             colors = CardDefaults.cardColors(
                                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                                             ),
@@ -752,7 +763,7 @@ fun DesignDetailScreen(
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(16.dp),
+                                                    .padding(AtelierSpacing.Base),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
@@ -783,14 +794,14 @@ fun DesignDetailScreen(
 
                     // Assigned Karigars Card
                     Card(
-                        shape = RoundedCornerShape(16.dp),
+                        shape = AtelierShapes.CornerLarge,
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                .padding(AtelierSpacing.Base),
+                            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -820,15 +831,15 @@ fun DesignDetailScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .horizontalScroll(rememberScrollState())
-                                        .padding(vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        .padding(vertical = AtelierSpacing.Micro),
+                                    horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     karigarsListToUse.forEach { karigar ->
                                         SuggestionChip(
                                             onClick = {},
                                             label = { Text(karigar, style = MaterialTheme.typography.labelLarge) },
-                                            shape = RoundedCornerShape(8.dp)
+                                            shape = AtelierShapes.CornerSmall
                                         )
                                     }
                                 }
@@ -846,7 +857,7 @@ fun DesignDetailScreen(
                             title = { Text("Manage Karigars", style = MaterialTheme.typography.titleLargeStrong) },
                             text = {
                                 Column(
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     OutlinedTextField(
@@ -854,7 +865,7 @@ fun DesignDetailScreen(
                                         onValueChange = { if (it.length <= 50) newKarigarInput = it },
                                         label = { Text("Karigar Name") },
                                         singleLine = true,
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = AtelierShapes.CornerMedium,
                                         modifier = Modifier.fillMaxWidth(),
                                         trailingIcon = {
                                             IconButton(
@@ -882,8 +893,8 @@ fun DesignDetailScreen(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .horizontalScroll(rememberScrollState())
-                                                .padding(vertical = 4.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                .padding(vertical = AtelierSpacing.Micro),
+                                            horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
                                         ) {
                                             tempKarigars.forEach { karigar ->
                                                 InputChip(
@@ -891,13 +902,22 @@ fun DesignDetailScreen(
                                                     onClick = {},
                                                     label = { Text(karigar) },
                                                     trailingIcon = {
-                                                        Icon(
-                                                            Icons.Default.Clear,
-                                                            contentDescription = "Remove",
+                                                        // 48dp tap target on the Box; glyph stays 18dp.
+                                                        Box(
                                                             modifier = Modifier
-                                                                .size(18.dp)
-                                                                .clickable { tempKarigars = tempKarigars - karigar }
-                                                        )
+                                                                .minimumInteractiveComponentSize()
+                                                                .clickable(
+                                                                    role = Role.Button,
+                                                                    onClickLabel = "Remove"
+                                                                ) { tempKarigars = tempKarigars - karigar },
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Default.Clear,
+                                                                contentDescription = "Remove $karigar",
+                                                                modifier = Modifier.size(RemoveIconSize)
+                                                            )
+                                                        }
                                                     }
                                                 )
                                             }
@@ -932,14 +952,14 @@ fun DesignDetailScreen(
 
                     if (specsToUse.isNotEmpty() || isEditing) {
                         Card(
-                            shape = RoundedCornerShape(16.dp),
+                            shape = AtelierShapes.CornerLarge,
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    .padding(AtelierSpacing.Base),
+                                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
                             ) {
                                 Text("Specifications", style = MaterialTheme.typography.titleMediumStrong)
 
@@ -948,7 +968,7 @@ fun DesignDetailScreen(
 
                                 ScrollableTabRow(
                                     selectedTabIndex = selectedSpecTab,
-                                    edgePadding = 0.dp,
+                                    edgePadding = AtelierSpacing.None,
                                     indicator = {},
                                     divider = {}
                                 ) {
@@ -966,7 +986,7 @@ fun DesignDetailScreen(
                                                 )
                                             },
                                             modifier = Modifier
-                                                .padding(horizontal = 4.dp, vertical = 6.dp)
+                                                .padding(horizontal = AtelierSpacing.Micro, vertical = 6.dp)
                                                 .clip(CircleShape)
                                                 .background(
                                                     if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
@@ -995,7 +1015,7 @@ fun DesignDetailScreen(
                                         "No specifications under this category.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(vertical = 12.dp)
+                                        modifier = Modifier.padding(vertical = AtelierSpacing.Cozy)
                                     )
                                 } else {
                                     filteredSpecs.forEach { (key, value) ->
@@ -1003,8 +1023,8 @@ fun DesignDetailScreen(
                                         if (isEditing) {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = AtelierSpacing.Micro),
+                                                horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
                                             ) {
                                                 OutlinedTextField(
                                                     value = value,
@@ -1017,7 +1037,7 @@ fun DesignDetailScreen(
                                                     },
                                                     label = { Text(cleanLabel) },
                                                     modifier = Modifier.weight(1f),
-                                                    shape = RoundedCornerShape(12.dp)
+                                                    shape = AtelierShapes.CornerMedium
                                                 )
                                                 val defaultFields = setOf(
                                                     "Top - Fabric", "Top - Work", "Top - Color",
@@ -1040,7 +1060,7 @@ fun DesignDetailScreen(
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(vertical = 4.dp),
+                                                    .padding(vertical = AtelierSpacing.Micro),
                                                 horizontalArrangement = Arrangement.SpaceBetween
                                             ) {
                                                 Text(
@@ -1058,7 +1078,7 @@ fun DesignDetailScreen(
                                 }
 
                                 if (isEditing) {
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = AtelierSpacing.Compact))
                                     
                                     var newKey by remember { mutableStateOf("") }
                                     var selectedScopeIndex by remember { mutableStateOf(0) }
@@ -1071,13 +1091,13 @@ fun DesignDetailScreen(
                                         onValueChange = { if (it.length <= 50) newKey = it },
                                         label = { Text("Field Name (e.g. Sleeve Style, Lining)") },
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp)
+                                        shape = AtelierShapes.CornerMedium
                                     )
 
                                     Text("Apply Field To:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
                                     ) {
                                         scopes.forEachIndexed { idx, scopeName ->
                                             FilterChip(
@@ -1106,14 +1126,14 @@ fun DesignDetailScreen(
                                             }
                                         },
                                         modifier = Modifier.align(Alignment.End),
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = AtelierShapes.CornerMedium,
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                     ) {
                                         Icon(Icons.Default.Add, contentDescription = "Add")
-                                        Spacer(Modifier.width(4.dp))
+                                        Spacer(Modifier.width(AtelierSpacing.Micro))
                                         Text("Add Field")
                                     }
                                 }
@@ -1126,7 +1146,7 @@ fun DesignDetailScreen(
                             onDismissRequest = { showSourceSelector = false },
                             title = { Text("Select Image Source", style = MaterialTheme.typography.titleLargeStrong) },
                             text = {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)) {
                                     Button(
                                         onClick = {
                                             showSourceSelector = false
@@ -1137,7 +1157,7 @@ fun DesignDetailScreen(
                                             )
                                         },
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp)
+                                        shape = AtelierShapes.CornerMedium
                                     ) {
                                         Text("Choose from Gallery")
                                     }
@@ -1154,7 +1174,7 @@ fun DesignDetailScreen(
                                             }
                                         },
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp)
+                                        shape = AtelierShapes.CornerMedium
                                     ) {
                                         Text("Take Photo with Camera")
                                     }
