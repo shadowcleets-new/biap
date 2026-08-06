@@ -98,7 +98,13 @@ fun MainScreen(
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
     val authManager = viewModel.authManager
+    // Drive grant (may be null while the user is perfectly well signed in).
     val currentUser by authManager.currentUser.collectAsStateWithLifecycle()
+    // App identity, shown when there is no Google account to describe the user.
+    val appIdentityLabel = remember {
+        com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+            ?.let { it.phoneNumber ?: it.email ?: it.displayName }
+    }
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
 
@@ -345,6 +351,10 @@ fun MainScreen(
                             }
                         }
                     } else {
+                        // Drive is not connected. That says nothing about whether the user is
+                        // signed IN - a phone or email identity is perfectly valid here - so the
+                        // account menu (and Sign Out with it) has to be reachable in this branch
+                        // too, not only once a Google account exists.
                         Button(
                             onClick = { googleSignInLauncher.launch(authManager.getSignInIntent()) },
                             shape = CircleShape,
@@ -356,11 +366,37 @@ fun MainScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Cloud,
-                                contentDescription = "Cloud Backup",
+                                contentDescription = "Connect Drive",
                                 modifier = Modifier.size(AtelierSpacing.Base)
                             )
                             Spacer(Modifier.width(AtelierSpacing.Micro))
-                            Text("Cloud Sync", style = MaterialTheme.typography.bodySmallStrong)
+                            Text("Connect Drive", style = MaterialTheme.typography.bodySmallStrong)
+                        }
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(
+                                    Icons.Default.AccountCircle,
+                                    contentDescription = "Account",
+                                    modifier = Modifier.size(AtelierSpacing.Double)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Signed in as:\n${appIdentityLabel ?: "Unknown"}") },
+                                    onClick = {},
+                                    enabled = false
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Sign Out") },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.signOut {}
+                                    }
+                                )
+                            }
                         }
                     }
                 }

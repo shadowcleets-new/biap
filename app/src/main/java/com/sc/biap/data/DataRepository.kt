@@ -23,6 +23,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -102,7 +107,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     init {
         repositoryScope.launch {
-            authManager.currentUser.collect { account ->
+            signedInUserKeyFlow().collect { userKey ->
                 dbLock.withLock {
                     // Close previous database connections and cancel current collections
                     dbCollectionJob?.cancelAndJoin()
@@ -111,7 +116,8 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                     currentDaoFlow.value = null
                     driveFileId = null
 
-                    val suffix = getDatabaseSuffix(account?.id)
+                    val suffix = getDatabaseSuffix(userKey)
+                    adoptLegacyGuestDatabaseIfPresent(suffix)
                     val db = openDatabaseForUser(suffix)
                     currentDb = db
                     val dao = db.designDao()
@@ -173,14 +179,58 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         )
     }
 
-    private fun getDatabaseSuffix(googleId: String?): String {
-        return if (!googleId.isNullOrBlank()) {
-            val bytes = googleId.toByteArray()
+    // The database is keyed by the app identity (Firebase uid), NOT by the Google account.
+    // Google sign-in is an authorisation for Drive, not a statement of who the user is;
+    // keying on it meant every phone/email user fell through to the shared guest DB.
+    private fun getDatabaseSuffix(userKey: String?): String {
+        return if (!userKey.isNullOrBlank()) {
+            val bytes = userKey.toByteArray()
             val hash = java.security.MessageDigest.getInstance("MD5").digest(bytes)
             val hex = hash.joinToString("") { "%02x".format(it) }
             "_$hex"
         } else {
             ""
+        }
+    }
+
+    /** Current app identity, or null when signed out. Drive state is deliberately not consulted. */
+    private fun currentUserKey(): String? = FirebaseAuth.getInstance().currentUser?.uid
+
+    /** Emits the app identity on sign-in/sign-out so the active database follows it. */
+    private fun signedInUserKeyFlow(): Flow<String?> = callbackFlow {
+        val auth = FirebaseAuth.getInstance()
+        val listener = FirebaseAuth.AuthStateListener { trySend(it.currentUser?.uid) }
+        auth.addAuthStateListener(listener)
+        awaitClose { auth.removeAuthStateListener(listener) }
+    }.distinctUntilChanged()
+
+    /**
+     * One-time adoption of the pre-identity database.
+     *
+     * Before the database was keyed on the Firebase uid, every phone/email user shared the
+     * unsuffixed "bi_database.db". On the first authenticated open we hand that file to the
+     * signed-in user rather than stranding it.
+     *
+     * Deliberately conservative: it only ever runs when the destination does NOT exist, so it
+     * cannot overwrite a real per-user database, and it renames rather than deletes - nothing
+     * is destroyed even if the move is wrong.
+     */
+    private fun adoptLegacyGuestDatabaseIfPresent(suffix: String) {
+        if (suffix.isEmpty()) return                       // signed out: guest DB IS the active DB
+        val legacy = context.getDatabasePath("bi_database.db")
+        val target = context.getDatabasePath("bi_database${suffix}.db")
+        if (!legacy.exists() || target.exists()) return    // nothing to adopt, or already keyed
+        try {
+            // Move the WAL/SHM sidecars with the main file or SQLite will reject the result.
+            for (ext in listOf("", "-wal", "-shm")) {
+                val from = File(legacy.parentFile, "${legacy.name}$ext")
+                if (from.exists()) {
+                    from.renameTo(File(target.parentFile, "${target.name}$ext"))
+                }
+            }
+            android.util.Log.i("DataRepository", "Adopted legacy guest database into $suffix")
+        } catch (e: Exception) {
+            e.printStackTrace()                            // leave the legacy file untouched on failure
         }
     }
 
@@ -266,8 +316,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     }
 
     private fun triggerLocalBackup() {
-        val account = authManager.currentUser.value
-        val suffix = getDatabaseSuffix(account?.id)
+        val suffix = getDatabaseSuffix(currentUserKey())
         repositoryScope.launch(Dispatchers.IO) {
             backupLock.withLock {
                 val dbFile = context.getDatabasePath("bi_database${suffix}.db")
@@ -449,6 +498,9 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     }
 
     override fun signOut(onComplete: () -> Unit) {
+        // Signing out of the app clears the identity as well as the Drive grant,
+        // so the two can never drift apart.
+        FirebaseAuth.getInstance().signOut()
         authManager.signOut {
             repositoryScope.launch {
                 dbLock.withLock {
@@ -505,7 +557,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     override suspend fun hasGuestData(): Boolean = withContext(Dispatchers.IO) {
         // Only meaningful while signed in: in guest mode "bi_database.db" IS the active DB.
-        if (authManager.currentUser.value == null) return@withContext false
+        if (currentUserKey() == null) return@withContext false
         val dbFile = context.getDatabasePath("bi_database.db")
         if (!dbFile.exists()) return@withContext false
         var guestDb: AppDatabase? = null
@@ -521,7 +573,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     }
 
     override suspend fun mergeGuestData(): Boolean = withContext(Dispatchers.IO) {
-        if (authManager.currentUser.value == null) return@withContext false
+        if (currentUserKey() == null) return@withContext false
         val dbFile = context.getDatabasePath("bi_database.db")
         if (!dbFile.exists()) return@withContext false
         dbLock.withLock {
@@ -565,7 +617,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     override suspend fun clearGuestData(): Boolean = withContext(Dispatchers.IO) {
         // Only valid while signed in: in guest mode "bi_database.db" IS the active database.
-        if (authManager.currentUser.value == null) return@withContext false
+        if (currentUserKey() == null) return@withContext false
         val dbFile = context.getDatabasePath("bi_database.db")
         if (!dbFile.exists()) return@withContext true
         var guestDb: AppDatabase? = null
