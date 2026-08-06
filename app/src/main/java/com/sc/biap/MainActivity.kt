@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -27,6 +28,7 @@ import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
 import com.google.firebase.auth.auth
 import com.google.firebase.initialize
+import com.sc.biap.theme.BiapTheme
 import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
@@ -35,6 +37,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
 
         Firebase.initialize(this)
 
@@ -84,14 +87,10 @@ fun BiapApp(
     }
 
     if (currentUser != null) {
-        HomeScreen(
-            user = currentUser!!,
-            onLogout = {
-                auth.signOut()
-                googleSignInClient.signOut()
-                currentUser = null
-            }
-        )
+        // Authenticated: hand off to the restored app. MainScreen's own profile
+        // menu owns in-app sign-out (Drive/AuthManager); Firebase sign-out is
+        // reached from there too.
+        MainNavigation()
     } else {
         AuthNavigationScreen(
             auth = auth,
@@ -633,54 +632,5 @@ fun GoogleSignInScreen(
     }
 }
 
-@Composable
-fun HomeScreen(
-    user: com.google.firebase.auth.FirebaseUser,
-    onLogout: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            "Welcome to BIAP",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Text(
-            "Ethnic Wear Operations Management",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(top = 16.dp)
-        )
-
-        Text(
-            "Logged in as: ${user.email ?: user.phoneNumber ?: user.displayName ?: "User"}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(top = 24.dp, bottom = 48.dp)
-        )
-
-        Button(
-            onClick = onLogout,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-        ) {
-            Text("Sign Out", style = MaterialTheme.typography.labelLarge)
-        }
-    }
-}
-
-@Composable
-private fun BiapTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = lightColorScheme(),
-        content = content
-    )
-}
+// The placeholder HomeScreen and the stub BiapTheme that lived here were removed:
+// both are superseded by the restored app (MainScreen + com.sc.biap.theme.BiapTheme).

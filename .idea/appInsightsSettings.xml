@@ -8,8 +8,8 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.example.biap" />
-                  <option name="mobileSdkAppId" value="1:641571185711:android:05cf6e078240209f3192da" />
+                  <option name="appId" value="com.sc.biap" />
+                  <option name="mobileSdkAppId" value="1:641571185711:android:19d0ad0cfc06f3523192da" />
                   <option name="projectId" value="biap-67a71" />
                   <option name="projectNumber" value="641571185711" />
                 </ConnectionSetting>
