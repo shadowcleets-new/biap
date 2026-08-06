@@ -17,7 +17,11 @@ data class DesignEntity(
     val imagePath: String?,
     val customFields: Map<String, String>,
     val karigars: List<String>,
-    val updatedAt: Long
+    val updatedAt: Long,
+    // Added in schema v4 - see AppDatabase.MIGRATION_3_4
+    val imageRef: String? = null,
+    val imageUpdatedAt: Long = 0L,
+    val imageUpdatedBy: String? = null
 )
 
 @Entity(
@@ -76,6 +80,9 @@ fun DesignWithInventories.toDomain(): Design {
         name = design.name,
         category = design.category,
         imagePath = design.imagePath,
+        imageRef = design.imageRef,
+        imageUpdatedAt = design.imageUpdatedAt,
+        imageUpdatedBy = design.imageUpdatedBy,
         sizeInventories = inventories.map { it.toDomain() },
         customFields = design.customFields,
         karigars = design.karigars,
@@ -97,6 +104,9 @@ fun Design.toEntity(): DesignEntity {
         name = name,
         category = category,
         imagePath = imagePath,
+        imageRef = imageRef,
+        imageUpdatedAt = imageUpdatedAt,
+        imageUpdatedBy = imageUpdatedBy,
         customFields = customFields,
         karigars = karigars,
         updatedAt = updatedAt

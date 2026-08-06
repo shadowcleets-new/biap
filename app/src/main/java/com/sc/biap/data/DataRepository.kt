@@ -249,6 +249,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         
         fun buildAndVerify(): AppDatabase {
             val db = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
+                .addMigrations(*AppDatabase.ALL_MIGRATIONS)
                 .fallbackToDestructiveMigration()
                 .build()
             // Force eager connection to check integrity immediately at start-up
@@ -562,7 +563,9 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         if (!dbFile.exists()) return@withContext false
         var guestDb: AppDatabase? = null
         try {
-            guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db").build()
+            guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db")
+                .addMigrations(*AppDatabase.ALL_MIGRATIONS)
+                .build()
             guestDb.designDao().getAllDesignsOnce().isNotEmpty()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -580,7 +583,9 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             val activeDao = awaitDao() ?: return@withContext false
             var guestDb: AppDatabase? = null
             try {
-                guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db").build()
+                guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db")
+                .addMigrations(*AppDatabase.ALL_MIGRATIONS)
+                .build()
                 val guestDao = guestDb.designDao()
 
                 val designs = guestDao.getAllDesignsOnce()
@@ -622,7 +627,9 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         if (!dbFile.exists()) return@withContext true
         var guestDb: AppDatabase? = null
         try {
-            guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db").build()
+            guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db")
+                .addMigrations(*AppDatabase.ALL_MIGRATIONS)
+                .build()
             val dao = guestDb.designDao()
             dao.deleteAllDesigns()
             dao.deleteAllInventories()

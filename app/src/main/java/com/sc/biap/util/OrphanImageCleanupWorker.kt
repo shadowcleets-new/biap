@@ -30,7 +30,8 @@ class OrphanImageCleanupWorker(
             for (dbFile in dbFiles) {
                 try {
                     val db = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.name)
-                        .fallbackToDestructiveMigration()
+                        .addMigrations(*AppDatabase.ALL_MIGRATIONS)
+                .fallbackToDestructiveMigration()
                         .build()
                     val paths = db.designDao().getAllImagePaths()
                     for (path in paths) {

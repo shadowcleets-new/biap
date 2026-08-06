@@ -16,9 +16,26 @@ object SyncMerger {
         }
 
         // 2. Merge active designs (LWW on updatedAt), drop those deleted later than their last edit
+        //
+        // The image pointer is resolved SEPARATELY from the rest of the record. Whole-record
+        // LWW would mean an edit to any field (a price, a karigar) drags that writer's older
+        // imageRef along with it and silently discards a newer photo someone else uploaded.
+        // Winning the record and winning the photo are two different questions.
         val allDesigns = (localData.designs + remoteData.designs)
             .groupBy { it.id }
-            .mapValues { (_, designsList) -> designsList.maxByOrNull { it.updatedAt }!! }
+            .mapValues { (_, designsList) ->
+                val winner = designsList.maxByOrNull { it.updatedAt }!!
+                val newestImage = designsList.maxByOrNull { it.imageUpdatedAt }!!
+                if (newestImage.imageUpdatedAt > winner.imageUpdatedAt) {
+                    winner.copy(
+                        imageRef = newestImage.imageRef,
+                        imageUpdatedAt = newestImage.imageUpdatedAt,
+                        imageUpdatedBy = newestImage.imageUpdatedBy
+                    )
+                } else {
+                    winner
+                }
+            }
         val mergedDesigns = allDesigns.values.filter { design ->
             val deletedAt = mergedDeleted[design.id] ?: -1L
             design.updatedAt > deletedAt
