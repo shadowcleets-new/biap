@@ -7,7 +7,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -61,6 +60,10 @@ import com.sc.biap.data.Design
 import com.sc.biap.theme.AtelierTheme
 import com.sc.biap.theme.AtelierShapes
 import com.sc.biap.theme.AtelierSpacing
+import com.sc.biap.theme.bodyMediumStrong
+import com.sc.biap.theme.bodySmallStrong
+import com.sc.biap.theme.glowBrush
+import com.sc.biap.theme.titleMediumStrong
 import java.io.File
 import com.sc.biap.util.FileUtils
 import com.sc.biap.ui.rememberPerformanceProfile
@@ -72,6 +75,17 @@ fun defaultMainScreenViewModel(): MainScreenViewModel {
     val context = LocalContext.current.applicationContext
     return viewModel { MainScreenViewModel(DefaultDataRepository.getInstance(context)) }
 }
+
+// Component metrics and artwork geometry: intrinsic sizes, deliberately off the
+// AtelierSpacing scale, which governs layout rhythm rather than component size.
+private val SyncSpinnerSmall = 20.dp
+private val SyncSpinnerLarge = 28.dp
+private val SyncSpinnerStroke = 2.dp
+private val EmptyStateGlowSize = 96.dp
+private val EmptyStateIconSize = 48.dp
+private val EmptyStateGap = 20.dp
+private val EmptyStateTextWidth = 280.dp
+private val DesignCardImageHeight = 140.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -175,8 +189,7 @@ fun MainScreen(
             title = {
                 Text(
                     "Import Offline Designs?",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleMediumStrong
                 )
             },
             text = {
@@ -229,7 +242,7 @@ fun MainScreen(
     if (showDiscardConfirm) {
         AlertDialog(
             onDismissRequest = { showDiscardConfirm = false },
-            title = { Text("Delete Offline Designs?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) },
+            title = { Text("Delete Offline Designs?", style = MaterialTheme.typography.titleMediumStrong) },
             text = { Text("This permanently deletes the designs created in the offline guest workspace. This cannot be undone.", style = MaterialTheme.typography.bodyMedium) },
             confirmButton = {
                 TextButton(
@@ -270,19 +283,19 @@ fun MainScreen(
                     if (currentUser != null) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
                         ) {
                             if (isSyncing) {
                                 if (profile == PerformanceProfile.LOW_POWER) {
                                     CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(SyncSpinnerSmall),
+                                        strokeWidth = SyncSpinnerStroke,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 } else {
                                     CircularProgressIndicator(
-                                        modifier = Modifier.size(28.dp),
-                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(SyncSpinnerLarge),
+                                        strokeWidth = SyncSpinnerStroke,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -298,11 +311,11 @@ fun MainScreen(
                                             painter = rememberAsyncImagePainter(currentUser!!.photoUrl),
                                             contentDescription = "Profile",
                                             modifier = Modifier
-                                                .size(32.dp)
+                                                .size(AtelierSpacing.Double)
                                                 .clip(CircleShape)
                                         )
                                     } else {
-                                        Icon(Icons.Default.AccountCircle, contentDescription = "Profile", modifier = Modifier.size(32.dp))
+                                        Icon(Icons.Default.AccountCircle, contentDescription = "Profile", modifier = Modifier.size(AtelierSpacing.Double))
                                     }
                                 }
                                 DropdownMenu(
@@ -335,7 +348,7 @@ fun MainScreen(
                         Button(
                             onClick = { googleSignInLauncher.launch(authManager.getSignInIntent()) },
                             shape = CircleShape,
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            contentPadding = PaddingValues(horizontal = AtelierSpacing.Cozy, vertical = 6.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer
@@ -344,10 +357,10 @@ fun MainScreen(
                             Icon(
                                 imageVector = Icons.Default.Cloud,
                                 contentDescription = "Cloud Backup",
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(AtelierSpacing.Base)
                             )
-                            Spacer(Modifier.width(4.dp))
-                            Text("Cloud Sync", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(AtelierSpacing.Micro))
+                            Text("Cloud Sync", style = MaterialTheme.typography.bodySmallStrong)
                         }
                     }
                 }
@@ -420,13 +433,13 @@ internal fun MainScreenContent(
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(24.dp)
+                modifier = Modifier.padding(AtelierSpacing.Large)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(96.dp)
+                        .size(EmptyStateGlowSize)
                         .background(
-                            brush = if (isSystemInDarkTheme()) AtelierTheme.darkGlowBrush else AtelierTheme.lightGlowBrush,
+                            brush = MaterialTheme.colorScheme.glowBrush,
                             shape = CircleShape,
                             alpha = 0.12f
                         ),
@@ -435,17 +448,16 @@ internal fun MainScreenContent(
                     Icon(
                         if (query.isNotEmpty()) Icons.Default.SearchOff else Icons.Default.Inventory,
                         contentDescription = "Empty stock",
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier.size(EmptyStateIconSize),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(EmptyStateGap))
                 Text(
                     text = if (query.isNotEmpty()) "No results found" else "No designs added yet",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleMediumStrong
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(AtelierSpacing.Compact))
                 Text(
                     text = if (query.isNotEmpty()) {
                         "We couldn't find anything matching \"$query\". Check for typos or search by category, size, or material."
@@ -454,12 +466,12 @@ internal fun MainScreenContent(
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.width(280.dp),
+                    modifier = Modifier.width(EmptyStateTextWidth),
                     onTextLayout = {},
                     textAlign = TextAlign.Center
                 )
                 if (query.isEmpty()) {
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(AtelierSpacing.Large))
                     Button(
                         onClick = { onItemClick(AddDesign) },
                         shape = AtelierShapes.CornerMedium,
@@ -469,7 +481,7 @@ internal fun MainScreenContent(
                         )
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(AtelierSpacing.Compact))
                         Text("Add Your First Design")
                     }
                 }
@@ -520,22 +532,6 @@ fun DesignCard(design: Design, onClick: () -> Unit) {
         animatedScale
     }
 
-    val isDark = isSystemInDarkTheme()
-    val borderBrush = Brush.linearGradient(
-        colors = if (isDark) {
-            listOf(
-                Color(0xFF9EC5FF).copy(alpha = 0.2f),
-                Color(0xFFC5A3FF).copy(alpha = 0.2f),
-                Color(0xFF80DEEA).copy(alpha = 0.2f)
-            )
-        } else {
-            listOf(
-                Color(0xFF1A73E8).copy(alpha = 0.15f),
-                Color(0xFF9C27B0).copy(alpha = 0.15f),
-                Color(0xFF00E5FF).copy(alpha = 0.15f)
-            )
-        }
-    )
 
     Card(
         shape = AtelierShapes.CornerLarge,
@@ -554,7 +550,7 @@ fun DesignCard(design: Design, onClick: () -> Unit) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(140.dp)
+                    .height(DesignCardImageHeight)
                     .clip(RoundedCornerShape(topStart = AtelierSpacing.Base, topEnd = AtelierSpacing.Base))
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
@@ -570,7 +566,7 @@ fun DesignCard(design: Design, onClick: () -> Unit) {
                     Icon(
                         Icons.Default.Inventory,
                         contentDescription = "No photo",
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(AtelierSpacing.Double),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                     )
                 }
@@ -582,8 +578,7 @@ fun DesignCard(design: Design, onClick: () -> Unit) {
             ) {
                 Text(
                     text = design.name,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMediumStrong,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -602,8 +597,7 @@ fun DesignCard(design: Design, onClick: () -> Unit) {
                 ) {
                     Text(
                         text = priceText,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMediumStrong
                     )
 
                     Text(
@@ -623,7 +617,6 @@ fun SearchBarField(
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isDark = isSystemInDarkTheme()
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,

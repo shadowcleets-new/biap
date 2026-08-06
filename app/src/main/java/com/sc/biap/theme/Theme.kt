@@ -62,6 +62,11 @@ val ColorScheme.warning: Color
 val ColorScheme.success: Color
     get() = if (background.luminance() < 0.5f) HeritageDarkSuccess else HeritageLightSuccess
 
+// Same derivation as `warning`/`success` (BUG-20): read the APPLIED scheme's
+// background, not the system dark-mode setting, so a forced theme stays consistent.
+val ColorScheme.glowBrush: Brush
+    get() = if (background.luminance() < 0.5f) AtelierTheme.darkGlowBrush else AtelierTheme.lightGlowBrush
+
 object AtelierTheme {
     // BUG-28 fix: brushes reference the palette constants so a palette change propagates.
     val lightGlowBrush = Brush.linearGradient(

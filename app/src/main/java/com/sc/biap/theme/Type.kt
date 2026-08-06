@@ -144,6 +144,9 @@ val Typography.titleSmallStrong: TextStyle
 val Typography.bodyMediumStrong: TextStyle
     get() = bodyMedium.copy(fontWeight = FontWeight.SemiBold)
 
+val Typography.bodySmallStrong: TextStyle
+    get() = bodySmall.copy(fontWeight = FontWeight.Bold)
+
 val Typography.labelLargeStrong: TextStyle
     get() = labelLarge.copy(fontWeight = FontWeight.Bold)
 // #endregion
