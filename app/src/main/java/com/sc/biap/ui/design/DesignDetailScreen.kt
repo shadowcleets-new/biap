@@ -43,6 +43,13 @@ import com.sc.biap.data.SizeInventory
 import com.sc.biap.util.FileUtils
 import com.sc.biap.util.SizeUtils
 import com.sc.biap.theme.AtelierSpacing
+import com.sc.biap.theme.bodyMediumStrong
+import com.sc.biap.theme.headlineSmallStrong
+import com.sc.biap.theme.labelLargeStrong
+import com.sc.biap.theme.success
+import com.sc.biap.theme.titleLargeStrong
+import com.sc.biap.theme.titleMediumStrong
+import com.sc.biap.theme.warning
 import com.sc.biap.theme.horizontalFadingEdges
 import kotlinx.coroutines.launch
 import java.io.File
@@ -52,6 +59,9 @@ fun defaultDesignDetailViewModel(designId: String): DesignDetailViewModel {
     val context = LocalContext.current.applicationContext
     return viewModel { DesignDetailViewModel(designId, DefaultDataRepository.getInstance(context)) }
 }
+
+// Stock at or below this count reads as low rather than healthy.
+private const val LOW_STOCK_THRESHOLD = 5
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -138,7 +148,7 @@ fun DesignDetailScreen(
             Scaffold(
                 topBar = {
                     TopAppBar(
-                        title = { Text("Loading...", fontWeight = FontWeight.Bold) },
+                        title = { Text("Loading...", style = MaterialTheme.typography.titleLargeStrong) },
                         navigationIcon = {
                             IconButton(onClick = onBack) {
                                 Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -157,7 +167,7 @@ fun DesignDetailScreen(
             Scaffold(
                 topBar = {
                     TopAppBar(
-                        title = { Text("Not Found", fontWeight = FontWeight.Bold) },
+                        title = { Text("Not Found", style = MaterialTheme.typography.titleLargeStrong) },
                         navigationIcon = {
                             IconButton(onClick = onBack) {
                                 Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -224,7 +234,7 @@ fun DesignDetailScreen(
             Scaffold(
                 topBar = {
                     TopAppBar(
-                        title = { Text(if (isEditing) "Edit Design" else "Design Details", fontWeight = FontWeight.Bold) },
+                        title = { Text(if (isEditing) "Edit Design" else "Design Details", style = MaterialTheme.typography.titleLargeStrong) },
                         navigationIcon = {
                             IconButton(onClick = {
                                 if (isEditing) {
@@ -347,7 +357,7 @@ fun DesignDetailScreen(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(Modifier.height(8.dp))
-                                Text("Upload Design Photo", fontWeight = FontWeight.Medium)
+                                Text("Upload Design Photo", style = MaterialTheme.typography.labelLarge)
                             }
                         }
                     }
@@ -364,7 +374,7 @@ fun DesignDetailScreen(
                                     .padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text("Basic Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("Basic Details", style = MaterialTheme.typography.titleMediumStrong)
                                 
                                 OutlinedTextField(
                                     value = editName,
@@ -398,8 +408,7 @@ fun DesignDetailScreen(
                             ) {
                                 Text(
                                     text = design.name,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.headlineSmallStrong,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 SuggestionChip(
@@ -423,7 +432,7 @@ fun DesignDetailScreen(
                                     .padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text("Sizes, Stock & Prices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("Sizes, Stock & Prices", style = MaterialTheme.typography.titleMediumStrong)
                                 
                                 var showCustomSizeDialog by remember { mutableStateOf(false) }
                                 var newSizeInput by remember { mutableStateOf("") }
@@ -479,7 +488,7 @@ fun DesignDetailScreen(
                                                     editSizes = updated
                                                 }
                                             },
-                                            label = { Text(size, fontWeight = FontWeight.Bold) },
+                                            label = { Text(size, style = MaterialTheme.typography.labelLargeStrong) },
                                             modifier = Modifier.minimumInteractiveComponentSize()
                                         )
                                     }
@@ -527,7 +536,7 @@ fun DesignDetailScreen(
                                                     .padding(horizontal = 8.dp, vertical = 8.dp),
                                                 contentAlignment = Alignment.Center
                                             ) {
-                                                Text(inv.size, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                                Text(inv.size, style = MaterialTheme.typography.labelLargeStrong, color = MaterialTheme.colorScheme.onPrimaryContainer)
                                             }
 
                                             OutlinedTextField(
@@ -586,7 +595,7 @@ fun DesignDetailScreen(
                                     }
                                     AlertDialog(
                                         onDismissRequest = { showCustomSizeDialog = false },
-                                        title = { Text("Add Custom Size", fontWeight = FontWeight.Bold) },
+                                        title = { Text("Add Custom Size", style = MaterialTheme.typography.titleLargeStrong) },
                                         text = {
                                             OutlinedTextField(
                                                 value = newSizeInput,
@@ -684,7 +693,7 @@ fun DesignDetailScreen(
                                     .padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text("Inventory & Pricing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("Inventory & Pricing", style = MaterialTheme.typography.titleMediumStrong)
 
                                 if (design.sizeInventories.isEmpty()) {
                                     Text(
@@ -714,7 +723,7 @@ fun DesignDetailScreen(
                                             InputChip(
                                                 selected = isSelected,
                                                 onClick = { selectedSizeIndexRaw = index },
-                                                label = { Text(inv.size, fontWeight = FontWeight.Bold) },
+                                                label = { Text(inv.size, style = MaterialTheme.typography.labelLargeStrong) },
                                                 colors = InputChipDefaults.inputChipColors(
                                                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                                                     selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -728,8 +737,9 @@ fun DesignDetailScreen(
                                     if (activeInventory != null) {
                                         val stockColor = when {
                                             activeInventory.stock == 0 -> MaterialTheme.colorScheme.error
-                                            activeInventory.stock <= 5 -> Color(0xFFFF9800) // Orange
-                                            else -> Color(0xFF4CAF50) // Green
+                                            activeInventory.stock <= LOW_STOCK_THRESHOLD ->
+                                                MaterialTheme.colorScheme.warning
+                                            else -> MaterialTheme.colorScheme.success
                                         }
 
                                         Card(
@@ -750,8 +760,7 @@ fun DesignDetailScreen(
                                                     Text("Price", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     Text(
                                                         text = "₹${FileUtils.formatPrice(activeInventory.price)}",
-                                                        fontWeight = FontWeight.Bold,
-                                                        style = MaterialTheme.typography.titleMedium,
+                                                        style = MaterialTheme.typography.titleMediumStrong,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
                                                 }
@@ -760,8 +769,7 @@ fun DesignDetailScreen(
                                                     Text("Availability", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     Text(
                                                         text = if (activeInventory.stock == 0) "Out of Stock" else "${activeInventory.stock} items",
-                                                        fontWeight = FontWeight.Bold,
-                                                        style = MaterialTheme.typography.titleMedium,
+                                                        style = MaterialTheme.typography.titleMediumStrong,
                                                         color = stockColor
                                                     )
                                                 }
@@ -789,7 +797,7 @@ fun DesignDetailScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Assigned Karigars", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("Assigned Karigars", style = MaterialTheme.typography.titleMediumStrong)
                                 IconButton(onClick = { showEditKarigarsDialog = true }) {
                                     Icon(
                                         Icons.Default.Edit,
@@ -819,7 +827,7 @@ fun DesignDetailScreen(
                                     karigarsListToUse.forEach { karigar ->
                                         SuggestionChip(
                                             onClick = {},
-                                            label = { Text(karigar, fontWeight = FontWeight.Medium) },
+                                            label = { Text(karigar, style = MaterialTheme.typography.labelLarge) },
                                             shape = RoundedCornerShape(8.dp)
                                         )
                                     }
@@ -835,7 +843,7 @@ fun DesignDetailScreen(
 
                         AlertDialog(
                             onDismissRequest = { showEditKarigarsDialog = false },
-                            title = { Text("Manage Karigars", fontWeight = FontWeight.Bold) },
+                            title = { Text("Manage Karigars", style = MaterialTheme.typography.titleLargeStrong) },
                             text = {
                                 Column(
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -933,7 +941,7 @@ fun DesignDetailScreen(
                                     .padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text("Specifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("Specifications", style = MaterialTheme.typography.titleMediumStrong)
 
                                 val specTabs = listOf("Top (Kameez)", "Bottom (Salwar)", "Dupatta", "General")
                                 var selectedSpecTab by remember { mutableStateOf(0) }
@@ -953,7 +961,7 @@ fun DesignDetailScreen(
                                                 Text(
                                                     text = title,
                                                     maxLines = 1,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    style = if (isSelected) MaterialTheme.typography.labelLargeStrong else MaterialTheme.typography.labelLarge,
                                                     color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             },
@@ -1037,12 +1045,12 @@ fun DesignDetailScreen(
                                             ) {
                                                 Text(
                                                     text = cleanLabel,
-                                                    fontWeight = FontWeight.Medium,
+                                                    style = MaterialTheme.typography.labelLarge,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                                 Text(
                                                     text = value.ifBlank { "Not Specified" },
-                                                    fontWeight = FontWeight.SemiBold
+                                                    style = MaterialTheme.typography.bodyMediumStrong
                                                 )
                                             }
                                         }
@@ -1056,7 +1064,7 @@ fun DesignDetailScreen(
                                     var selectedScopeIndex by remember { mutableStateOf(0) }
                                     val scopes = listOf("Top", "Bottom", "Dupatta", "General")
 
-                                    Text("Add New Custom Field", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                    Text("Add New Custom Field", style = MaterialTheme.typography.bodyMediumStrong)
 
                                     OutlinedTextField(
                                         value = newKey,
@@ -1116,7 +1124,7 @@ fun DesignDetailScreen(
                     if (showSourceSelector) {
                         AlertDialog(
                             onDismissRequest = { showSourceSelector = false },
-                            title = { Text("Select Image Source", fontWeight = FontWeight.Bold) },
+                            title = { Text("Select Image Source", style = MaterialTheme.typography.titleLargeStrong) },
                             text = {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Button(

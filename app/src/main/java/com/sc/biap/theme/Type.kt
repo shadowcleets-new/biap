@@ -129,6 +129,9 @@ val Typography = Typography(
  * If the project later moves to material3 1.5.x, these become one-line aliases to the
  * real Expressive tokens and every call site is already correct.
  */
+val Typography.headlineSmallStrong: TextStyle
+    get() = headlineSmall.copy(fontWeight = FontWeight.Bold)
+
 val Typography.titleLargeStrong: TextStyle
     get() = titleLarge.copy(fontWeight = FontWeight.Bold)
 

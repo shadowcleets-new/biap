@@ -58,6 +58,10 @@ private val LightColorScheme = lightColorScheme(
 val ColorScheme.warning: Color
     get() = if (background.luminance() < 0.5f) HeritageDarkWarning else HeritageLightWarning
 
+// Same derivation as `warning`: read from the APPLIED scheme, not the system setting.
+val ColorScheme.success: Color
+    get() = if (background.luminance() < 0.5f) HeritageDarkSuccess else HeritageLightSuccess
+
 object AtelierTheme {
     // BUG-28 fix: brushes reference the palette constants so a palette change propagates.
     val lightGlowBrush = Brush.linearGradient(

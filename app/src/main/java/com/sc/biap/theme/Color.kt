@@ -39,6 +39,11 @@ val HeritageDarkOutline = Color(0xFF8D8C8A)      // Compliance outline (>3:1)
 val HeritageLightWarning = Color(0xFFC65100)
 val HeritageDarkWarning = Color(0xFFFFB74D)
 
+// Success Colors (WCAG 2.1 AA compliant, chosen the same way as the warning pair:
+// deep on light backgrounds, light on dark backgrounds)
+val HeritageLightSuccess = Color(0xFF1B5E20)
+val HeritageDarkSuccess = Color(0xFF81C784)
+
 // Decorative glow gradient endpoints (referenced by AtelierTheme brushes)
 val HeritageGlowGreyLight = Color(0xFFD1CFC7)   // Light Outline Grey
 val HeritageGlowCharcoalDark = Color(0xFF3C3D40) // Muted Charcoal
