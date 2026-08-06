@@ -42,7 +42,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.rememberAsyncImagePainter
 import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.data.SizeInventory
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.ui.semantics.Role
 import com.sc.biap.theme.AtelierShapes
 import com.sc.biap.theme.AtelierSpacing
 import com.sc.biap.theme.bodyMediumStrong
@@ -64,6 +67,7 @@ private val ImagePickerHeight = 200.dp
 private val OverlayIconSize = 20.dp
 private val EmptyStateIconSize = 40.dp
 private val SizeTokenWidth = 56.dp
+private val RemoveIconSize = 18.dp
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -586,13 +590,26 @@ fun AddDesignScreen(
                                     onClick = {},
                                     label = { Text(karigar, style = MaterialTheme.typography.labelLarge) },
                                     trailingIcon = {
-                                        Icon(
-                                            Icons.Default.Clear,
-                                            contentDescription = "Remove Karigar",
+                                        // The tap target is the Box, not the glyph: the icon
+                                        // stays 18dp visually while the touch area meets the
+                                        // 48dp minimum. This fits inside the chip's existing
+                                        // minimumInteractiveComponentSize height, so the chip
+                                        // does not grow taller.
+                                        Box(
                                             modifier = Modifier
-                                                .size(18.dp)
-                                                .clickable { viewModel.removeKarigar(karigar) }
-                                        )
+                                                .minimumInteractiveComponentSize()
+                                                .clickable(
+                                                    role = Role.Button,
+                                                    onClickLabel = "Remove"
+                                                ) { viewModel.removeKarigar(karigar) },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Clear,
+                                                contentDescription = "Remove $karigar",
+                                                modifier = Modifier.size(RemoveIconSize)
+                                            )
+                                        }
                                     },
                                     modifier = Modifier.minimumInteractiveComponentSize()
                                 )
