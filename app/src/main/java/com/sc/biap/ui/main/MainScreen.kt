@@ -66,6 +66,7 @@ import com.sc.biap.theme.glowBrush
 import com.sc.biap.theme.titleMediumStrong
 import java.io.File
 import com.sc.biap.util.FileUtils
+import com.sc.biap.ui.rememberDesignImageModel
 import com.sc.biap.ui.rememberPerformanceProfile
 import com.sc.biap.ui.PerformanceProfile
 import androidx.compose.ui.platform.LocalConfiguration
@@ -591,9 +592,10 @@ fun DesignCard(design: Design, onClick: () -> Unit) {
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
-                if (design.imagePath != null) {
+                val imageModel = rememberDesignImageModel(design.imagePath, design.imageRef)
+                if (imageModel != null) {
                     Image(
-                        painter = rememberAsyncImagePainter(FileUtils.resolveImageFile(LocalContext.current, design.imagePath)),
+                        painter = rememberAsyncImagePainter(imageModel),
                         contentDescription = design.name,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop

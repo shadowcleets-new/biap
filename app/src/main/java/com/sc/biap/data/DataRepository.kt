@@ -7,6 +7,7 @@ import com.sc.biap.util.AuthManager
 import com.sc.biap.util.EncryptionUtils
 import com.sc.biap.util.GoogleDriveSyncManager
 import com.sc.biap.util.DriveSyncWorker
+import com.sc.biap.util.FileUtils
 import com.sc.biap.util.ImageStore
 import com.sc.biap.util.ImageUploadWorker
 import com.sc.biap.util.OrphanImageCleanupWorker
@@ -576,6 +577,18 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             )
             dao.deleteDeletedDesignTombstone(design.id)
             triggerLocalBackup()
+
+            // A local photo with no remote pointer is one that has not been uploaded yet -
+            // either brand new, or a replacement (picking a new photo clears imageRef).
+            // Hooked here rather than in each ViewModel so a save path added later cannot
+            // silently skip uploading. Sync does not come through here; it uses importData.
+            val localPath = designWithTime.imagePath
+            if (!localPath.isNullOrBlank() && designWithTime.imageRef.isNullOrBlank()) {
+                val file = FileUtils.resolveImageFile(context, localPath)
+                if (file != null && file.exists()) {
+                    enqueueImageUpload(design.id, file.absolutePath)
+                }
+            }
         }
     }
 

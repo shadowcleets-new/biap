@@ -40,6 +40,7 @@ import coil3.compose.rememberAsyncImagePainter
 import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.data.Design
 import com.sc.biap.data.SizeInventory
+import com.sc.biap.ui.rememberDesignImageModel
 import com.sc.biap.util.FileUtils
 import com.sc.biap.util.SizeUtils
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -222,6 +223,7 @@ fun DesignDetailScreen(
                                     name = editName.trim(),
                                     category = editCategory.trim(),
                                     imagePath = editImagePath,
+                                    imageRef = if (editImagePath != design.imagePath) null else design.imageRef,
                                     sizeInventories = editSizes,
                                     customFields = editCustomFields.filterKeys { it.isNotBlank() },
                                     karigars = editKarigars
@@ -272,6 +274,12 @@ fun DesignDetailScreen(
                                                     name = editName.trim(),
                                                     category = editCategory.trim(),
                                                     imagePath = editImagePath,
+                                                    // A different local photo means the
+                                                    // uploaded one is superseded. Clearing the
+                                                    // pointer is what marks it for re-upload;
+                                                    // the previous object is left intact until
+                                                    // the new bytes land.
+                                                    imageRef = if (editImagePath != design.imagePath) null else design.imageRef,
                                                     sizeInventories = editSizes,
                                                     customFields = editCustomFields.filterKeys { it.isNotBlank() },
                                                     karigars = editKarigars
@@ -336,9 +344,15 @@ fun DesignDetailScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         val imagePathToUse = if (isEditing) editImagePath else design.imagePath
-                        if (imagePathToUse != null) {
+                        // While editing, a freshly picked local photo must win over the
+                        // uploaded one - otherwise the user sees the old image after replacing it.
+                        val detailImageModel = rememberDesignImageModel(
+                            imagePath = imagePathToUse,
+                            imageRef = if (isEditing && editImagePath != null) null else design.imageRef
+                        )
+                        if (detailImageModel != null) {
                             Image(
-                                painter = rememberAsyncImagePainter(FileUtils.resolveImageFile(context, imagePathToUse)),
+                                painter = rememberAsyncImagePainter(detailImageModel),
                                 contentDescription = if (isEditing) "Edit Photo" else design.name,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
