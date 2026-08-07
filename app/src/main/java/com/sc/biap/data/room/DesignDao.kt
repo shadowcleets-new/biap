@@ -36,6 +36,19 @@ interface DesignDao {
         insertInventories(inventories)
     }
 
+    /**
+     * Move ONLY the image pointer.
+     *
+     * Deliberately not a read-modify-write of the whole row: an upload completing in the
+     * background must not carry a stale copy of the name/price/karigars back over whatever
+     * the user has edited in the meantime.
+     */
+    @Query("UPDATE designs SET imageRef = :key, imageUpdatedAt = :updatedAt, imageUpdatedBy = :updatedBy WHERE id = :id")
+    suspend fun updateImagePointer(id: String, key: String, updatedAt: Long, updatedBy: String?)
+
+    @Query("SELECT imageRef FROM designs WHERE id = :id")
+    suspend fun getImageRef(id: String): String?
+
     @Query("DELETE FROM designs WHERE id = :id")
     suspend fun deleteDesign(id: String)
 

@@ -7,10 +7,14 @@ import com.sc.biap.util.AuthManager
 import com.sc.biap.util.EncryptionUtils
 import com.sc.biap.util.GoogleDriveSyncManager
 import com.sc.biap.util.DriveSyncWorker
+import com.sc.biap.util.ImageStore
+import com.sc.biap.util.ImageUploadWorker
 import com.sc.biap.util.OrphanImageCleanupWorker
 import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.BackoffPolicy
+import androidx.work.workDataOf
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkRequest
 import androidx.work.WorkManager
@@ -52,6 +56,10 @@ sealed interface SyncStatus {
 }
 
 interface DataRepository {
+    /** Queue a design photo for background upload. Returns the storage key it will land on. */
+    fun enqueueImageUpload(designId: String, localPath: String): String
+    /** Move a design's image pointer after its bytes are confirmed uploaded. */
+    suspend fun applyUploadedImage(designId: String, key: String, uploadedBy: String?): Boolean
     val biData: StateFlow<BusinessIntelligenceData>
     fun addOrUpdateDesign(design: Design)
     fun deleteDesign(designId: String)
@@ -511,6 +519,50 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                     onComplete()
                 }
             }
+        }
+    }
+
+    override fun enqueueImageUpload(designId: String, localPath: String): String {
+        val key = ImageStore.newVersionKey(designId, File(localPath).extension.ifBlank { "jpg" })
+        val request = OneTimeWorkRequestBuilder<ImageUploadWorker>()
+            .setInputData(
+                workDataOf(
+                    ImageUploadWorker.KEY_DESIGN_ID to designId,
+                    ImageUploadWorker.KEY_LOCAL_PATH to localPath,
+                    ImageUploadWorker.KEY_STORAGE_KEY to key,
+                )
+            )
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                WorkRequest.MIN_BACKOFF_MILLIS,
+                TimeUnit.MILLISECONDS
+            )
+            .build()
+        // REPLACE: a rapid re-shoot supersedes the pending upload instead of racing it.
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            ImageUploadWorker.workName(designId),
+            ExistingWorkPolicy.REPLACE,
+            request
+        )
+        return key
+    }
+
+    override suspend fun applyUploadedImage(
+        designId: String,
+        key: String,
+        uploadedBy: String?,
+    ): Boolean = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val dao = awaitDao() ?: return@withContext false
+            // Targeted column update: whatever the user edited while the upload was in
+            // flight stays exactly as they left it.
+            dao.updateImagePointer(designId, key, System.currentTimeMillis(), uploadedBy)
+            triggerLocalBackup()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
         }
     }
 

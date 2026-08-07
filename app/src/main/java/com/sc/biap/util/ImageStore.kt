@@ -94,4 +94,60 @@ object ImageStore {
             false
         }
     }
+
+    /** How many versions of a design's image are retained. Older ones are pruned. */
+    const val VERSIONS_RETAINED = 5
+
+    /**
+     * Prune a design's image history to the newest [keep] versions.
+     *
+     * [protectKey] - the version the design currently points at - is NEVER deleted, even if
+     * it somehow falls outside the newest [keep]. Losing the live image to a retention sweep
+     * would be far worse than keeping one extra object.
+     *
+     * Pruning is best-effort and deliberately non-fatal: it runs after a successful upload
+     * and pointer move, so a failure here leaves extra objects behind but never breaks a
+     * design. Returns the number of versions actually deleted.
+     */
+    suspend fun pruneToLatest(
+        designId: String,
+        keep: Int = VERSIONS_RETAINED,
+        protectKey: String? = null,
+    ): Int = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val items = storage.getReference("$ROOT/$designId").listAll().await().items
+            val doomedNames = versionsToPrune(
+                names = items.map { it.name },
+                keep = keep,
+                protectName = protectKey?.substringAfterLast('/'),
+            ).toSet()
+            var deleted = 0
+            for (ref in items.filter { it.name in doomedNames }) {
+                try {
+                    ref.delete().await()
+                    deleted++
+                } catch (e: Exception) {
+                    e.printStackTrace()   // one stubborn object must not abort the sweep
+                }
+            }
+            deleted
+        } catch (e: Exception) {
+            e.printStackTrace()
+            0
+        }
+    }
+
+    /**
+     * Which version filenames should be deleted. Pure, so the choice of what to destroy is
+     * testable without touching the network.
+     *
+     * Keys are "<millis>_<nonce>.<ext>", so lexical order on the name is chronological and
+     * the newest [keep] are simply the last [keep] entries. [protectName] is never returned.
+     */
+    fun versionsToPrune(names: List<String>, keep: Int, protectName: String?): List<String> {
+        if (keep <= 0) return emptyList()
+        return names.sorted()
+            .dropLast(keep)
+            .filter { it != protectName }
+    }
 }
