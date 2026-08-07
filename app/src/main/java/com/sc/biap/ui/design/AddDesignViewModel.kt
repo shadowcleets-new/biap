@@ -147,6 +147,22 @@ class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
         _uiState.update { it.copy(isSaved = true) }
     }
 
+    /**
+     * Consume the one-shot "saved" signal once the screen has acted on it.
+     *
+     * `isSaved` drives a navigation side effect, so it must not survive the navigation that
+     * it triggered. Leaving it latched meant that any reuse of this ViewModel instance
+     * re-fired the effect on first composition and popped the screen before it could render
+     * - which is exactly what happened while ViewModels were Activity-scoped rather than
+     * scoped to the nav entry.
+     *
+     * Scoping is fixed at the source in Navigation.kt; this is the second line of defence,
+     * so a future change to ViewModel scoping cannot resurrect the bug.
+     */
+    fun onSaveNavigationHandled() {
+        _uiState.update { it.copy(isSaved = false) }
+    }
+
     fun addKarigar(name: String) {
         if (name.isBlank()) return
         val trimmed = name.trim()

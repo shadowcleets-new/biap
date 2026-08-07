@@ -335,7 +335,13 @@ fun MainScreen(
                                         enabled = false
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Sync with Drive") },
+                                        // Greyed out while a sync is in flight. The repository
+                                        // ignores the call anyway, but a dead-looking tap with
+                                        // no explanation is worse than a disabled item.
+                                        text = {
+                                            Text(if (isSyncing) "Syncing…" else "Sync with Drive")
+                                        },
+                                        enabled = !isSyncing,
                                         onClick = {
                                             showMenu = false
                                             viewModel.syncWithGoogleDrive()

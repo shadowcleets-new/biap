@@ -113,6 +113,10 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     private var currentDb: AppDatabase? = null
     private val currentDaoFlow = MutableStateFlow<DesignDao?>(null)
     private var dbCollectionJob: Job? = null
+    // Exactly one live WorkInfo observer. Previously every syncWithGoogleDrive() call
+    // launched a collector that never completed, so N taps left N collectors racing to
+    // write _syncStatus - and a cancelled one could overwrite a newer one's Success.
+    private var syncObserverJob: Job? = null
 
     init {
         repositoryScope.launch {
@@ -349,6 +353,11 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     }
 
     override fun syncWithGoogleDrive() {
+        // Debounce: ignore taps while a sync is already in flight rather than enqueueing
+        // another one. REPLACE would cancel the running job and restart it, which is both
+        // wasteful and the reason rapid taps used to end with no status at all.
+        if (_isSyncing.value) return
+
         val account = authManager.currentUser.value
         if (account == null) {
             _syncStatus.value = SyncStatus.Error("No Google account signed in.")
@@ -380,13 +389,20 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             syncRequest
         )
 
-        repositoryScope.launch {
+        // Only ever one observer alive; the previous one cannot outlive its request and
+        // clobber this one's result.
+        syncObserverJob?.cancel()
+        syncObserverJob = repositoryScope.launch {
             wm.getWorkInfoByIdFlow(syncRequest.id).collect { workInfo ->
                 if (workInfo != null) {
                     when (workInfo.state) {
                         androidx.work.WorkInfo.State.ENQUEUED -> {
-                            _isSyncing.value = false
-                            _syncStatus.value = SyncStatus.Idle
+                            // Still pending - either the first run or, after a retry, waiting
+                            // out the backoff. Treating this as Idle is what made a retrying
+                            // sync go completely silent: the spinner stopped and no message
+                            // was ever shown. It is still working, so say so.
+                            _isSyncing.value = true
+                            _syncStatus.value = SyncStatus.Syncing
                         }
                         androidx.work.WorkInfo.State.RUNNING -> {
                             _isSyncing.value = true
@@ -395,10 +411,12 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                         androidx.work.WorkInfo.State.SUCCEEDED -> {
                             _isSyncing.value = false
                             _syncStatus.value = SyncStatus.Success("Sync completed successfully.")
+                            return@collect   // terminal: stop observing
                         }
                         androidx.work.WorkInfo.State.FAILED -> {
                             _isSyncing.value = false
                             _syncStatus.value = SyncStatus.Error("Sync failed in background execution.")
+                            return@collect   // terminal: stop observing
                         }
                         androidx.work.WorkInfo.State.CANCELLED -> {
                             _isSyncing.value = false

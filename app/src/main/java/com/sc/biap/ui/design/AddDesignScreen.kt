@@ -154,6 +154,8 @@ fun AddDesignScreen(
 
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) {
+            // Consume BEFORE navigating: the flag must not outlive the navigation it caused.
+            viewModel.onSaveNavigationHandled()
             onBack()
         }
     }
