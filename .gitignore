@@ -18,3 +18,18 @@ local.properties
 .ai-context/
 graphify-out/
 
+
+# Build artifacts - never version APKs
+build-output/
+*.apk
+*.aab
+
+# Build and tooling logs
+*.log
+.kotlin/
+
+# Session transcripts (large, and may contain sensitive conversation content)
+docs/*.jsonl
+
+# Editor backup files
+*~
