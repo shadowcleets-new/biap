@@ -131,67 +131,28 @@ fun DesignDetailScreen(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Design") },
-            text = { Text("Are you sure you want to delete this design? This action cannot be undone.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deleteDesign()
-                        showDeleteDialog = false
-                        onBack()
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
-                }
+        DeleteDesignDialog(
+            onDismiss = { showDeleteDialog = false },
+            onConfirmDelete = {
+                // Order is load-bearing: deleteDesign() flips uiState to NotFound on the
+                // next emission, so it must run before the dialog is dismissed and before
+                // navigating back.
+                viewModel.deleteDesign()
+                showDeleteDialog = false
+                onBack()
             }
         )
     }
 
     when (val uiState = state) {
         DesignDetailUiState.Loading -> {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = { Text("Loading...", style = MaterialTheme.typography.titleLargeStrong) },
-                        navigationIcon = {
-                            IconButton(onClick = onBack) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                            }
-                        }
-                    )
-                },
-                modifier = modifier
-            ) { paddingValues ->
-                Box(modifier = Modifier.padding(paddingValues).fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+            DetailStatusScaffold(title = "Loading...", onBack = onBack, modifier = modifier) {
+                CircularProgressIndicator()
             }
         }
         DesignDetailUiState.NotFound -> {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = { Text("Not Found", style = MaterialTheme.typography.titleLargeStrong) },
-                        navigationIcon = {
-                            IconButton(onClick = onBack) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                            }
-                        }
-                    )
-                },
-                modifier = modifier
-            ) { paddingValues ->
-                Box(modifier = Modifier.padding(paddingValues).fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Design not found", style = MaterialTheme.typography.titleMedium)
-                }
+            DetailStatusScaffold(title = "Not Found", onBack = onBack, modifier = modifier) {
+                Text("Design not found", style = MaterialTheme.typography.titleMedium)
             }
         }
         is DesignDetailUiState.Success -> {
@@ -211,35 +172,21 @@ fun DesignDetailScreen(
             }
 
             if (showConflictDialog) {
-                AlertDialog(
-                    onDismissRequest = { showConflictDialog = false },
-                    title = { Text("Design Changed During Edit") },
-                    text = { Text("This design was updated by a sync while you were editing. Save anyway and overwrite those changes?") },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                showConflictDialog = false
-                                val updated = design.copy(
-                                    name = editName.trim(),
-                                    category = editCategory.trim(),
-                                    imagePath = editImagePath,
-                                    imageRef = if (editImagePath != design.imagePath) null else design.imageRef,
-                                    sizeInventories = editSizes,
-                                    customFields = editCustomFields.filterKeys { it.isNotBlank() },
-                                    karigars = editKarigars
-                                )
-                                viewModel.updateDesign(updated)
-                                isEditing = false
-                            },
-                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Text("Overwrite")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showConflictDialog = false }) {
-                            Text("Cancel")
-                        }
+                SaveConflictDialog(
+                    onDismiss = { showConflictDialog = false },
+                    onOverwrite = {
+                        showConflictDialog = false
+                        val updated = design.copy(
+                            name = editName.trim(),
+                            category = editCategory.trim(),
+                            imagePath = editImagePath,
+                            imageRef = if (editImagePath != design.imagePath) null else design.imageRef,
+                            sizeInventories = editSizes,
+                            customFields = editCustomFields.filterKeys { it.isNotBlank() },
+                            karigars = editKarigars
+                        )
+                        viewModel.updateDesign(updated)
+                        isEditing = false
                     }
                 )
             }
@@ -326,124 +273,21 @@ fun DesignDetailScreen(
                         .padding(AtelierSpacing.Base),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    // Design Image Card
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(HeroImageHeight)
-                            .clip(AtelierShapes.CornerLarge)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(
-                                        MaterialTheme.colorScheme.surfaceVariant,
-                                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                                    )
-                                )
-                            )
-                            .clickable(enabled = isEditing) { showSourceSelector = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val imagePathToUse = if (isEditing) editImagePath else design.imagePath
-                        // While editing, a freshly picked local photo must win over the
-                        // uploaded one - otherwise the user sees the old image after replacing it.
-                        val detailImageModel = rememberDesignImageModel(
-                            imagePath = imagePathToUse,
-                            imageRef = if (isEditing && editImagePath != null) null else design.imageRef
-                        )
-                        if (detailImageModel != null) {
-                            Image(
-                                painter = rememberAsyncImagePainter(detailImageModel),
-                                contentDescription = if (isEditing) "Edit Photo" else design.name,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                            if (isEditing) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .padding(AtelierSpacing.Cozy)
-                                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                                        .padding(AtelierSpacing.Compact)
-                                ) {
-                                    Icon(
-                                        Icons.Default.PhotoCamera,
-                                        contentDescription = "Change Photo",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(OverlayIconSize)
-                                    )
-                                }
-                            }
-                        } else {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.PhotoCamera,
-                                    contentDescription = "Upload Photo",
-                                    modifier = Modifier.size(EmptyStateIconSize),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(Modifier.height(AtelierSpacing.Compact))
-                                Text("Upload Design Photo", style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
-                    }
+                    DesignImageCard(
+                        design = design,
+                        isEditing = isEditing,
+                        editImagePath = editImagePath,
+                        onPickImage = { showSourceSelector = true },
+                    )
 
-                    // Product Title & Category Card
-                    if (isEditing) {
-                        Card(
-                            shape = AtelierShapes.CornerLarge,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(AtelierSpacing.Base),
-                                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
-                            ) {
-                                Text("Basic Details", style = MaterialTheme.typography.titleMediumStrong)
-                                
-                                OutlinedTextField(
-                                    value = editName,
-                                    onValueChange = { if (it.length <= 80) editName = it },
-                                    label = { Text("Design Name / Code") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true,
-                                    shape = AtelierShapes.CornerMedium
-                                )
-
-                                OutlinedTextField(
-                                    value = editCategory,
-                                    onValueChange = { if (it.length <= 80) editCategory = it },
-                                    label = { Text("Category (e.g. Salwar Kameez)") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true,
-                                    shape = AtelierShapes.CornerMedium
-                                )
-                            }
-                        }
-                    } else {
-                        Card(
-                            shape = AtelierShapes.CornerLarge,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(AtelierSpacing.Base),
-                                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
-                            ) {
-                                Text(
-                                    text = design.name,
-                                    style = MaterialTheme.typography.headlineSmallStrong,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                SuggestionChip(
-                                    onClick = {},
-                                    label = { Text(design.category) },
-                                    shape = AtelierShapes.CornerSmall
-                                )
-                            }
-                        }
-                    }
+                    TitleCategoryCard(
+                        design = design,
+                        isEditing = isEditing,
+                        editName = editName,
+                        editCategory = editCategory,
+                        onNameChange = { editName = it },
+                        onCategoryChange = { editCategory = it },
+                    )
 
                     // Inventory & Pricing Card
                     if (isEditing) {
@@ -455,158 +299,21 @@ fun DesignDetailScreen(
                         InventoryPricingCard(design = design)
                     }
 
-                    // Assigned Karigars Card
-                    Card(
-                        shape = AtelierShapes.CornerLarge,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(AtelierSpacing.Base),
-                            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Assigned Karigars", style = MaterialTheme.typography.titleMediumStrong)
-                                IconButton(onClick = { showEditKarigarsDialog = true }) {
-                                    Icon(
-                                        Icons.Default.Edit,
-                                        contentDescription = "Edit Karigars",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-
-                            val karigarsListToUse = if (isEditing) editKarigars else design.karigars
-
-                            if (karigarsListToUse.isEmpty()) {
-                                Text(
-                                    "No Karigars assigned to this design.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            } else {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState())
-                                        .padding(vertical = AtelierSpacing.Micro),
-                                    horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    karigarsListToUse.forEach { karigar ->
-                                        SuggestionChip(
-                                            onClick = {},
-                                            label = { Text(karigar, style = MaterialTheme.typography.labelLarge) },
-                                            shape = AtelierShapes.CornerSmall
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    AssignedKarigarsCard(
+                        design = design,
+                        isEditing = isEditing,
+                        editKarigars = editKarigars,
+                        onManageKarigars = { showEditKarigarsDialog = true },
+                    )
 
                     if (showEditKarigarsDialog) {
-                        val karigarsListToUse = if (isEditing) editKarigars else design.karigars
-                        var tempKarigars by remember(karigarsListToUse) { mutableStateOf(karigarsListToUse) }
-                        var newKarigarInput by remember { mutableStateOf("") }
-
-                        AlertDialog(
-                            onDismissRequest = { showEditKarigarsDialog = false },
-                            title = { Text("Manage Karigars", style = MaterialTheme.typography.titleLargeStrong) },
-                            text = {
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    OutlinedTextField(
-                                        value = newKarigarInput,
-                                        onValueChange = { if (it.length <= 50) newKarigarInput = it },
-                                        label = { Text("Karigar Name") },
-                                        singleLine = true,
-                                        shape = AtelierShapes.CornerMedium,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        trailingIcon = {
-                                            IconButton(
-                                                onClick = {
-                                                    val trimmed = newKarigarInput.trim()
-                                                    if (trimmed.isNotBlank() && !tempKarigars.contains(trimmed)) {
-                                                        tempKarigars = tempKarigars + trimmed
-                                                        newKarigarInput = ""
-                                                    }
-                                                }
-                                            ) {
-                                                Icon(Icons.Default.Add, contentDescription = "Add Karigar")
-                                            }
-                                        }
-                                    )
-
-                                    if (tempKarigars.isEmpty()) {
-                                        Text(
-                                            "No Karigars in list.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    } else {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .horizontalScroll(rememberScrollState())
-                                                .padding(vertical = AtelierSpacing.Micro),
-                                            horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
-                                        ) {
-                                            tempKarigars.forEach { karigar ->
-                                                InputChip(
-                                                    selected = false,
-                                                    onClick = {},
-                                                    label = { Text(karigar) },
-                                                    trailingIcon = {
-                                                        // 48dp tap target on the Box; glyph stays 18dp.
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .minimumInteractiveComponentSize()
-                                                                .clickable(
-                                                                    role = Role.Button,
-                                                                    onClickLabel = "Remove"
-                                                                ) { tempKarigars = tempKarigars - karigar },
-                                                            contentAlignment = Alignment.Center
-                                                        ) {
-                                                            Icon(
-                                                                Icons.Default.Clear,
-                                                                contentDescription = "Remove $karigar",
-                                                                modifier = Modifier.size(RemoveIconSize)
-                                                            )
-                                                        }
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            },
-                            confirmButton = {
-                                Button(
-                                    onClick = {
-                                        if (isEditing) {
-                                            editKarigars = tempKarigars
-                                        } else {
-                                            viewModel.updateKarigars(tempKarigars)
-                                        }
-                                        showEditKarigarsDialog = false
-                                    }
-                                ) {
-                                    Text("Save Changes")
-                                }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { showEditKarigarsDialog = false }) {
-                                    Text("Cancel")
-                                }
-                            }
+                        KarigarEditorDialog(
+                            design = design,
+                            isEditing = isEditing,
+                            editKarigars = editKarigars,
+                            viewModel = viewModel,
+                            onEditKarigarsChange = { editKarigars = it },
+                            onDismiss = { showEditKarigarsDialog = false },
                         )
                     }
 
@@ -1277,6 +984,429 @@ private fun InventoryPricingCard(design: Design) {
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Add and remove karigars for this design.
+ *
+ * Its working copy and the new-name input are local; only the confirmed list crosses
+ * back out, so the parent still owns what gets saved.
+ */
+@Composable
+private fun KarigarEditorDialog(
+    design: Design,
+    isEditing: Boolean,
+    editKarigars: List<String>,
+    viewModel: DesignDetailViewModel,
+    onEditKarigarsChange: (List<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+val karigarsListToUse = if (isEditing) editKarigars else design.karigars
+var tempKarigars by remember(karigarsListToUse) { mutableStateOf(karigarsListToUse) }
+var newKarigarInput by remember { mutableStateOf("") }
+
+AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Manage Karigars", style = MaterialTheme.typography.titleLargeStrong) },
+    text = {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = newKarigarInput,
+                onValueChange = { if (it.length <= 50) newKarigarInput = it },
+                label = { Text("Karigar Name") },
+                singleLine = true,
+                shape = AtelierShapes.CornerMedium,
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    IconButton(
+                        onClick = {
+                            val trimmed = newKarigarInput.trim()
+                            if (trimmed.isNotBlank() && !tempKarigars.contains(trimmed)) {
+                                tempKarigars = tempKarigars + trimmed
+                                newKarigarInput = ""
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add Karigar")
+                    }
+                }
+            )
+
+            if (tempKarigars.isEmpty()) {
+                Text(
+                    "No Karigars in list.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(vertical = AtelierSpacing.Micro),
+                    horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
+                ) {
+                    tempKarigars.forEach { karigar ->
+                        InputChip(
+                            selected = false,
+                            onClick = {},
+                            label = { Text(karigar) },
+                            trailingIcon = {
+                                // 48dp tap target on the Box; glyph stays 18dp.
+                                Box(
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .clickable(
+                                            role = Role.Button,
+                                            onClickLabel = "Remove"
+                                        ) { tempKarigars = tempKarigars - karigar },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Clear,
+                                        contentDescription = "Remove $karigar",
+                                        modifier = Modifier.size(RemoveIconSize)
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    },
+    confirmButton = {
+        Button(
+            onClick = {
+                if (isEditing) {
+                    onEditKarigarsChange(tempKarigars)
+                } else {
+                    viewModel.updateKarigars(tempKarigars)
+                }
+                onDismiss()
+            }
+        ) {
+            Text("Save Changes")
+        }
+    },
+    dismissButton = {
+        TextButton(onClick = onDismiss) {
+            Text("Cancel")
+        }
+    }
+)
+}
+
+/**
+ * Shows the karigars assigned to this design, with an edit affordance.
+ */
+@Composable
+private fun AssignedKarigarsCard(
+    design: Design,
+    isEditing: Boolean,
+    editKarigars: List<String>,
+    onManageKarigars: () -> Unit,
+) {
+// Assigned Karigars Card
+Card(
+    shape = AtelierShapes.CornerLarge,
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(AtelierSpacing.Base),
+        verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Assigned Karigars", style = MaterialTheme.typography.titleMediumStrong)
+            IconButton(onClick = onManageKarigars) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = "Edit Karigars",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        val karigarsListToUse = if (isEditing) editKarigars else design.karigars
+
+        if (karigarsListToUse.isEmpty()) {
+            Text(
+                "No Karigars assigned to this design.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(vertical = AtelierSpacing.Micro),
+                horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                karigarsListToUse.forEach { karigar ->
+                    SuggestionChip(
+                        onClick = {},
+                        label = { Text(karigar, style = MaterialTheme.typography.labelLarge) },
+                        shape = AtelierShapes.CornerSmall
+                    )
+                }
+            }
+        }
+    }
+}
+}
+
+/**
+ * Design name and category - an editable form in edit mode, a heading otherwise.
+ */
+@Composable
+private fun TitleCategoryCard(
+    design: Design,
+    isEditing: Boolean,
+    editName: String,
+    editCategory: String,
+    onNameChange: (String) -> Unit,
+    onCategoryChange: (String) -> Unit,
+) {
+// Product Title & Category Card
+if (isEditing) {
+    Card(
+        shape = AtelierShapes.CornerLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AtelierSpacing.Base),
+            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
+        ) {
+            Text("Basic Details", style = MaterialTheme.typography.titleMediumStrong)
+            
+            OutlinedTextField(
+                value = editName,
+                onValueChange = { if (it.length <= 80) onNameChange(it) },
+                label = { Text("Design Name / Code") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = AtelierShapes.CornerMedium
+            )
+
+            OutlinedTextField(
+                value = editCategory,
+                onValueChange = { if (it.length <= 80) onCategoryChange(it) },
+                label = { Text("Category (e.g. Salwar Kameez)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = AtelierShapes.CornerMedium
+            )
+        }
+    }
+} else {
+    Card(
+        shape = AtelierShapes.CornerLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AtelierSpacing.Base),
+            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
+        ) {
+            Text(
+                text = design.name,
+                style = MaterialTheme.typography.headlineSmallStrong,
+                color = MaterialTheme.colorScheme.primary
+            )
+            SuggestionChip(
+                onClick = {},
+                label = { Text(design.category) },
+                shape = AtelierShapes.CornerSmall
+            )
+        }
+    }
+}
+}
+
+/**
+ * Hero photo. Tapping it in edit mode asks for a new one.
+ *
+ * While editing, a freshly picked LOCAL photo deliberately outranks the uploaded one -
+ * otherwise replacing a photo would still show the old image until sync caught up.
+ */
+@Composable
+private fun DesignImageCard(
+    design: Design,
+    isEditing: Boolean,
+    editImagePath: String?,
+    onPickImage: () -> Unit,
+) {
+// Design Image Card
+Box(
+    modifier = Modifier
+        .fillMaxWidth()
+        .height(HeroImageHeight)
+        .clip(AtelierShapes.CornerLarge)
+        .background(
+            Brush.linearGradient(
+                listOf(
+                    MaterialTheme.colorScheme.surfaceVariant,
+                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                )
+            )
+        )
+        .clickable(enabled = isEditing) { onPickImage() },
+    contentAlignment = Alignment.Center
+) {
+    val imagePathToUse = if (isEditing) editImagePath else design.imagePath
+    // While editing, a freshly picked local photo must win over the
+    // uploaded one - otherwise the user sees the old image after replacing it.
+    val detailImageModel = rememberDesignImageModel(
+        imagePath = imagePathToUse,
+        imageRef = if (isEditing && editImagePath != null) null else design.imageRef
+    )
+    if (detailImageModel != null) {
+        Image(
+            painter = rememberAsyncImagePainter(detailImageModel),
+            contentDescription = if (isEditing) "Edit Photo" else design.name,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+        if (isEditing) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(AtelierSpacing.Cozy)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    .padding(AtelierSpacing.Compact)
+            ) {
+                Icon(
+                    Icons.Default.PhotoCamera,
+                    contentDescription = "Change Photo",
+                    tint = Color.White,
+                    modifier = Modifier.size(OverlayIconSize)
+                )
+            }
+        }
+    } else {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                Icons.Default.PhotoCamera,
+                contentDescription = "Upload Photo",
+                modifier = Modifier.size(EmptyStateIconSize),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(AtelierSpacing.Compact))
+            Text("Upload Design Photo", style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+}
+
+/**
+ * Shown when the design changed underneath an in-progress edit.
+ *
+ * The overwrite action is passed in whole rather than reconstructed here, so the caller
+ * keeps ownership of what "overwrite" means and in what order it happens.
+ */
+@Composable
+private fun SaveConflictDialog(
+    onDismiss: () -> Unit,
+    onOverwrite: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Design Changed During Edit") },
+        text = { Text("This design was updated by a sync while you were editing. Save anyway and overwrite those changes?") },
+        confirmButton = {
+            TextButton(
+                onClick = onOverwrite,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Overwrite")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Delete confirmation.
+ *
+ * The confirm action is ONE lambda supplied by the caller. Splitting it into "confirm" plus
+ * an automatic dismiss would reorder the statements, and the order matters: deleteDesign()
+ * flips uiState to NotFound on the next emission.
+ */
+@Composable
+private fun DeleteDesignDialog(
+    onDismiss: () -> Unit,
+    onConfirmDelete: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete Design") },
+        text = { Text("Are you sure you want to delete this design? This action cannot be undone.") },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirmDelete,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * The chrome shared by the Loading and Not-Found states: a titled bar with a back action
+ * and a centred body. Both states rendered identical scaffolds; this removes the duplicate.
+ *
+ * Carries its own @OptIn because TopAppBar is experimental and a top-level composable does
+ * NOT inherit the file-level opt-in.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DetailStatusScaffold(
+    title: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(title, style = MaterialTheme.typography.titleLargeStrong) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        },
+        modifier = modifier
+    ) { paddingValues ->
+        Box(modifier = Modifier.padding(paddingValues).fillMaxSize(), contentAlignment = Alignment.Center) {
+            content()
         }
     }
 }
