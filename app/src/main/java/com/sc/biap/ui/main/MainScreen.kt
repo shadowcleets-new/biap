@@ -56,6 +56,7 @@ import androidx.navigation3.runtime.NavKey
 import coil3.compose.rememberAsyncImagePainter
 import com.sc.biap.AddDesign
 import com.sc.biap.DesignDetail
+import com.sc.biap.Profile
 import com.sc.biap.data.BusinessIntelligenceData
 import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.data.Design
@@ -355,6 +356,13 @@ fun MainScreen(
                                         }
                                     )
                                     DropdownMenuItem(
+                                        text = { Text("Profile") },
+                                        onClick = {
+                                            showMenu = false
+                                            onItemClick(Profile)
+                                        }
+                                    )
+                                    DropdownMenuItem(
                                         text = { Text("Sign Out") },
                                         onClick = {
                                             showMenu = false
@@ -405,6 +413,13 @@ fun MainScreen(
                                     text = { Text("Signed in as:\n${appIdentityLabel ?: "Unknown"}") },
                                     onClick = {},
                                     enabled = false
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Profile") },
+                                    onClick = {
+                                        showMenu = false
+                                        onItemClick(Profile)
+                                    }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Sign Out") },

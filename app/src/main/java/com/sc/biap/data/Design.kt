@@ -37,5 +37,10 @@ data class BusinessIntelligenceData(
     val globalCustomFieldsMetadata: Map<String, Long> = emptyMap(),
     val deletedDesignIds: Set<String> = emptySet(),
     val deletedDesigns: Map<String, Long> = emptyMap(),
-    val deletedCustomFields: Map<String, Long> = emptyMap()
+    val deletedCustomFields: Map<String, Long> = emptyMap(),
+    /**
+     * The owner's own details. Null on payloads written before profiles existed, which is
+     * why it is defaulted rather than required - an older device's upload must still parse.
+     */
+    val profile: UserProfile? = null
 )

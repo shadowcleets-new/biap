@@ -8,6 +8,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Relation
 import com.sc.biap.data.Design
 import com.sc.biap.data.SizeInventory
+import com.sc.biap.data.UserProfile
 
 @Entity(tableName = "designs")
 data class DesignEntity(
@@ -45,6 +46,29 @@ data class SizeInventoryEntity(
     val stock: Int,
     val price: Long
 )
+
+/**
+ * The signed-in person's own details. Exactly one row.
+ *
+ * The database is already per-identity (bi_database_<hash of uid>.db), so a single row IS
+ * this user's profile; no uid column is needed and none is stored. The access level is
+ * deliberately absent - it lives in Firestore, where the user cannot edit their own.
+ */
+@Entity(tableName = "user_profile")
+data class UserProfileEntity(
+    @PrimaryKey val id: Int = SINGLETON_ID,
+    val firstName: String = "",
+    val lastName: String = "",
+    val age: String = "",
+    val designation: String = "",
+    val photoRef: String? = null,
+    val updatedAt: Long = 0L,
+) {
+    companion object {
+        /** Fixed key, so every write replaces the profile rather than appending another. */
+        const val SINGLETON_ID = 1
+    }
+}
 
 @Entity(tableName = "global_custom_fields")
 data class GlobalCustomFieldEntity(
@@ -112,6 +136,24 @@ fun Design.toEntity(): DesignEntity {
         updatedAt = updatedAt
     )
 }
+
+fun UserProfileEntity.toDomain(): UserProfile = UserProfile(
+    firstName = firstName,
+    lastName = lastName,
+    age = age,
+    designation = designation,
+    photoRef = photoRef,
+    updatedAt = updatedAt,
+)
+
+fun UserProfile.toEntity(): UserProfileEntity = UserProfileEntity(
+    firstName = firstName,
+    lastName = lastName,
+    age = age,
+    designation = designation,
+    photoRef = photoRef,
+    updatedAt = updatedAt,
+)
 
 fun SizeInventory.toEntity(designId: String): SizeInventoryEntity {
     return SizeInventoryEntity(

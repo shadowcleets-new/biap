@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// Access levels only. Everything else about a user - their name, age, designation and
+// photo - lives with their catalogue in their own Google Drive appDataFolder and never
+// reaches Firestore. This file exists solely so a role is something the user cannot
+// award themselves.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Declared inside this match because $(database) is only bound here.
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN';
+    }
+
+    match /users/{uid} {
+
+      // A signed-in person may read their own role, and admins may read anyone's so they
+      // can see who currently has what.
+      allow read: if request.auth != null
+        && (request.auth.uid == uid || isAdmin());
+
+      // Only an admin writes roles - including their own, so a non-admin can neither
+      // promote themselves nor demote anybody. The app ships NO write path whatsoever.
+      //
+      // BOOTSTRAPPING: this means the first admin cannot be created from the app or by
+      // any client, which is the point. Create that first users/<uid> document with
+      // role: "ADMIN" in the Firebase Console, which bypasses these rules by design.
+      allow write: if isAdmin();
+    }
+
+    // Anything outside /users is denied by default - no catch-all required.
+  }
+}

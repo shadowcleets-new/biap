@@ -12,9 +12,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SizeInventoryEntity::class,
         GlobalCustomFieldEntity::class,
         DeletedDesignEntity::class,
-        DeletedCustomFieldEntity::class
+        DeletedCustomFieldEntity::class,
+        UserProfileEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -46,7 +47,35 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v4 -> v5: the signed-in person's own profile.
+         *
+         * A new table only - nothing existing is read, rewritten or dropped, so a failure
+         * here cannot cost a design. One row, keyed by a constant, because the database is
+         * already per-identity and therefore already describes exactly one person.
+         *
+         * No access-level column, deliberately: a role stored in the user's own database is
+         * a role the user can edit. That lives in Firestore where only an admin may write it.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS user_profile (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        firstName TEXT NOT NULL DEFAULT '',
+                        lastName TEXT NOT NULL DEFAULT '',
+                        age TEXT NOT NULL DEFAULT '',
+                        designation TEXT NOT NULL DEFAULT '',
+                        photoRef TEXT,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         /** Every migration the app knows about. Pass to `addMigrations(*ALL_MIGRATIONS)`. */
-        val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4)
+        val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4, MIGRATION_4_5)
     }
 }

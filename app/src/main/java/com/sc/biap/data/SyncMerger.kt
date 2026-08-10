@@ -67,13 +67,24 @@ object SyncMerger {
             updatedAt == null || deletedAt >= updatedAt
         }
 
+        // 4. Merge the owner's profile (LWW on its own updatedAt)
+        //
+        // Resolved independently of everything else, for the same reason the image pointer
+        // is: editing a design on one device must never drag a stale copy of the profile
+        // along with it. A null side loses to a real one rather than erasing it - an older
+        // build that has never heard of profiles uploads null, and that must not wipe the
+        // details entered on a newer device.
+        val mergedProfile = listOfNotNull(localData.profile, remoteData.profile)
+            .maxByOrNull { it.updatedAt }
+
         return BusinessIntelligenceData(
             designs = mergedDesigns,
             globalCustomFields = mergedFields.keys,
             globalCustomFieldsMetadata = mergedFields,
             deletedDesignIds = finalDeleted.keys,
             deletedDesigns = finalDeleted,
-            deletedCustomFields = finalDeletedFields
+            deletedCustomFields = finalDeletedFields,
+            profile = mergedProfile
         )
     }
 }

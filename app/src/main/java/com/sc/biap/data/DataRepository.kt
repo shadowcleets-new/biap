@@ -33,6 +33,12 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
+import com.sc.biap.data.room.toDomain
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -76,11 +82,16 @@ interface DataRepository {
     fun resetSyncStatus()
 
     // Guest merge operations
+    /** The signed-in person's own details, kept with the catalogue and synced with it. */
+    val profile: StateFlow<UserProfile>
+    suspend fun saveProfile(profile: UserProfile)
+
     suspend fun hasGuestData(): Boolean
     suspend fun mergeGuestData(): Boolean
     suspend fun clearGuestData(): Boolean
 }
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class DefaultDataRepository(private val context: Context) : DataRepository {
     companion object {
         @Volatile
@@ -113,6 +124,28 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     private var currentDb: AppDatabase? = null
     private val currentDaoFlow = MutableStateFlow<DesignDao?>(null)
+
+    /**
+     * The signed-in person's own details.
+     *
+     * Follows the active DAO rather than being read once, so switching accounts swaps the
+     * profile along with the catalogue instead of leaving the previous person's name on
+     * screen. Empty while no database is open.
+     */
+    override val profile: StateFlow<UserProfile> =
+        currentDaoFlow
+            .flatMapLatest { dao ->
+                dao?.getProfileFlow()?.map { it?.toDomain() ?: UserProfile() }
+                    ?: flowOf(UserProfile())
+            }
+            .stateIn(repositoryScope, SharingStarted.Eagerly, UserProfile())
+
+    override suspend fun saveProfile(profile: UserProfile) {
+        val dao = awaitDao() ?: return
+        // Stamped here rather than by the caller: the timestamp decides which side wins a
+        // merge, so it must reflect when the write actually happened.
+        dao.upsertProfile(profile.copy(updatedAt = System.currentTimeMillis()).toEntity())
+    }
     private var dbCollectionJob: Job? = null
     // Exactly one live WorkInfo observer. Previously every syncWithGoogleDrive() call
     // launched a collector that never completed, so N taps left N collectors racing to
@@ -323,13 +356,15 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         val globals = dao.getAllGlobalCustomFields()
         val deletedDesigns = dao.getAllDeletedDesignsOnce()
         val deletedFields = dao.getAllDeletedCustomFieldsOnce()
+        val profile = dao.getProfileOnce()?.toDomain()
         return BusinessIntelligenceData(
             designs = designs.map { it.toDomain() },
             globalCustomFields = globals.map { it.field }.toSet(),
             globalCustomFieldsMetadata = globals.associate { it.field to it.updatedAt },
             deletedDesignIds = deletedDesigns.map { it.designId }.toSet(),
             deletedDesigns = deletedDesigns.associate { it.designId to it.deletedAt },
-            deletedCustomFields = deletedFields.associate { it.field to it.deletedAt }
+            deletedCustomFields = deletedFields.associate { it.field to it.deletedAt },
+            profile = profile
         )
     }
 

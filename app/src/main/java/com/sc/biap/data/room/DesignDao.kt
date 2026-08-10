@@ -59,6 +59,17 @@ interface DesignDao {
     }
 
     // Global custom fields
+    // --- Profile (exactly one row; see UserProfileEntity) ---
+
+    @Query("SELECT * FROM user_profile WHERE id = :id")
+    fun getProfileFlow(id: Int = UserProfileEntity.SINGLETON_ID): Flow<UserProfileEntity?>
+
+    @Query("SELECT * FROM user_profile WHERE id = :id")
+    suspend fun getProfileOnce(id: Int = UserProfileEntity.SINGLETON_ID): UserProfileEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertProfile(profile: UserProfileEntity)
+
     @Query("SELECT * FROM global_custom_fields")
     fun getAllGlobalCustomFieldsFlow(): Flow<List<GlobalCustomFieldEntity>>
 
@@ -122,6 +133,11 @@ interface DesignDao {
             insertDesign(design.toEntity())
             insertInventories(design.sizeInventories.map { it.toEntity(design.id) })
         }
+
+        // The profile is upserted, never cleared first: a payload from an older build
+        // carries null here, and that must leave the existing details alone rather than
+        // wiping them.
+        data.profile?.let { upsertProfile(it.toEntity()) }
 
         // Insert globals
         val globalEntities = data.globalCustomFields.map { field ->
