@@ -8,7 +8,7 @@ import com.sc.biap.util.EncryptionUtils
 import com.sc.biap.util.GoogleDriveSyncManager
 import com.sc.biap.util.DriveSyncWorker
 import com.sc.biap.util.FileUtils
-import com.sc.biap.util.ImageStore
+import com.sc.biap.util.DriveImageStore
 import com.sc.biap.util.ImageUploadWorker
 import com.sc.biap.util.OrphanImageCleanupWorker
 import androidx.work.Constraints
@@ -101,7 +101,8 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     override val biData: StateFlow<BusinessIntelligenceData> = _biData.asStateFlow()
 
     override val authManager = AuthManager(context)
-    private val driveSyncManager = GoogleDriveSyncManager()
+    // Also used by DriveImageStore: photos travel over the same transport as the data.
+    val driveSyncManager = GoogleDriveSyncManager()
     
     private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val _isSyncing = MutableStateFlow(false)
@@ -583,7 +584,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     }
 
     override fun enqueueImageUpload(designId: String, localPath: String): String {
-        val key = ImageStore.newVersionKey(designId, File(localPath).extension.ifBlank { "jpg" })
+        val key = DriveImageStore.newVersionKey(designId)
         val request = OneTimeWorkRequestBuilder<ImageUploadWorker>()
             .setInputData(
                 workDataOf(

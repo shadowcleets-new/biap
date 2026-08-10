@@ -152,7 +152,8 @@ dependencies {
   androidTestImplementation(firebaseBom)
   implementation(libs.firebase.auth)
   implementation(libs.firebase.firestore)
-  implementation(libs.firebase.storage)
+  // firebase-storage removed: design photos now live in the same Google Drive
+  // appDataFolder as the catalogue. See DriveImageStore for why.
   // .await() on Play Services Tasks. Firebase pulls this in transitively, but relying on
   // that means a Firebase bump could silently break the build - so declare it.
   implementation(libs.kotlinx.coroutines.play.services)

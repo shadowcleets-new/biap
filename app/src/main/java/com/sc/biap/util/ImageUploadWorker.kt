@@ -63,10 +63,10 @@ class ImageUploadWorker(
         }
 
         // 1. bytes first, to a key nothing points at yet
-        val uploaded = ImageStore.upload(file, storageKey)
+        val uploaded = DriveImageStore.upload(applicationContext, file, storageKey)
         if (!uploaded) {
             Log.w(TAG, "upload failed (attempt ${runAttemptCount + 1}/$MAX_ATTEMPTS) key=$storageKey - " +
-                "check Storage rules and that the App Check debug token is registered")
+                "check that the Google account is connected and has Drive access")
             return Result.retry()
         }
 
@@ -81,7 +81,7 @@ class ImageUploadWorker(
         }
 
         // 3. retention, best-effort - never fails the job
-        ImageStore.pruneToLatest(designId, protectKey = storageKey)
+        DriveImageStore.pruneToLatest(applicationContext, designId, protectKey = storageKey)
 
         Log.i(TAG, "uploaded design=$designId key=$storageKey")
         return Result.success()

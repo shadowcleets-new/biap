@@ -11,7 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.sc.biap.util.FileUtils
-import com.sc.biap.util.ImageStore
+import com.sc.biap.util.DriveImageStore
+import java.io.File
 
 /**
  * @file DesignImage.kt
@@ -24,9 +25,9 @@ import com.sc.biap.util.ImageStore
  *  2. otherwise the uploaded version, resolved from `imageRef` - this is what lets an
  *     employee see a photo somebody else took
  *
- * The remote URL is only resolved when there is no local file, so a photo taken on this
- * device costs zero network calls. Coil caches the fetched bytes, and ImageStore caches the
- * resolved URL, so a photo taken by someone else costs one round trip per device.
+ * The remote copy is only fetched when there is no local file, so a photo taken on this
+ * device costs zero network calls. A fetched photo is decrypted and cached on disk, so a
+ * photo taken by someone else is downloaded once per device rather than once per view.
  *
  * WHY THIS RETURNS A STATE RATHER THAN A NULLABLE MODEL:
  *   It used to return null for both "this design has no photo" and "the photo exists but
@@ -78,15 +79,18 @@ fun rememberDesignImage(imagePath: String?, imageRef: String?): DesignImage {
     }
     val remoteKey = imageRef?.takeIf { it.isNotBlank() }
 
-    var resolved by remember(remoteKey) { mutableStateOf<String?>(null) }
+    var resolved by remember(remoteKey) { mutableStateOf<File?>(null) }
     var failed by remember(remoteKey) { mutableStateOf(false) }
 
     // Keyed on attempts as well as the ref, so retry() genuinely re-runs the lookup.
     LaunchedEffect(remoteKey, localFile, attempts.intValue) {
         if (localFile != null || remoteKey == null) return@LaunchedEffect
         failed = false
-        val url = ImageStore.resolveUrl(remoteKey)
-        if (url != null) resolved = url else failed = true
+        // Photos live in Drive encrypted, so there is no URL to hand a loader: the bytes
+        // must be fetched and decrypted here. Cached on disk, so this costs one download
+        // per device rather than one per view.
+        val file = DriveImageStore.ensureLocal(context, remoteKey)
+        if (file != null) resolved = file else failed = true
     }
 
     val state = when {

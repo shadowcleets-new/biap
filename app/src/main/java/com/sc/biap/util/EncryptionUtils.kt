@@ -75,6 +75,40 @@ object EncryptionUtils {
         return String(decryptedBytes, Charsets.UTF_8)
     }
 
+    /**
+     * Encrypts raw bytes with the same scheme as [encryptWithKey]. Output: iv || ciphertext.
+     *
+     * Deliberately NOT Base64: a design photo is uploaded uncompressed and runs to several
+     * megabytes, and Base64 would add a third again to every upload and every download for
+     * no benefit. The text variant keeps its Base64 because it is embedded in JSON.
+     */
+    fun encryptBytes(plain: ByteArray, rawKeyBase64: String): ByteArray {
+        val keyBytes = Base64.decode(rawKeyBase64, Base64.NO_WRAP)
+        val secretKey = SecretKeySpec(keyBytes, "AES")
+        val cipher = Cipher.getInstance(ALGORITHM)
+        val iv = ByteArray(12)
+        SecureRandom().nextBytes(iv)
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
+        val cipherText = cipher.doFinal(plain)
+        return iv + cipherText
+    }
+
+    /**
+     * Reverses [encryptBytes]. Throws on tampered input or a foreign key - GCM authenticates,
+     * so a photo encrypted under a different sync key fails loudly rather than decoding to
+     * garbage that would then be handed to the image decoder.
+     */
+    fun decryptBytes(payload: ByteArray, rawKeyBase64: String): ByteArray {
+        require(payload.size > 12) { "Ciphertext too short" }
+        val keyBytes = Base64.decode(rawKeyBase64, Base64.NO_WRAP)
+        val secretKey = SecretKeySpec(keyBytes, "AES")
+        val iv = payload.copyOfRange(0, 12)
+        val cipherText = payload.copyOfRange(12, payload.size)
+        val cipher = Cipher.getInstance(ALGORITHM)
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
+        return cipher.doFinal(cipherText)
+    }
+
     private fun buildSecurePrefs(context: Context): SharedPreferences {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
