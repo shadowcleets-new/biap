@@ -20,7 +20,9 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -40,7 +42,8 @@ import coil3.compose.rememberAsyncImagePainter
 import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.data.Design
 import com.sc.biap.data.SizeInventory
-import com.sc.biap.ui.rememberDesignImageModel
+import com.sc.biap.ui.DesignImageState
+import com.sc.biap.ui.rememberDesignImage
 import com.sc.biap.util.FileUtils
 import com.sc.biap.util.SizeUtils
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -338,7 +341,7 @@ fun DesignDetailScreen(
                             onTakePhoto = {
                                 showSourceSelector = false
                                 try {
-                                    val uri = getTempUri(context)
+                                    val uri = FileUtils.createCameraTempUri(context)
                                     tempPhotoUriString = uri.toString()
                                     cameraLauncher.launch(uri)
                                 } catch (e: Exception) {
@@ -1272,35 +1275,42 @@ Box(
     val imagePathToUse = if (isEditing) editImagePath else design.imagePath
     // While editing, a freshly picked local photo must win over the
     // uploaded one - otherwise the user sees the old image after replacing it.
-    val detailImageModel = rememberDesignImageModel(
+    val detailImage = rememberDesignImage(
         imagePath = imagePathToUse,
         imageRef = if (isEditing && editImagePath != null) null else design.imageRef
     )
-    if (detailImageModel != null) {
-        Image(
-            painter = rememberAsyncImagePainter(detailImageModel),
-            contentDescription = if (isEditing) "Edit Photo" else design.name,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-        if (isEditing) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(AtelierSpacing.Cozy)
-                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                    .padding(AtelierSpacing.Compact)
-            ) {
-                Icon(
-                    Icons.Default.PhotoCamera,
-                    contentDescription = "Change Photo",
-                    tint = Color.White,
-                    modifier = Modifier.size(OverlayIconSize)
-                )
+
+    when (val imageState = detailImage.state) {
+        is DesignImageState.Ready -> {
+            Image(
+                painter = rememberAsyncImagePainter(imageState.model),
+                contentDescription = if (isEditing) "Edit Photo" else design.name,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+            if (isEditing) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(AtelierSpacing.Cozy)
+                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                        .padding(AtelierSpacing.Compact)
+                ) {
+                    Icon(
+                        Icons.Default.PhotoCamera,
+                        contentDescription = "Change Photo",
+                        tint = Color.White,
+                        modifier = Modifier.size(OverlayIconSize)
+                    )
+                }
             }
         }
-    } else {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+        DesignImageState.Loading -> CircularProgressIndicator()
+
+        DesignImageState.Unavailable -> PhotoUnavailable(onRetry = detailImage.retry)
+
+        DesignImageState.Absent -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
                 Icons.Default.PhotoCamera,
                 contentDescription = "Upload Photo",
@@ -1312,6 +1322,51 @@ Box(
         }
     }
 }
+}
+
+/**
+ * Shown when a design HAS a photo that this device could not fetch.
+ *
+ * Deliberately worded as a temporary problem rather than a missing one: the bytes are in
+ * Storage, so telling someone their photo is gone would send them off to re-shoot a design
+ * that never needed it. The retry is here because the earlier behaviour - resolve once, then
+ * stay blank forever - turned a moment without signal into a permanently empty frame.
+ */
+@Composable
+private fun PhotoUnavailable(onRetry: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
+    ) {
+        Icon(
+            Icons.Default.CloudOff,
+            contentDescription = null,
+            modifier = Modifier.size(EmptyStateIconSize),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            "Photo could not be loaded",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            "It is saved in the cloud - check your connection.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TextButton(
+            onClick = onRetry,
+            modifier = Modifier.minimumInteractiveComponentSize()
+        ) {
+            Icon(
+                Icons.Default.Refresh,
+                contentDescription = null,
+                modifier = Modifier.size(ButtonDefaults.IconSize)
+            )
+            Spacer(Modifier.width(AtelierSpacing.Micro))
+            Text("Try again")
+        }
+    }
 }
 
 /**

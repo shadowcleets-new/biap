@@ -1,6 +1,7 @@
 package com.sc.biap.util
 
 import android.net.Uri
+import android.util.Log
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageReference
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +34,7 @@ import java.util.UUID
  */
 object ImageStore {
 
+    private const val TAG = "ImageStore"
     private const val ROOT = "designs"
 
     private val storage: FirebaseStorage get() = FirebaseStorage.getInstance()
@@ -68,14 +70,44 @@ object ImageStore {
     }
 
     /**
-     * Resolve a storage key to a URL for loading. Safe to cache: the key is immutable, so
-     * the bytes behind it can never change.
+     * Resolved download URLs, kept for the life of the process.
+     *
+     * Keys are write-once, so the bytes behind one can never change and a URL can never go
+     * stale - which makes this safe to cache indefinitely. Without it, every scroll past a
+     * design costs a fresh getDownloadUrl() round trip; a catalogue browsed repeatedly on a
+     * workshop connection spends most of its time re-asking for URLs it already had.
+     *
+     * Bounded so a large catalogue cannot grow it without limit. Failures are never cached -
+     * a refusal is usually transient (no signal, an expired token) and caching it would turn
+     * a momentary problem into a permanent blank.
+     */
+    private const val URL_CACHE_LIMIT = 256
+    private val urlCache = object : LinkedHashMap<String, String>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean =
+            size > URL_CACHE_LIMIT
+    }
+
+    /**
+     * Resolve a storage key to a URL for loading, or null if it cannot be reached.
+     *
+     * A null here is what the UI turns into "photo unavailable", so the reason is logged
+     * rather than swallowed: a rejected App Check token and a dead network produce the same
+     * blank square on screen but need completely different fixes.
      */
     suspend fun resolveUrl(key: String): String? = withContext(Dispatchers.IO) {
+        synchronized(urlCache) { urlCache[key] }?.let { return@withContext it }
+
         return@withContext try {
-            refFor(key).downloadUrl.await().toString()
+            val url = refFor(key).downloadUrl.await().toString()
+            synchronized(urlCache) { urlCache[key] = url }
+            url
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w(
+                TAG,
+                "could not resolve $key - the design points at a photo this device cannot " +
+                    "fetch. Check sign-in, connectivity, Storage read rules, and that the " +
+                    "App Check token is registered. Cause: ${e.message}"
+            )
             null
         }
     }

@@ -1,3 +1,16 @@
+import java.util.Properties
+
+/**
+ * Developer-local settings, never committed. Absent on a fresh clone, which is fine:
+ * every value read from here has a working fallback.
+ */
+val localProperties = Properties().apply {
+    rootProject.file("local.properties")
+        .takeIf { it.exists() }
+        ?.inputStream()
+        ?.use { load(it) }
+}
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
@@ -30,6 +43,23 @@ android {
     // }
 
     buildTypes {
+        debug {
+            // Pin the App Check debug token.
+            //
+            // The debug provider mints a RANDOM secret on first run and stores it in the
+            // app's SharedPreferences. "Clear storage" and reinstall both wipe that store,
+            // so a new unregistered secret is minted and every App Check-gated call starts
+            // failing silently - photos stop loading with no error shown anywhere.
+            //
+            // Pinning it to a value registered once in Firebase Console makes debug builds
+            // survive both. Set APPCHECK_DEBUG_SECRET in local.properties (gitignored, so
+            // the secret never enters version control). Left blank, behaviour is unchanged.
+            resValue(
+                "string",
+                "appcheck_debug_secret",
+                localProperties.getProperty("APPCHECK_DEBUG_SECRET").orEmpty()
+            )
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -45,6 +75,8 @@ android {
       aidl = false
       buildConfig = false
       shaders = false
+      // Enabled for the debug-only App Check token resource; see the debug buildType.
+      resValues = true
     }
 
     packaging {

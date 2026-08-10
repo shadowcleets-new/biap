@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.*
@@ -66,7 +67,8 @@ import com.sc.biap.theme.glowBrush
 import com.sc.biap.theme.titleMediumStrong
 import java.io.File
 import com.sc.biap.util.FileUtils
-import com.sc.biap.ui.rememberDesignImageModel
+import com.sc.biap.ui.DesignImageState
+import com.sc.biap.ui.rememberDesignImage
 import com.sc.biap.ui.rememberPerformanceProfile
 import com.sc.biap.ui.PerformanceProfile
 import androidx.compose.ui.platform.LocalConfiguration
@@ -87,6 +89,7 @@ private val EmptyStateIconSize = 48.dp
 private val EmptyStateGap = 20.dp
 private val EmptyStateTextWidth = 280.dp
 private val DesignCardImageHeight = 140.dp
+private val ThumbnailSpinnerStroke = 2.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -598,16 +601,30 @@ fun DesignCard(design: Design, onClick: () -> Unit) {
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
-                val imageModel = rememberDesignImageModel(design.imagePath, design.imageRef)
-                if (imageModel != null) {
-                    Image(
-                        painter = rememberAsyncImagePainter(imageModel),
+                when (val imageState = rememberDesignImage(design.imagePath, design.imageRef).state) {
+                    is DesignImageState.Ready -> Image(
+                        painter = rememberAsyncImagePainter(imageState.model),
                         contentDescription = design.name,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
-                } else {
-                    Icon(
+
+                    DesignImageState.Loading -> CircularProgressIndicator(
+                        modifier = Modifier.size(AtelierSpacing.Base),
+                        strokeWidth = ThumbnailSpinnerStroke
+                    )
+
+                    // A photo exists but this device could not fetch it. Deliberately
+                    // distinct from "no photo": that difference decides whether a design
+                    // needs re-shooting or just a working connection. Open it to retry.
+                    DesignImageState.Unavailable -> Icon(
+                        Icons.Default.CloudOff,
+                        contentDescription = "Photo unavailable - open the design to retry",
+                        modifier = Modifier.size(AtelierSpacing.Double),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    DesignImageState.Absent -> Icon(
                         Icons.Default.Inventory,
                         contentDescription = "No photo",
                         modifier = Modifier.size(AtelierSpacing.Double),
