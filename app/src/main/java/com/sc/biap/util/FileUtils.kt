@@ -2,6 +2,7 @@ package com.sc.biap.util
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -44,6 +45,19 @@ object FileUtils {
             e.printStackTrace()
             null
         }
+    }
+
+    /**
+     * A throwaway file in the cache for the camera to write its capture into.
+     *
+     * The camera app writes to a Uri we hand it rather than returning bytes, so the
+     * destination has to exist as a shareable FileProvider Uri before the intent is
+     * launched. The capture is copied into filesDir on success; the cache copy is
+     * disposable and may be reclaimed by the system at any time.
+     */
+    fun createCameraTempUri(context: Context): Uri {
+        val file = File(context.cacheDir, "temp_camera_${System.currentTimeMillis()}.jpg")
+        return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     }
 
     /**
