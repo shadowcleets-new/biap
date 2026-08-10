@@ -31,16 +31,32 @@ android {
         versionName = "1.0"
     }
 
-    // signingConfigs intentionally absent: the owner has not supplied a release keystore.
-    // When available, uncomment and fill from a local (git-ignored) keystore.properties:
-    // signingConfigs {
-    //     create("release") {
-    //         storeFile = file("<owner-supplied>.keystore")
-    //         storePassword = "<owner-supplied>"
-    //         keyAlias = "<owner-supplied>"
-    //         keyPassword = "<owner-supplied>"
-    //     }
-    // }
+    /**
+     * Release signing, read from local.properties (gitignored) with the keystore itself
+     * kept OUTSIDE the repository so it cannot be committed by accident.
+     *
+     * Previously absent entirely, which meant a "release" build was signed with the debug
+     * key - a key whose password is public and identical on every developer machine on
+     * earth. Anyone could have produced a build Android would accept as an update to this
+     * app. It is now a 4096-bit RSA key valid for ~27 years.
+     *
+     * Configured only when the properties are present, so a fresh clone still builds; it
+     * just produces an unsigned release, which fails loudly at install rather than
+     * silently shipping something signed with a throwaway key.
+     */
+    val releaseStorePath = localProperties.getProperty("RELEASE_STORE_FILE")
+    val hasReleaseSigning = releaseStorePath != null && file(releaseStorePath).exists()
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStorePath!!)
+                storePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS")
+                keyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
 
     buildTypes {
         debug {
@@ -64,6 +80,9 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {
@@ -144,6 +163,10 @@ dependencies {
   implementation(libs.androidx.security.crypto)
   // App lock: BiometricPrompt, plus process-wide lifecycle to know when the whole app
   // (not just one screen) goes to the background.
+  // Encrypts the catalogue at rest. Without it the database is plain SQLite:
+  // designs, costs and margins readable by anyone with file access to the phone.
+  implementation(libs.sqlcipher)
+  implementation(libs.androidx.sqlite)
   implementation(libs.androidx.biometric)
   implementation(libs.androidx.lifecycle.process)
 

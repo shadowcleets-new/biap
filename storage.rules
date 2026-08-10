@@ -1,24 +1,20 @@
 rules_version = '2';
 
+// Cloud Storage is RETIRED. Design photos live in the user's own Google Drive
+// appDataFolder (see DriveImageStore), and the firebase-storage dependency has been
+// removed from the app entirely.
+//
+// The bucket previously allowed any authenticated user to read, write and delete under
+// designs/**. Nothing used it any more, but the surface stayed live: this project is on
+// the Blaze plan and anybody in the world can create an account through phone sign-up, so
+// an unused-but-writable bucket was a free file host billed to the owner.
+//
+// Everything is denied. If Storage is ever reinstated, write explicit rules then rather
+// than loosening these.
 service firebase.storage {
   match /b/{bucket}/o {
-
-    // Design photos. Keys are designs/{designId}/{millis}_{nonce}.{ext} and are
-    // written once: replacing a photo uploads a NEW key rather than overwriting,
-    // so a failed upload can never destroy the image a design still points at.
-    match /designs/{designId}/{fileName} {
-
-      allow read: if request.auth != null;
-
-      allow create, update: if request.auth != null
-        && request.resource.size < 30 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
-
-      // Retention (keep newest 5) needs delete. request.resource is null on a
-      // delete, so this rule cannot carry the size/type conditions above.
-      allow delete: if request.auth != null;
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
-
-    // Anything outside /designs is denied by default - no catch-all required.
   }
 }

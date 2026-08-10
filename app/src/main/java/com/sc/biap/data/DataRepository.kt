@@ -29,6 +29,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import com.google.firebase.auth.FirebaseAuth
+import com.sc.biap.security.DatabaseKey
+import com.sc.biap.security.PassphraseStore
+import com.sc.biap.security.SyncPassphrase
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -60,6 +64,12 @@ sealed interface SyncStatus {
     object Syncing : SyncStatus
     data class Success(val message: String) : SyncStatus
     data class Error(val message: String) : SyncStatus
+    /**
+     * Sync stopped because the passphrase that unlocks the sync key is missing or wrong.
+     * [isNewPassphrase] is true when this Drive has no key yet, so the UI asks the owner to
+     * choose one rather than to recall one they never set.
+     */
+    data class PassphraseRequired(val isNewPassphrase: Boolean) : SyncStatus
 }
 
 interface DataRepository {
@@ -78,6 +88,9 @@ interface DataRepository {
     val isSyncing: StateFlow<Boolean>
     val syncStatus: StateFlow<SyncStatus>
     fun syncWithGoogleDrive()
+    /** Store the passphrase that wraps the sync key, then retry the sync. */
+    fun setSyncPassphrase(passphrase: CharArray)
+    fun hasSyncPassphrase(): Boolean
     fun signOut(onComplete: () -> Unit)
     fun resetSyncStatus()
 
@@ -105,6 +118,11 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     }
 
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
+
+    // Drive filenames for the sync key. The legacy one held the key in plain text and is
+    // migrated away from on the first sync that finds it.
+    private val KEY_FILE_WRAPPED = "sync_key.enc"
+    private val KEY_FILE_LEGACY = "sync_key.txt"
     private val dbLock = Mutex()
     private val backupLock = Mutex()
 
@@ -308,7 +326,16 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         fun buildAndVerify(): AppDatabase {
             val db = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
                 .addMigrations(*AppDatabase.ALL_MIGRATIONS)
-                .fallbackToDestructiveMigration()
+                // Encrypted at rest with SQLCipher. Previously this was plain SQLite, so a
+                // copy of the file handed over every design, cost price and margin in the
+                // business to anyone who could read app storage. The passphrase is random
+                // per install and sealed in the Android Keystore, so a copied database is
+                // useless without the phone it came from.
+                .openHelperFactory(SupportOpenHelperFactory(DatabaseKey.getOrCreate(context)))
+                // NO fallbackToDestructiveMigration: a missing migration used to wipe the
+                // catalogue silently and call it success. Now the open throws, and the
+                // caller below preserves a copy of the file before recreating anything -
+                // so a schema mistake costs a support conversation, not the business's data.
                 .build()
             // Force eager connection to check integrity immediately at start-up
             db.openHelper.writableDatabase.query("SELECT 1").close()
@@ -433,6 +460,13 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         }
     }
 
+    override fun setSyncPassphrase(passphrase: CharArray) {
+        PassphraseStore.save(context, passphrase)
+        syncWithGoogleDrive()
+    }
+
+    override fun hasSyncPassphrase(): Boolean = PassphraseStore.isSet(context)
+
     override fun resetSyncStatus() {
         _syncStatus.value = SyncStatus.Idle
     }
@@ -523,19 +557,67 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                 return@withContext ListenableWorker.Result.failure()
             }
 
-            // --- Key management: validated and race-safe (BUG-05) ---
+            // --- Key management ---
+            //
+            // The sync key used to be uploaded as sync_key.txt in PLAIN TEXT, into the same
+            // Drive folder as the data it decrypts. Ciphertext and key side by side, which
+            // made the encryption close to decorative: anyone reaching the folder - or
+            // Google - held both halves.
+            //
+            // It is now wrapped with a passphrase that never leaves the device, so the
+            // folder holds two ciphertexts and no key. The cost is that a sync cannot
+            // proceed without the passphrase, and that is the point.
             val localKey = EncryptionUtils.getOrGenerateLocalSyncKey(context)
-            var keyFileId = driveSyncManager.searchFile(token, "sync_key.txt")
-            if (keyFileId == null) {
-                driveSyncManager.uploadFile(token, localKey, null, "sync_key.txt")
-                // Re-read so two devices racing here converge on the same files[0] winner.
-                keyFileId = driveSyncManager.searchFile(token, "sync_key.txt")
+            val passphrase = PassphraseStore.get(context)
+
+            val wrappedFileId = driveSyncManager.searchFile(token, KEY_FILE_WRAPPED)
+            val legacyFileId = driveSyncManager.searchFile(token, KEY_FILE_LEGACY)
+
+            if (passphrase == null) {
+                // Distinguishes "choose one" from "enter the existing one", so the UI can
+                // ask the right question instead of a generic prompt.
+                val isFirstEver = wrappedFileId == null && legacyFileId == null
+                _syncStatus.value = SyncStatus.PassphraseRequired(isNewPassphrase = isFirstEver)
+                return@withContext ListenableWorker.Result.failure()
             }
+
             var candidateKey = localKey
-            if (keyFileId != null) {
-                val remoteKey = driveSyncManager.downloadFile(token, keyFileId)?.trim()
-                if (!remoteKey.isNullOrBlank() && EncryptionUtils.isValidKey(remoteKey)) {
-                    candidateKey = remoteKey
+
+            when {
+                wrappedFileId != null -> {
+                    val envelope = driveSyncManager.downloadFile(token, wrappedFileId)?.trim()
+                    val unwrapped = envelope?.let { SyncPassphrase.unwrap(it, passphrase) }
+                    if (unwrapped == null || !EncryptionUtils.isValidKey(unwrapped)) {
+                        // Refuse rather than fall back to the local key: continuing would
+                        // re-encrypt the catalogue under a different key and orphan every
+                        // other device permanently.
+                        _syncStatus.value = SyncStatus.PassphraseRequired(isNewPassphrase = false)
+                        return@withContext ListenableWorker.Result.failure()
+                    }
+                    candidateKey = unwrapped
+                }
+
+                legacyFileId != null -> {
+                    // Migrate a plaintext key left by an older build: adopt it, re-upload it
+                    // wrapped, then delete the plaintext copy so it stops sitting there.
+                    val plain = driveSyncManager.downloadFile(token, legacyFileId)?.trim()
+                    if (!plain.isNullOrBlank() && EncryptionUtils.isValidKey(plain)) {
+                        candidateKey = plain
+                    }
+                    val wrapped = SyncPassphrase.wrap(candidateKey, passphrase)
+                    if (driveSyncManager.uploadFile(token, wrapped, null, KEY_FILE_WRAPPED) != null) {
+                        driveSyncManager.deleteFile(token, legacyFileId)
+                    }
+                }
+
+                else -> {
+                    // First sync for this Drive: publish the key wrapped from the outset.
+                    driveSyncManager.uploadFile(
+                        token,
+                        SyncPassphrase.wrap(candidateKey, passphrase),
+                        null,
+                        KEY_FILE_WRAPPED
+                    )
                 }
             }
 
@@ -577,9 +659,15 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                 }
                 if (decryptedJson != null) {
                     usedKey = localKey
-                    if (keyFileId != null) {
-                        // The escrowed key is wrong for the real payload; repair it.
-                        driveSyncManager.uploadFile(token, localKey, keyFileId, "sync_key.txt")
+                    // The escrowed key did not match the real payload; repair it - wrapped,
+                    // never in plain text, which is what this whole change is about.
+                    if (wrappedFileId != null) {
+                        driveSyncManager.uploadFile(
+                            token,
+                            SyncPassphrase.wrap(localKey, passphrase),
+                            wrappedFileId,
+                            KEY_FILE_WRAPPED
+                        )
                     }
                 }
             }
@@ -733,6 +821,10 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         try {
             guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db")
                 .addMigrations(*AppDatabase.ALL_MIGRATIONS)
+                // Encrypted like every other database. Missing this would leave the guest
+                // catalogue as the one plaintext file on the device - the exact hole the
+                // rest of this change closes.
+                .openHelperFactory(SupportOpenHelperFactory(DatabaseKey.getOrCreate(context)))
                 .build()
             guestDb.designDao().getAllDesignsOnce().isNotEmpty()
         } catch (e: Exception) {
@@ -753,6 +845,10 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             try {
                 guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db")
                 .addMigrations(*AppDatabase.ALL_MIGRATIONS)
+                // Encrypted like every other database. Missing this would leave the guest
+                // catalogue as the one plaintext file on the device - the exact hole the
+                // rest of this change closes.
+                .openHelperFactory(SupportOpenHelperFactory(DatabaseKey.getOrCreate(context)))
                 .build()
                 val guestDao = guestDb.designDao()
 
@@ -797,6 +893,10 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         try {
             guestDb = Room.databaseBuilder(context, AppDatabase::class.java, "bi_database.db")
                 .addMigrations(*AppDatabase.ALL_MIGRATIONS)
+                // Encrypted like every other database. Missing this would leave the guest
+                // catalogue as the one plaintext file on the device - the exact hole the
+                // rest of this change closes.
+                .openHelperFactory(SupportOpenHelperFactory(DatabaseKey.getOrCreate(context)))
                 .build()
             val dao = guestDb.designDao()
             dao.deleteAllDesigns()

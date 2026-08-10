@@ -33,3 +33,8 @@ docs/*.jsonl
 
 # Editor backup files
 *~
+
+# Never commit signing material
+*.jks
+*.p12
+*.keystore

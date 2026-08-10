@@ -5,6 +5,8 @@ import androidx.room.Room
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.sc.biap.data.room.AppDatabase
+import com.sc.biap.security.DatabaseKey
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -29,9 +31,16 @@ class OrphanImageCleanupWorker(
             // 2. Open each database and extract referenced imagePath values
             for (dbFile in dbFiles) {
                 try {
+                    // A background cleanup worker must never be able to destroy data.
+                    // With fallbackToDestructiveMigration this loop could silently wipe a
+                    // signed-out user's entire catalogue while merely looking for orphaned
+                    // files. Without it, a mismatched database throws, is skipped by the
+                    // catch below, and stays intact.
                     val db = Room.databaseBuilder(context, AppDatabase::class.java, dbFile.name)
                         .addMigrations(*AppDatabase.ALL_MIGRATIONS)
-                .fallbackToDestructiveMigration()
+                        // Same passphrase as the app: these databases are encrypted now, and
+                        // without this the worker simply cannot open them.
+                        .openHelperFactory(SupportOpenHelperFactory(DatabaseKey.getOrCreate(context)))
                         .build()
                     val paths = db.designDao().getAllImagePaths()
                     for (path in paths) {

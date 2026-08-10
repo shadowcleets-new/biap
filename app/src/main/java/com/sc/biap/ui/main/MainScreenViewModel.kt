@@ -69,6 +69,11 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
     dataRepository.syncWithGoogleDrive()
   }
 
+  /** Stores the passphrase that unlocks the sync key, then retries the sync. */
+  fun setSyncPassphrase(passphrase: CharArray) {
+    dataRepository.setSyncPassphrase(passphrase)
+  }
+
   fun resetSyncStatus() {
     dataRepository.resetSyncStatus()
   }

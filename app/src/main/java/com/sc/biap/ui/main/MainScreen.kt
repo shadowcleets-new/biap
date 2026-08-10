@@ -125,8 +125,16 @@ fun MainScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // Sync stopped for want of the passphrase that unwraps the sync key. Handled with a
+    // dialog rather than a snackbar because it is a question, not a notification.
+    var passphrasePrompt by remember { mutableStateOf<SyncStatus.PassphraseRequired?>(null) }
+
     LaunchedEffect(syncStatus) {
         when (val status = syncStatus) {
+            is SyncStatus.PassphraseRequired -> {
+                passphrasePrompt = status
+                viewModel.resetSyncStatus()
+            }
             is SyncStatus.Success -> {
                 snackbarHostState.showSnackbar(status.message)
                 viewModel.resetSyncStatus()
@@ -167,6 +175,17 @@ fun MainScreen(
                 snackbarHostState.showSnackbar("Google Sign-In cancelled or failed")
             }
         }
+    }
+
+    passphrasePrompt?.let { prompt ->
+        SyncPassphraseDialog(
+            isNewPassphrase = prompt.isNewPassphrase,
+            onConfirm = { entered ->
+                passphrasePrompt = null
+                viewModel.setSyncPassphrase(entered)
+            },
+            onDismiss = { passphrasePrompt = null }
+        )
     }
 
     var showMenu by remember { mutableStateOf(false) }
