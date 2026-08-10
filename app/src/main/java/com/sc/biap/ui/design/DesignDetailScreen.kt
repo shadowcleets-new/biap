@@ -961,245 +961,290 @@ fun DesignDetailScreen(
                         )
                     }
 
-                    // Specifications Card
-                    val specsToUse = if (isEditing) editCustomFields else design.customFields
-
-                    if (specsToUse.isNotEmpty() || isEditing) {
-                        Card(
-                            shape = AtelierShapes.CornerLarge,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(AtelierSpacing.Base),
-                                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
-                            ) {
-                                Text("Specifications", style = MaterialTheme.typography.titleMediumStrong)
-
-                                val specTabs = listOf("Top (Kameez)", "Bottom (Salwar)", "Dupatta", "General")
-                                var selectedSpecTab by remember { mutableStateOf(0) }
-
-                                ScrollableTabRow(
-                                    selectedTabIndex = selectedSpecTab,
-                                    edgePadding = AtelierSpacing.None,
-                                    indicator = {},
-                                    divider = {}
-                                ) {
-                                    specTabs.forEachIndexed { index, title ->
-                                        val isSelected = selectedSpecTab == index
-                                        Tab(
-                                            selected = isSelected,
-                                            onClick = { selectedSpecTab = index },
-                                            text = {
-                                                Text(
-                                                    text = title,
-                                                    maxLines = 1,
-                                                    style = if (isSelected) MaterialTheme.typography.labelLargeStrong else MaterialTheme.typography.labelLarge,
-                                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            },
-                                            modifier = Modifier
-                                                .padding(horizontal = AtelierSpacing.Micro, vertical = 6.dp)
-                                                .clip(CircleShape)
-                                                .background(
-                                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
-                                                )
-                                        )
-                                    }
-                                }
-
-                                val prefix = when (selectedSpecTab) {
-                                    0 -> "Top - "
-                                    1 -> "Bottom - "
-                                    2 -> "Dupatta - "
-                                    else -> ""
-                                }
-
-                                val filteredSpecs = specsToUse.filter { (key, _) ->
-                                    if (selectedSpecTab < 3) {
-                                        key.startsWith(prefix)
-                                    } else {
-                                        !key.startsWith("Top - ") && !key.startsWith("Bottom - ") && !key.startsWith("Dupatta - ")
-                                    }
-                                }
-
-                                if (filteredSpecs.isEmpty()) {
-                                    Text(
-                                        "No specifications under this category.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(vertical = AtelierSpacing.Cozy)
-                                    )
-                                } else {
-                                    filteredSpecs.forEach { (key, value) ->
-                                        val cleanLabel = if (selectedSpecTab < 3) key.removePrefix(prefix) else key
-                                        if (isEditing) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.fillMaxWidth().padding(vertical = AtelierSpacing.Micro),
-                                                horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
-                                            ) {
-                                                OutlinedTextField(
-                                                    value = value,
-                                                    onValueChange = { newValue ->
-                                                        if (newValue.length <= 200) {
-                                                            val updated = editCustomFields.toMutableMap()
-                                                            updated[key] = newValue
-                                                            editCustomFields = updated
-                                                        }
-                                                    },
-                                                    label = { Text(cleanLabel) },
-                                                    modifier = Modifier.weight(1f),
-                                                    shape = AtelierShapes.CornerMedium
-                                                )
-                                                val defaultFields = setOf(
-                                                    "Top - Fabric", "Top - Work", "Top - Color",
-                                                    "Bottom - Fabric", "Bottom - Work", "Bottom - Color",
-                                                    "Dupatta - Fabric", "Dupatta - Work", "Dupatta - Color"
-                                                )
-                                                if (!defaultFields.contains(key)) {
-                                                    IconButton(
-                                                        onClick = {
-                                                            val updated = editCustomFields.toMutableMap()
-                                                            updated.remove(key)
-                                                            editCustomFields = updated
-                                                        }
-                                                    ) {
-                                                        Icon(Icons.Default.Clear, contentDescription = "Remove")
-                                                    }
-                                                }
-                                            }
-                                        } else {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(vertical = AtelierSpacing.Micro),
-                                                horizontalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                Text(
-                                                    text = cleanLabel,
-                                                    style = MaterialTheme.typography.labelLarge,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                Text(
-                                                    text = value.ifBlank { "Not Specified" },
-                                                    style = MaterialTheme.typography.bodyMediumStrong
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if (isEditing) {
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = AtelierSpacing.Compact))
-                                    
-                                    var newKey by remember { mutableStateOf("") }
-                                    var selectedScopeIndex by remember { mutableStateOf(0) }
-                                    val scopes = listOf("Top", "Bottom", "Dupatta", "General")
-
-                                    Text("Add New Custom Field", style = MaterialTheme.typography.bodyMediumStrong)
-
-                                    OutlinedTextField(
-                                        value = newKey,
-                                        onValueChange = { if (it.length <= 50) newKey = it },
-                                        label = { Text("Field Name (e.g. Sleeve Style, Lining)") },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = AtelierShapes.CornerMedium
-                                    )
-
-                                    Text("Apply Field To:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
-                                    ) {
-                                        scopes.forEachIndexed { idx, scopeName ->
-                                            FilterChip(
-                                                selected = selectedScopeIndex == idx,
-                                                onClick = { selectedScopeIndex = idx },
-                                                label = { Text(scopeName) }
-                                            )
-                                        }
-                                    }
-
-                                    Button(
-                                        onClick = {
-                                            if (newKey.isNotBlank()) {
-                                                val scopedKey = when (selectedScopeIndex) {
-                                                    0 -> "Top - ${newKey.trim()}"
-                                                    1 -> "Bottom - ${newKey.trim()}"
-                                                    2 -> "Dupatta - ${newKey.trim()}"
-                                                    else -> newKey.trim()
-                                                }
-                                                if (!editCustomFields.containsKey(scopedKey)) {
-                                                    val updated = editCustomFields.toMutableMap()
-                                                    updated[scopedKey] = ""
-                                                    editCustomFields = updated
-                                                }
-                                                newKey = ""
-                                            }
-                                        },
-                                        modifier = Modifier.align(Alignment.End),
-                                        shape = AtelierShapes.CornerMedium,
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                        )
-                                    ) {
-                                        Icon(Icons.Default.Add, contentDescription = "Add")
-                                        Spacer(Modifier.width(AtelierSpacing.Micro))
-                                        Text("Add Field")
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    SpecificationsCard(
+                        design = design,
+                        isEditing = isEditing,
+                        editCustomFields = editCustomFields,
+                        onEditCustomFieldsChange = { editCustomFields = it },
+                    )
 
                     if (showSourceSelector) {
-                        AlertDialog(
-                            onDismissRequest = { showSourceSelector = false },
-                            title = { Text("Select Image Source", style = MaterialTheme.typography.titleLargeStrong) },
-                            text = {
-                                Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)) {
-                                    Button(
-                                        onClick = {
-                                            showSourceSelector = false
-                                            imagePickerLauncher.launch(
-                                                androidx.activity.result.PickVisualMediaRequest(
-                                                    ActivityResultContracts.PickVisualMedia.ImageOnly
-                                                )
-                                            )
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = AtelierShapes.CornerMedium
-                                    ) {
-                                        Text("Choose from Gallery")
-                                    }
-                                    
-                                    Button(
-                                        onClick = {
-                                            showSourceSelector = false
-                                            try {
-                                                val uri = getTempUri(context)
-                                                tempPhotoUriString = uri.toString()
-                                                cameraLauncher.launch(uri)
-                                            } catch (e: Exception) {
-                                                e.printStackTrace()
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = AtelierShapes.CornerMedium
-                                    ) {
-                                        Text("Take Photo with Camera")
-                                    }
-                                }
+                        ImageSourceSelectorDialog(
+                            onDismiss = { showSourceSelector = false },
+                            onChooseGallery = {
+                                showSourceSelector = false
+                                imagePickerLauncher.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageOnly
+                                    )
+                                )
                             },
-                            confirmButton = {
-                                TextButton(onClick = { showSourceSelector = false }) {
-                                    Text("Cancel")
+                            onTakePhoto = {
+                                showSourceSelector = false
+                                try {
+                                    val uri = getTempUri(context)
+                                    tempPhotoUriString = uri.toString()
+                                    cameraLauncher.launch(uri)
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
                                 }
                             }
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// #region Extracted dialogs
+
+/**
+ * Asks whether to pick an existing photo or take a new one.
+ *
+ * Each action is passed as a whole lambda rather than being reconstructed here, so the
+ * caller keeps ownership of the exact statement order - dismissing before launching is
+ * load-bearing, and splitting it into "dismiss, then act" would change behaviour.
+ */
+@Composable
+private fun ImageSourceSelectorDialog(
+    onDismiss: () -> Unit,
+    onChooseGallery: () -> Unit,
+    onTakePhoto: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Image Source", style = MaterialTheme.typography.titleLargeStrong) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)) {
+                Button(
+                    onClick = onChooseGallery,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = AtelierShapes.CornerMedium
+                ) {
+                    Text("Choose from Gallery")
+                }
+
+                Button(
+                    onClick = onTakePhoto,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = AtelierShapes.CornerMedium
+                ) {
+                    Text("Take Photo with Camera")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+// #endregion
+
+
+/**
+ * Three-piece attributes and custom fields, in both read and edit modes.
+ *
+ * Owns its own tab selection and new-field inputs; only the field map crosses the
+ * boundary, hoisted so the parent still drives the save.
+ */
+@Composable
+private fun SpecificationsCard(
+    design: Design,
+    isEditing: Boolean,
+    editCustomFields: Map<String, String>,
+    onEditCustomFieldsChange: (Map<String, String>) -> Unit,
+) {
+    // Specifications Card
+    val specsToUse = if (isEditing) editCustomFields else design.customFields
+
+    if (specsToUse.isNotEmpty() || isEditing) {
+        Card(
+            shape = AtelierShapes.CornerLarge,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(AtelierSpacing.Base),
+                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
+            ) {
+                Text("Specifications", style = MaterialTheme.typography.titleMediumStrong)
+
+                val specTabs = listOf("Top (Kameez)", "Bottom (Salwar)", "Dupatta", "General")
+                var selectedSpecTab by remember { mutableStateOf(0) }
+
+                ScrollableTabRow(
+                    selectedTabIndex = selectedSpecTab,
+                    edgePadding = AtelierSpacing.None,
+                    indicator = {},
+                    divider = {}
+                ) {
+                    specTabs.forEachIndexed { index, title ->
+                        val isSelected = selectedSpecTab == index
+                        Tab(
+                            selected = isSelected,
+                            onClick = { selectedSpecTab = index },
+                            text = {
+                                Text(
+                                    text = title,
+                                    maxLines = 1,
+                                    style = if (isSelected) MaterialTheme.typography.labelLargeStrong else MaterialTheme.typography.labelLarge,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            modifier = Modifier
+                                .padding(horizontal = AtelierSpacing.Micro, vertical = 6.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                                )
+                        )
+                    }
+                }
+
+                val prefix = when (selectedSpecTab) {
+                    0 -> "Top - "
+                    1 -> "Bottom - "
+                    2 -> "Dupatta - "
+                    else -> ""
+                }
+
+                val filteredSpecs = specsToUse.filter { (key, _) ->
+                    if (selectedSpecTab < 3) {
+                        key.startsWith(prefix)
+                    } else {
+                        !key.startsWith("Top - ") && !key.startsWith("Bottom - ") && !key.startsWith("Dupatta - ")
+                    }
+                }
+
+                if (filteredSpecs.isEmpty()) {
+                    Text(
+                        "No specifications under this category.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = AtelierSpacing.Cozy)
+                    )
+                } else {
+                    filteredSpecs.forEach { (key, value) ->
+                        val cleanLabel = if (selectedSpecTab < 3) key.removePrefix(prefix) else key
+                        if (isEditing) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = AtelierSpacing.Micro),
+                                horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
+                            ) {
+                                OutlinedTextField(
+                                    value = value,
+                                    onValueChange = { newValue ->
+                                        if (newValue.length <= 200) {
+                                            val updated = editCustomFields.toMutableMap()
+                                            updated[key] = newValue
+                                            onEditCustomFieldsChange(updated)
+                                        }
+                                    },
+                                    label = { Text(cleanLabel) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = AtelierShapes.CornerMedium
+                                )
+                                val defaultFields = setOf(
+                                    "Top - Fabric", "Top - Work", "Top - Color",
+                                    "Bottom - Fabric", "Bottom - Work", "Bottom - Color",
+                                    "Dupatta - Fabric", "Dupatta - Work", "Dupatta - Color"
+                                )
+                                if (!defaultFields.contains(key)) {
+                                    IconButton(
+                                        onClick = {
+                                            val updated = editCustomFields.toMutableMap()
+                                            updated.remove(key)
+                                            onEditCustomFieldsChange(updated)
+                                        }
+                                    ) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Remove")
+                                    }
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = AtelierSpacing.Micro),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = cleanLabel,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = value.ifBlank { "Not Specified" },
+                                    style = MaterialTheme.typography.bodyMediumStrong
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (isEditing) {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = AtelierSpacing.Compact))
+                    
+                    var newKey by remember { mutableStateOf("") }
+                    var selectedScopeIndex by remember { mutableStateOf(0) }
+                    val scopes = listOf("Top", "Bottom", "Dupatta", "General")
+
+                    Text("Add New Custom Field", style = MaterialTheme.typography.bodyMediumStrong)
+
+                    OutlinedTextField(
+                        value = newKey,
+                        onValueChange = { if (it.length <= 50) newKey = it },
+                        label = { Text("Field Name (e.g. Sleeve Style, Lining)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = AtelierShapes.CornerMedium
+                    )
+
+                    Text("Apply Field To:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
+                    ) {
+                        scopes.forEachIndexed { idx, scopeName ->
+                            FilterChip(
+                                selected = selectedScopeIndex == idx,
+                                onClick = { selectedScopeIndex = idx },
+                                label = { Text(scopeName) }
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            if (newKey.isNotBlank()) {
+                                val scopedKey = when (selectedScopeIndex) {
+                                    0 -> "Top - ${newKey.trim()}"
+                                    1 -> "Bottom - ${newKey.trim()}"
+                                    2 -> "Dupatta - ${newKey.trim()}"
+                                    else -> newKey.trim()
+                                }
+                                if (!editCustomFields.containsKey(scopedKey)) {
+                                    val updated = editCustomFields.toMutableMap()
+                                    updated[scopedKey] = ""
+                                    onEditCustomFieldsChange(updated)
+                                }
+                                newKey = ""
+                            }
+                        },
+                        modifier = Modifier.align(Alignment.End),
+                        shape = AtelierShapes.CornerMedium,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add")
+                        Spacer(Modifier.width(AtelierSpacing.Micro))
+                        Text("Add Field")
                     }
                 }
             }
