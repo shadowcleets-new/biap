@@ -44,6 +44,7 @@ import com.sc.biap.data.Design
 import com.sc.biap.data.SizeInventory
 import com.sc.biap.ui.DesignImageState
 import com.sc.biap.ui.rememberDesignImage
+import com.sc.biap.security.AppLock
 import com.sc.biap.util.FileUtils
 import com.sc.biap.util.SizeUtils
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -114,6 +115,7 @@ fun DesignDetailScreen(
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
+        AppLock.endTrustedFlow()
         if (uri != null) {
             scope.launch {
                 val localPath = FileUtils.copyUriToInternalStorage(context, uri)
@@ -125,6 +127,7 @@ fun DesignDetailScreen(
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success: Boolean ->
+        AppLock.endTrustedFlow()
         if (success && tempPhotoUri != null) {
             scope.launch {
                 val localPath = FileUtils.copyUriToInternalStorage(context, tempPhotoUri!!)
@@ -343,8 +346,10 @@ fun DesignDetailScreen(
                                 try {
                                     val uri = FileUtils.createCameraTempUri(context)
                                     tempPhotoUriString = uri.toString()
+                                    AppLock.beginTrustedFlow()
                                     cameraLauncher.launch(uri)
                                 } catch (e: Exception) {
+                                    AppLock.endTrustedFlow()
                                     e.printStackTrace()
                                 }
                             }

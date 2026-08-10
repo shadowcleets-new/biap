@@ -142,6 +142,10 @@ dependencies {
   // WorkManager & Security
   implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.androidx.security.crypto)
+  // App lock: BiometricPrompt, plus process-wide lifecycle to know when the whole app
+  // (not just one screen) goes to the background.
+  implementation(libs.androidx.biometric)
+  implementation(libs.androidx.lifecycle.process)
 
   // DataStore
   implementation(libs.androidx.datastore.preferences)

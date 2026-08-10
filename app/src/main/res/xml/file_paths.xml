@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Exactly one shareable location: the folder the camera writes a capture into.
+
+  This previously exposed path="." for BOTH the cache and files directories, which meant
+  every design photo and every decrypted copy fetched from Drive sat inside the sharable
+  surface. Nothing outside the camera hand-off ever needs to leave the app, so nothing
+  else is listed here.
+-->
 <paths>
-    <cache-path name="camera_cache" path="." />
-    <files-path name="camera_files" path="." />
+    <cache-path name="camera_cache" path="camera/" />
 </paths>

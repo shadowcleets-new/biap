@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  All traffic is encrypted, stated explicitly rather than relied upon.
+
+  cleartextTrafficPermitted="false" is already the platform default at this targetSdk, but
+  declaring it means a future library that tries to open a plain HTTP connection fails
+  loudly at that call instead of quietly succeeding. Everything this app talks to - Google
+  Drive, Firebase Auth - is HTTPS only, so there is nothing legitimate to break.
+
+  No custom trust anchors and no certificate pinning: pinning a certificate we do not
+  control would eventually take the app offline when Google rotates it, which is a worse
+  outcome than the attack it defends against.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

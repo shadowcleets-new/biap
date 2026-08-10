@@ -67,6 +67,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.rememberAsyncImagePainter
 import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.data.SizeInventory
+import com.sc.biap.security.AppLock
 import com.sc.biap.theme.AtelierShapes
 import com.sc.biap.theme.AtelierSpacing
 import com.sc.biap.theme.bodyMediumStrong
@@ -156,6 +157,7 @@ fun AddDesignScreen(
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
+        AppLock.endTrustedFlow()
         if (uri != null) {
             scope.launch {
                 val localPath = FileUtils.copyUriToInternalStorage(context, uri)
@@ -167,6 +169,7 @@ fun AddDesignScreen(
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success: Boolean ->
+        AppLock.endTrustedFlow()
         if (success && tempPhotoUri != null) {
             scope.launch {
                 val localPath = FileUtils.copyUriToInternalStorage(context, tempPhotoUri)
@@ -267,6 +270,8 @@ fun AddDesignScreen(
             onDismiss = { showSourceSelector = false },
             onPickFromGallery = {
                 showSourceSelector = false
+                // The picker takes the screen; returning from it is not "the user left".
+                AppLock.beginTrustedFlow()
                 imagePickerLauncher.launch(
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                 )
@@ -276,8 +281,10 @@ fun AddDesignScreen(
                 try {
                     val uri = FileUtils.createCameraTempUri(context)
                     tempPhotoUriString = uri.toString()
+                    AppLock.beginTrustedFlow()
                     cameraLauncher.launch(uri)
                 } catch (e: Exception) {
+                    AppLock.endTrustedFlow()
                     e.printStackTrace()
                 }
             }

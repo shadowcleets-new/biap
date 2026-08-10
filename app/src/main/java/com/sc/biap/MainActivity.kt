@@ -2,7 +2,6 @@ package com.sc.biap
 
 import android.app.Activity
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -28,10 +27,15 @@ import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
 import com.google.firebase.auth.auth
 import com.google.firebase.initialize
+import androidx.fragment.app.FragmentActivity
+import com.sc.biap.security.AppLock
+import com.sc.biap.security.BiometricGate
 import com.sc.biap.theme.BiapTheme
 import java.util.concurrent.TimeUnit
 
-class MainActivity : ComponentActivity() {
+// FragmentActivity rather than ComponentActivity: BiometricPrompt attaches to the
+// fragment manager, and there is no supported way to show it from a bare ComponentActivity.
+class MainActivity : FragmentActivity() {
     private lateinit var auth: FirebaseAuth
     private lateinit var googleSignInClient: GoogleSignInClient
 
@@ -44,6 +48,10 @@ class MainActivity : ComponentActivity() {
         // Provider is chosen by build variant via source sets (src/debug, src/release),
         // not by a runtime flag. See AppCheckInit.kt in each variant.
         installAppCheck(this)
+
+        // Gate the catalogue behind the device lock. No-ops on a device with no biometric
+        // and no PIN, rather than making the data unreachable.
+        AppLock.install(this)
 
         auth = Firebase.auth
 
@@ -60,11 +68,13 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    BiapApp(
-                        auth = auth,
-                        googleSignInClient = googleSignInClient,
-                        activity = this
-                    )
+                    BiometricGate {
+                        BiapApp(
+                            auth = auth,
+                            googleSignInClient = googleSignInClient,
+                            activity = this
+                        )
+                    }
                 }
             }
         }
@@ -600,6 +610,7 @@ fun GoogleSignInScreen(
                 isLoading = true
                 errorMessage = ""
                 val signInIntent = googleSignInClient.signInIntent
+                AppLock.beginTrustedFlow()
                 googleSignInLauncher.launch(signInIntent)
             },
             modifier = Modifier

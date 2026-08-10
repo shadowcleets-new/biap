@@ -37,6 +37,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.launch
 import com.sc.biap.data.SyncStatus
+import com.sc.biap.security.AppLock
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -139,6 +140,7 @@ fun MainScreen(
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        AppLock.endTrustedFlow()
         if (result.resultCode == android.app.Activity.RESULT_OK) {
             val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
             try {
@@ -168,6 +170,7 @@ fun MainScreen(
     val reauthLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { _ ->
+        AppLock.endTrustedFlow()
         authManager.clearPendingAuthIntent()
         viewModel.syncWithGoogleDrive()
     }
@@ -180,6 +183,7 @@ fun MainScreen(
                 duration = SnackbarDuration.Long
             )
             if (result == SnackbarResult.ActionPerformed) {
+                AppLock.beginTrustedFlow()
                 reauthLauncher.launch(intent)
             }
         }
@@ -366,7 +370,10 @@ fun MainScreen(
                         // account menu (and Sign Out with it) has to be reachable in this branch
                         // too, not only once a Google account exists.
                         Button(
-                            onClick = { googleSignInLauncher.launch(authManager.getSignInIntent()) },
+                            onClick = {
+                                AppLock.beginTrustedFlow()
+                                googleSignInLauncher.launch(authManager.getSignInIntent())
+                            },
                             shape = CircleShape,
                             contentPadding = PaddingValues(horizontal = AtelierSpacing.Cozy, vertical = 6.dp),
                             colors = ButtonDefaults.buttonColors(

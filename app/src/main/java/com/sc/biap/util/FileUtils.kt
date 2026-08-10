@@ -8,6 +8,10 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 object FileUtils {
+
+    /** Matches the cache-path entry in res/xml/file_paths.xml. */
+    private const val CAMERA_TEMP_DIR = "camera"
+
     /**
      * Resolves a design image path robustly.
      * Stored paths can be absolute (e.g. legacy/local path) or relative filename.
@@ -56,7 +60,10 @@ object FileUtils {
      * disposable and may be reclaimed by the system at any time.
      */
     fun createCameraTempUri(context: Context): Uri {
-        val file = File(context.cacheDir, "temp_camera_${System.currentTimeMillis()}.jpg")
+        // Kept in its own subfolder so the FileProvider grants access to exactly this
+        // directory rather than the whole cache. Nothing else is shareable out of the app.
+        val cameraDir = File(context.cacheDir, CAMERA_TEMP_DIR).apply { mkdirs() }
+        val file = File(cameraDir, "temp_camera_${System.currentTimeMillis()}.jpg")
         return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     }
 
