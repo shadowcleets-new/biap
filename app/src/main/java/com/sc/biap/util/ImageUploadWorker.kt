@@ -1,6 +1,7 @@
 package com.sc.biap.util
 
 import android.content.Context
+import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.google.firebase.auth.FirebaseAuth
@@ -29,6 +30,7 @@ class ImageUploadWorker(
 ) : CoroutineWorker(appContext, params) {
 
     companion object {
+        private const val TAG = "ImageUploadWorker"
         const val KEY_DESIGN_ID = "designId"
         const val KEY_LOCAL_PATH = "localPath"
         const val KEY_STORAGE_KEY = "storageKey"
@@ -48,16 +50,23 @@ class ImageUploadWorker(
         val file = File(localPath)
         if (!file.exists()) {
             // The source is gone; retrying cannot help.
+            Log.w(TAG, "give up: local file missing for design=$designId path=$localPath")
             return Result.failure()
         }
 
         if (runAttemptCount >= MAX_ATTEMPTS) {
+            // Terminal. Previously silent, which is how a photo could stay local forever with
+            // nobody aware: the design synced fine, the picture simply never existed remotely.
+            // DataRepository.backfillPendingImageUploads retries this on the next launch.
+            Log.e(TAG, "give up after $runAttemptCount attempts: design=$designId key=$storageKey")
             return Result.failure()
         }
 
         // 1. bytes first, to a key nothing points at yet
         val uploaded = ImageStore.upload(file, storageKey)
         if (!uploaded) {
+            Log.w(TAG, "upload failed (attempt ${runAttemptCount + 1}/$MAX_ATTEMPTS) key=$storageKey - " +
+                "check Storage rules and that the App Check debug token is registered")
             return Result.retry()
         }
 
@@ -67,12 +76,14 @@ class ImageUploadWorker(
         val applied = repository.applyUploadedImage(designId, storageKey, uploadedBy)
         if (!applied) {
             // Bytes are safely stored; the design just has not caught up. Retry the move.
+            Log.w(TAG, "uploaded but could not move the pointer for design=$designId; will retry")
             return Result.retry()
         }
 
         // 3. retention, best-effort - never fails the job
         ImageStore.pruneToLatest(designId, protectKey = storageKey)
 
+        Log.i(TAG, "uploaded design=$designId key=$storageKey")
         return Result.success()
     }
 }

@@ -154,6 +154,9 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                         }
                     }
 
+                    // Retry any photo that exists on this device but never reached Storage.
+                    repositoryScope.launch { backfillPendingImageUploads(dao) }
+
                     // Start collecting from Room Flow and updating UI state Flow
                     dbCollectionJob = repositoryScope.launch {
                         combine(
@@ -327,6 +330,44 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             deletedDesigns = deletedDesigns.associate { it.designId to it.deletedAt },
             deletedCustomFields = deletedFields.associate { it.field to it.deletedAt }
         )
+    }
+
+    /**
+     * Re-enqueue uploads for photos that exist on this device but never reached Storage.
+     *
+     * An upload used to be enqueued in exactly ONE place: the instant a design was saved. If
+     * that upload failed - no network, an unregistered App Check debug token, rules still
+     * propagating - the worker gave up after its attempt cap and NOTHING ever tried again.
+     * imageRef stayed null forever, so the photo existed only as a local file. Reinstalling
+     * the app then lost it, even though the design record itself synced back intact: sizes,
+     * stock and prices returned, the photograph did not.
+     *
+     * Running this every time a database is opened turns a permanent silent loss into a
+     * retry on the next launch.
+     *
+     * Deliberately conservative: it only enqueues when the local file is actually present,
+     * so it can never fabricate an upload for a photo this device does not have.
+     */
+    private suspend fun backfillPendingImageUploads(dao: DesignDao) {
+        try {
+            val pending = dao.getAllDesignsOnce()
+                .map { it.toDomain() }
+                .filter { it.imageRef.isNullOrBlank() && !it.imagePath.isNullOrBlank() }
+                .mapNotNull { design ->
+                    val file = FileUtils.resolveImageFile(context, design.imagePath)
+                    if (file != null && file.exists()) design.id to file.absolutePath else null
+                }
+
+            if (pending.isEmpty()) return
+
+            android.util.Log.i(
+                "DataRepository",
+                "Image backfill: re-queueing ${pending.size} photo(s) that never reached Storage"
+            )
+            pending.forEach { (designId, path) -> enqueueImageUpload(designId, path) }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun triggerLocalBackup() {
