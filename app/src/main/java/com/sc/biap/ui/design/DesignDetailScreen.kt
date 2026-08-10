@@ -447,363 +447,12 @@ fun DesignDetailScreen(
 
                     // Inventory & Pricing Card
                     if (isEditing) {
-                        Card(
-                            shape = AtelierShapes.CornerLarge,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(AtelierSpacing.Base),
-                                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
-                            ) {
-                                Text("Sizes, Stock & Prices", style = MaterialTheme.typography.titleMediumStrong)
-                                
-                                var showCustomSizeDialog by remember { mutableStateOf(false) }
-                                var newSizeInput by remember { mutableStateOf("") }
-                                var sizeToRemove by remember { mutableStateOf<String?>(null) }
-                                val availableSizes = remember { mutableStateListOf(*SizeUtils.sortSizes(listOf("S", "M", "L", "XL", "XXL")).toTypedArray()) }
-                                val sizeCache = remember { mutableMapOf<String, SizeInventory>() }
-                                
-                                LaunchedEffect(editSizes) {
-                                    var addedAny = false
-                                    editSizes.forEach {
-                                        if (!availableSizes.contains(it.size)) {
-                                            availableSizes.add(it.size)
-                                            addedAny = true
-                                        }
-                                    }
-                                    if (addedAny) {
-                                        val sorted = SizeUtils.sortSizes(availableSizes.toList())
-                                        availableSizes.clear()
-                                        availableSizes.addAll(sorted)
-                                    }
-                                }
-
-                                val editSizesScrollState = rememberScrollState()
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalFadingEdges(editSizesScrollState)
-                                        .horizontalScroll(editSizesScrollState),
-                                    horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    availableSizes.forEach { size ->
-                                        val isEnabled = editSizes.any { it.size == size }
-                                        FilterChip(
-                                            selected = isEnabled,
-                                            onClick = {
-                                                if (isEnabled) {
-                                                    val inventory = editSizes.find { it.size == size }
-                                                    if (inventory != null) {
-                                                        sizeCache[size] = inventory
-                                                    }
-                                                    if (inventory != null && (inventory.stock > 0 || inventory.price > 0L)) {
-                                                        sizeToRemove = size
-                                                    } else {
-                                                        val updated = editSizes.toMutableList()
-                                                        updated.removeAll { it.size == size }
-                                                        editSizes = updated
-                                                    }
-                                                } else {
-                                                    val cached = sizeCache[size]
-                                                    val updated = editSizes.toMutableList()
-                                                    updated.add(cached ?: SizeInventory(size, 0, 0L))
-                                                    editSizes = updated
-                                                }
-                                            },
-                                            label = { Text(size, style = MaterialTheme.typography.labelLargeStrong) },
-                                            modifier = Modifier.minimumInteractiveComponentSize()
-                                        )
-                                    }
-                                    InputChip(
-                                        selected = false,
-                                        onClick = { showCustomSizeDialog = true },
-                                        label = { Text("+ Custom") },
-                                        modifier = Modifier.minimumInteractiveComponentSize()
-                                    )
-                                }
-
-                                if (editSizes.isEmpty()) {
-                                    Text(
-                                        "Select sizes above to configure stock and pricing.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(vertical = AtelierSpacing.Cozy)
-                                    )
-                                } else {
-                                    editSizes.sortedBy { SizeUtils.getSizeSortWeight(it.size) }.forEach { inv ->
-                                        var stockText by remember(inv) { mutableStateOf(inv.stock.toString()) }
-                                        var priceText by remember { 
-                                            val initialText = if (inv.price == 0L) "" else (inv.price / 100.0).toString()
-                                            mutableStateOf(initialText) 
-                                        }
-
-                                        LaunchedEffect(inv.price) {
-                                            val parsedCents = FileUtils.parsePriceToCents(priceText)
-                                            if (parsedCents != inv.price) {
-                                                priceText = if (inv.price == 0L) "" else (inv.price / 100.0).toString()
-                                            }
-                                        }
-
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = AtelierSpacing.Micro),
-                                            horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .width(SizeTokenWidth)
-                                                    .background(MaterialTheme.colorScheme.primaryContainer, AtelierShapes.CornerSmall)
-                                                    .padding(horizontal = AtelierSpacing.Compact, vertical = AtelierSpacing.Compact),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(inv.size, style = MaterialTheme.typography.labelLargeStrong, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                            }
-
-                                            OutlinedTextField(
-                                                value = stockText,
-                                                onValueChange = { newValue ->
-                                                    val digits = newValue.filter { it.isDigit() }
-                                                    if (digits.length <= 6) {
-                                                        stockText = digits
-                                                        val updated = editSizes.toMutableList()
-                                                        val idx = updated.indexOfFirst { it.size == inv.size }
-                                                        if (idx >= 0) {
-                                                            updated[idx] = inv.copy(stock = digits.toIntOrNull() ?: 0)
-                                                            editSizes = updated
-                                                        }
-                                                    }
-                                                },
-                                                label = { Text("Stock") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                modifier = Modifier.weight(1f),
-                                                shape = AtelierShapes.CornerSmall
-                                            )
-
-                                            OutlinedTextField(
-                                                value = priceText,
-                                                onValueChange = { newValue ->
-                                                    val dotCount = newValue.count { it == '.' }
-                                                    val sanitized = newValue.filter { it.isDigit() || it == '.' }
-                                                    if (dotCount <= 1 && sanitized.length <= 9) {
-                                                        val dotIndex = sanitized.indexOf('.')
-                                                        if (dotIndex == -1 || sanitized.length - dotIndex - 1 <= 2) {
-                                                            priceText = sanitized
-                                                            val parsedCents = FileUtils.parsePriceToCents(sanitized)
-                                                            val updated = editSizes.toMutableList()
-                                                            val idx = updated.indexOfFirst { it.size == inv.size }
-                                                            if (idx >= 0) {
-                                                                updated[idx] = inv.copy(price = parsedCents)
-                                                                editSizes = updated
-                                                            }
-                                                        }
-                                                    }
-                                                },
-                                                label = { Text("Price") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                                modifier = Modifier.weight(1f),
-                                                shape = AtelierShapes.CornerSmall,
-                                                prefix = { Text("₹") }
-                                            )
-                                        }
-                                    }
-                                }
-
-                                if (showCustomSizeDialog) {
-                                    val normInput = newSizeInput.trim().uppercase()
-                                    val sizeExists = remember(newSizeInput, availableSizes) {
-                                        normInput.isNotEmpty() && availableSizes.contains(normInput)
-                                    }
-                                    AlertDialog(
-                                        onDismissRequest = { showCustomSizeDialog = false },
-                                        title = { Text("Add Custom Size", style = MaterialTheme.typography.titleLargeStrong) },
-                                        text = {
-                                            OutlinedTextField(
-                                                value = newSizeInput,
-                                                onValueChange = { if (it.length <= 10) newSizeInput = it },
-                                                label = { Text("Size Label (e.g. 3XL)") },
-                                                singleLine = true,
-                                                shape = AtelierShapes.CornerMedium,
-                                                isError = sizeExists,
-                                                supportingText = if (sizeExists) {
-                                                    { Text("This size is already configured!", color = MaterialTheme.colorScheme.error) }
-                                                } else null,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        },
-                                        confirmButton = {
-                                            Button(
-                                                onClick = {
-                                                    if (newSizeInput.isNotBlank() && !sizeExists) {
-                                                        val norm = newSizeInput.trim().uppercase()
-                                                        if (!availableSizes.contains(norm)) {
-                                                            availableSizes.add(norm)
-                                                            val sorted = SizeUtils.sortSizes(availableSizes.toList())
-                                                            availableSizes.clear()
-                                                            availableSizes.addAll(sorted)
-                                                        }
-                                                        val updated = editSizes.toMutableList()
-                                                        if (!updated.any { it.size == norm }) {
-                                                            updated.add(SizeInventory(norm, 0, 0L))
-                                                            editSizes = updated
-                                                        }
-                                                        newSizeInput = ""
-                                                        showCustomSizeDialog = false
-                                                    }
-                                                },
-                                                enabled = newSizeInput.isNotBlank() && !sizeExists,
-                                                modifier = Modifier.minimumInteractiveComponentSize()
-                                            ) {
-                                                Text("Add")
-                                            }
-                                        },
-                                        dismissButton = {
-                                            TextButton(
-                                                onClick = { showCustomSizeDialog = false },
-                                                modifier = Modifier.minimumInteractiveComponentSize()
-                                            ) {
-                                                Text("Cancel")
-                                            }
-                                        }
-                                    )
-                                }
-
-                                if (sizeToRemove != null) {
-                                    AlertDialog(
-                                        onDismissRequest = { sizeToRemove = null },
-                                        title = { Text("Remove Size $sizeToRemove?") },
-                                        text = { Text("This will clear the price and stock values configured for this size. Are you sure you want to remove it?") },
-                                        confirmButton = {
-                                            TextButton(
-                                                onClick = {
-                                                    val inventory = editSizes.find { it.size == sizeToRemove }
-                                                    if (inventory != null) {
-                                                        sizeCache[sizeToRemove!!] = inventory
-                                                    }
-                                                    val updated = editSizes.toMutableList()
-                                                    updated.removeAll { it.size == sizeToRemove }
-                                                    editSizes = updated
-                                                    sizeToRemove = null
-                                                },
-                                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                                modifier = Modifier.minimumInteractiveComponentSize()
-                                            ) {
-                                                Text("Remove")
-                                            }
-                                        },
-                                        dismissButton = {
-                                            TextButton(
-                                                onClick = { sizeToRemove = null },
-                                                modifier = Modifier.minimumInteractiveComponentSize()
-                                            ) {
-                                                Text("Cancel")
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        SizeStockPriceEditorCard(
+                            editSizes = editSizes,
+                            onEditSizesChange = { editSizes = it },
+                        )
                     } else {
-                        Card(
-                            shape = AtelierShapes.CornerLarge,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(AtelierSpacing.Base),
-                                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
-                            ) {
-                                Text("Inventory & Pricing", style = MaterialTheme.typography.titleMediumStrong)
-
-                                if (design.sizeInventories.isEmpty()) {
-                                    Text(
-                                        "No size options configured for this design.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                } else {
-                                    val sortedInventories = design.sizeInventories.sortedBy { SizeUtils.getSizeSortWeight(it.size) }
-                                    // Keyed on the design ID (not the object) so a background sync
-                                    // refresh does not reset the user's selection; clamped as a
-                                    // value instead of writing state during composition (BUG-16).
-                                    var selectedSizeIndexRaw by remember(design.id) { mutableStateOf(0) }
-                                    val selectedSizeIndex = selectedSizeIndexRaw.coerceIn(0, (sortedInventories.size - 1).coerceAtLeast(0))
-
-                                    val activeInventory = sortedInventories.getOrNull(selectedSizeIndex)
-
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .horizontalScroll(rememberScrollState())
-                                            .padding(vertical = AtelierSpacing.Micro),
-                                        horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
-                                    ) {
-                                        sortedInventories.forEachIndexed { index, inv ->
-                                            val isSelected = selectedSizeIndex == index
-                                            InputChip(
-                                                selected = isSelected,
-                                                onClick = { selectedSizeIndexRaw = index },
-                                                label = { Text(inv.size, style = MaterialTheme.typography.labelLargeStrong) },
-                                                colors = InputChipDefaults.inputChipColors(
-                                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                                )
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(Modifier.height(AtelierSpacing.Compact))
-
-                                    if (activeInventory != null) {
-                                        val stockColor = when {
-                                            activeInventory.stock == 0 -> MaterialTheme.colorScheme.error
-                                            activeInventory.stock <= LOW_STOCK_THRESHOLD ->
-                                                MaterialTheme.colorScheme.warning
-                                            else -> MaterialTheme.colorScheme.success
-                                        }
-
-                                        Card(
-                                            shape = AtelierShapes.CornerMedium,
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                                            ),
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(AtelierSpacing.Base),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Column {
-                                                    Text("Price", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                    Text(
-                                                        text = "₹${FileUtils.formatPrice(activeInventory.price)}",
-                                                        style = MaterialTheme.typography.titleMediumStrong,
-                                                        color = MaterialTheme.colorScheme.primary
-                                                    )
-                                                }
-
-                                                Column(horizontalAlignment = Alignment.End) {
-                                                    Text("Availability", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                    Text(
-                                                        text = if (activeInventory.stock == 0) "Out of Stock" else "${activeInventory.stock} items",
-                                                        style = MaterialTheme.typography.titleMediumStrong,
-                                                        color = stockColor
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        InventoryPricingCard(design = design)
                     }
 
                     // Assigned Karigars Card
@@ -1245,6 +894,386 @@ private fun SpecificationsCard(
                         Icon(Icons.Default.Add, contentDescription = "Add")
                         Spacer(Modifier.width(AtelierSpacing.Micro))
                         Text("Add Field")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Edit mode for sizes, stock and per-size price.
+ *
+ * Self-contained: the size catalogue, the custom-size dialog, the pending removal and the
+ * per-row stock/price text buffers are all local. Only the resulting size list crosses the
+ * boundary, so the parent still owns what gets saved.
+ */
+@Composable
+private fun SizeStockPriceEditorCard(
+    editSizes: List<SizeInventory>,
+    onEditSizesChange: (List<SizeInventory>) -> Unit,
+) {
+    Card(
+        shape = AtelierShapes.CornerLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AtelierSpacing.Base),
+            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
+        ) {
+            Text("Sizes, Stock & Prices", style = MaterialTheme.typography.titleMediumStrong)
+            
+            var showCustomSizeDialog by remember { mutableStateOf(false) }
+            var newSizeInput by remember { mutableStateOf("") }
+            var sizeToRemove by remember { mutableStateOf<String?>(null) }
+            val availableSizes = remember { mutableStateListOf(*SizeUtils.sortSizes(listOf("S", "M", "L", "XL", "XXL")).toTypedArray()) }
+            val sizeCache = remember { mutableMapOf<String, SizeInventory>() }
+            
+            LaunchedEffect(editSizes) {
+                var addedAny = false
+                editSizes.forEach {
+                    if (!availableSizes.contains(it.size)) {
+                        availableSizes.add(it.size)
+                        addedAny = true
+                    }
+                }
+                if (addedAny) {
+                    val sorted = SizeUtils.sortSizes(availableSizes.toList())
+                    availableSizes.clear()
+                    availableSizes.addAll(sorted)
+                }
+            }
+
+            val editSizesScrollState = rememberScrollState()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalFadingEdges(editSizesScrollState)
+                    .horizontalScroll(editSizesScrollState),
+                horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                availableSizes.forEach { size ->
+                    val isEnabled = editSizes.any { it.size == size }
+                    FilterChip(
+                        selected = isEnabled,
+                        onClick = {
+                            if (isEnabled) {
+                                val inventory = editSizes.find { it.size == size }
+                                if (inventory != null) {
+                                    sizeCache[size] = inventory
+                                }
+                                if (inventory != null && (inventory.stock > 0 || inventory.price > 0L)) {
+                                    sizeToRemove = size
+                                } else {
+                                    val updated = editSizes.toMutableList()
+                                    updated.removeAll { it.size == size }
+                                    onEditSizesChange(updated)
+                                }
+                            } else {
+                                val cached = sizeCache[size]
+                                val updated = editSizes.toMutableList()
+                                updated.add(cached ?: SizeInventory(size, 0, 0L))
+                                onEditSizesChange(updated)
+                            }
+                        },
+                        label = { Text(size, style = MaterialTheme.typography.labelLargeStrong) },
+                        modifier = Modifier.minimumInteractiveComponentSize()
+                    )
+                }
+                InputChip(
+                    selected = false,
+                    onClick = { showCustomSizeDialog = true },
+                    label = { Text("+ Custom") },
+                    modifier = Modifier.minimumInteractiveComponentSize()
+                )
+            }
+
+            if (editSizes.isEmpty()) {
+                Text(
+                    "Select sizes above to configure stock and pricing.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = AtelierSpacing.Cozy)
+                )
+            } else {
+                editSizes.sortedBy { SizeUtils.getSizeSortWeight(it.size) }.forEach { inv ->
+                    var stockText by remember(inv) { mutableStateOf(inv.stock.toString()) }
+                    var priceText by remember { 
+                        val initialText = if (inv.price == 0L) "" else (inv.price / 100.0).toString()
+                        mutableStateOf(initialText) 
+                    }
+
+                    LaunchedEffect(inv.price) {
+                        val parsedCents = FileUtils.parsePriceToCents(priceText)
+                        if (parsedCents != inv.price) {
+                            priceText = if (inv.price == 0L) "" else (inv.price / 100.0).toString()
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = AtelierSpacing.Micro),
+                        horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(SizeTokenWidth)
+                                .background(MaterialTheme.colorScheme.primaryContainer, AtelierShapes.CornerSmall)
+                                .padding(horizontal = AtelierSpacing.Compact, vertical = AtelierSpacing.Compact),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(inv.size, style = MaterialTheme.typography.labelLargeStrong, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+
+                        OutlinedTextField(
+                            value = stockText,
+                            onValueChange = { newValue ->
+                                val digits = newValue.filter { it.isDigit() }
+                                if (digits.length <= 6) {
+                                    stockText = digits
+                                    val updated = editSizes.toMutableList()
+                                    val idx = updated.indexOfFirst { it.size == inv.size }
+                                    if (idx >= 0) {
+                                        updated[idx] = inv.copy(stock = digits.toIntOrNull() ?: 0)
+                                        onEditSizesChange(updated)
+                                    }
+                                }
+                            },
+                            label = { Text("Stock") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            shape = AtelierShapes.CornerSmall
+                        )
+
+                        OutlinedTextField(
+                            value = priceText,
+                            onValueChange = { newValue ->
+                                val dotCount = newValue.count { it == '.' }
+                                val sanitized = newValue.filter { it.isDigit() || it == '.' }
+                                if (dotCount <= 1 && sanitized.length <= 9) {
+                                    val dotIndex = sanitized.indexOf('.')
+                                    if (dotIndex == -1 || sanitized.length - dotIndex - 1 <= 2) {
+                                        priceText = sanitized
+                                        val parsedCents = FileUtils.parsePriceToCents(sanitized)
+                                        val updated = editSizes.toMutableList()
+                                        val idx = updated.indexOfFirst { it.size == inv.size }
+                                        if (idx >= 0) {
+                                            updated[idx] = inv.copy(price = parsedCents)
+                                            onEditSizesChange(updated)
+                                        }
+                                    }
+                                }
+                            },
+                            label = { Text("Price") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f),
+                            shape = AtelierShapes.CornerSmall,
+                            prefix = { Text("₹") }
+                        )
+                    }
+                }
+            }
+
+            if (showCustomSizeDialog) {
+                val normInput = newSizeInput.trim().uppercase()
+                val sizeExists = remember(newSizeInput, availableSizes) {
+                    normInput.isNotEmpty() && availableSizes.contains(normInput)
+                }
+                AlertDialog(
+                    onDismissRequest = { showCustomSizeDialog = false },
+                    title = { Text("Add Custom Size", style = MaterialTheme.typography.titleLargeStrong) },
+                    text = {
+                        OutlinedTextField(
+                            value = newSizeInput,
+                            onValueChange = { if (it.length <= 10) newSizeInput = it },
+                            label = { Text("Size Label (e.g. 3XL)") },
+                            singleLine = true,
+                            shape = AtelierShapes.CornerMedium,
+                            isError = sizeExists,
+                            supportingText = if (sizeExists) {
+                                { Text("This size is already configured!", color = MaterialTheme.colorScheme.error) }
+                            } else null,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                if (newSizeInput.isNotBlank() && !sizeExists) {
+                                    val norm = newSizeInput.trim().uppercase()
+                                    if (!availableSizes.contains(norm)) {
+                                        availableSizes.add(norm)
+                                        val sorted = SizeUtils.sortSizes(availableSizes.toList())
+                                        availableSizes.clear()
+                                        availableSizes.addAll(sorted)
+                                    }
+                                    val updated = editSizes.toMutableList()
+                                    if (!updated.any { it.size == norm }) {
+                                        updated.add(SizeInventory(norm, 0, 0L))
+                                        onEditSizesChange(updated)
+                                    }
+                                    newSizeInput = ""
+                                    showCustomSizeDialog = false
+                                }
+                            },
+                            enabled = newSizeInput.isNotBlank() && !sizeExists,
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                        ) {
+                            Text("Add")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { showCustomSizeDialog = false },
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            if (sizeToRemove != null) {
+                AlertDialog(
+                    onDismissRequest = { sizeToRemove = null },
+                    title = { Text("Remove Size $sizeToRemove?") },
+                    text = { Text("This will clear the price and stock values configured for this size. Are you sure you want to remove it?") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                val inventory = editSizes.find { it.size == sizeToRemove }
+                                if (inventory != null) {
+                                    sizeCache[sizeToRemove!!] = inventory
+                                }
+                                val updated = editSizes.toMutableList()
+                                updated.removeAll { it.size == sizeToRemove }
+                                onEditSizesChange(updated)
+                                sizeToRemove = null
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                        ) {
+                            Text("Remove")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { sizeToRemove = null },
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Read-only inventory and pricing, with the size selector.
+ *
+ * Reads nothing but the design. The selected-size index is local and keyed on design.id
+ * rather than the design object, so a background sync refresh does not reset the choice.
+ */
+@Composable
+private fun InventoryPricingCard(design: Design) {
+    Card(
+        shape = AtelierShapes.CornerLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AtelierSpacing.Base),
+            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
+        ) {
+            Text("Inventory & Pricing", style = MaterialTheme.typography.titleMediumStrong)
+
+            if (design.sizeInventories.isEmpty()) {
+                Text(
+                    "No size options configured for this design.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                val sortedInventories = design.sizeInventories.sortedBy { SizeUtils.getSizeSortWeight(it.size) }
+                // Keyed on the design ID (not the object) so a background sync
+                // refresh does not reset the user's selection; clamped as a
+                // value instead of writing state during composition (BUG-16).
+                var selectedSizeIndexRaw by remember(design.id) { mutableStateOf(0) }
+                val selectedSizeIndex = selectedSizeIndexRaw.coerceIn(0, (sortedInventories.size - 1).coerceAtLeast(0))
+
+                val activeInventory = sortedInventories.getOrNull(selectedSizeIndex)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(vertical = AtelierSpacing.Micro),
+                    horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
+                ) {
+                    sortedInventories.forEachIndexed { index, inv ->
+                        val isSelected = selectedSizeIndex == index
+                        InputChip(
+                            selected = isSelected,
+                            onClick = { selectedSizeIndexRaw = index },
+                            label = { Text(inv.size, style = MaterialTheme.typography.labelLargeStrong) },
+                            colors = InputChipDefaults.inputChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(AtelierSpacing.Compact))
+
+                if (activeInventory != null) {
+                    val stockColor = when {
+                        activeInventory.stock == 0 -> MaterialTheme.colorScheme.error
+                        activeInventory.stock <= LOW_STOCK_THRESHOLD ->
+                            MaterialTheme.colorScheme.warning
+                        else -> MaterialTheme.colorScheme.success
+                    }
+
+                    Card(
+                        shape = AtelierShapes.CornerMedium,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(AtelierSpacing.Base),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Price", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = "₹${FileUtils.formatPrice(activeInventory.price)}",
+                                    style = MaterialTheme.typography.titleMediumStrong,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Availability", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = if (activeInventory.stock == 0) "Out of Stock" else "${activeInventory.stock} items",
+                                    style = MaterialTheme.typography.titleMediumStrong,
+                                    color = stockColor
+                                )
+                            }
+                        }
                     }
                 }
             }
