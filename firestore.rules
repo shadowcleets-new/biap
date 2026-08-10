@@ -26,6 +26,16 @@ service cloud.firestore {
       return signedIn() && (myRole() == 'SUPER_ADMIN' || myRole() == 'ADMIN');
     }
 
+    // Super Admin sits above all; Admin one below. Manager and Accountant are PEERS, both
+    // one level below Admin. Support Staff sits below them. Viewer is not part of that
+    // hierarchy - it is the fail-closed answer when a role cannot be read, and grants the
+    // least possible.
+    function isKnownRole(role) {
+      return role in [
+        'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'ACCOUNTANT', 'SUPPORT_STAFF', 'VIEWER'
+      ];
+    }
+
     function isTopLevel(role) {
       return role == 'SUPER_ADMIN' || role == 'ADMIN';
     }
@@ -37,8 +47,9 @@ service cloud.firestore {
     // appoint a deputy, and the distinction between the two top levels would not survive
     // the first afternoon.
     function canAssign(targetRole, newRole) {
-      return myRole() == 'SUPER_ADMIN'
-        || (myRole() == 'ADMIN' && !isTopLevel(targetRole) && !isTopLevel(newRole));
+      return isKnownRole(newRole)
+        && (myRole() == 'SUPER_ADMIN'
+            || (myRole() == 'ADMIN' && !isTopLevel(targetRole) && !isTopLevel(newRole)));
     }
 
     function changedKeys() {

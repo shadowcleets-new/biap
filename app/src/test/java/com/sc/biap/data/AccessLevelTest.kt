@@ -26,9 +26,35 @@ class AccessLevelTest {
         }
     }
 
+    private val belowAdmin = listOf(
+        AccessLevel.MANAGER,
+        AccessLevel.ACCOUNTANT,
+        AccessLevel.SUPPORT_STAFF,
+        AccessLevel.VIEWER,
+    )
+
+    @Test
+    fun `the hierarchy is Super Admin, Admin, then Manager and Accountant as peers, then Support Staff`() {
+        assertTrue(AccessLevel.SUPER_ADMIN.tier < AccessLevel.ADMIN.tier)
+        assertTrue(AccessLevel.ADMIN.tier < AccessLevel.MANAGER.tier)
+        // Peers: neither outranks the other, whatever order they are declared in.
+        assertEquals(AccessLevel.MANAGER.tier, AccessLevel.ACCOUNTANT.tier)
+        assertTrue(AccessLevel.MANAGER.tier < AccessLevel.SUPPORT_STAFF.tier)
+        assertTrue(AccessLevel.ACCOUNTANT.tier < AccessLevel.SUPPORT_STAFF.tier)
+        // Viewer is the fail-closed floor, below everything.
+        assertTrue(AccessLevel.SUPPORT_STAFF.tier < AccessLevel.VIEWER.tier)
+    }
+
+    @Test
+    fun `only the top two can manage access`() {
+        assertTrue(AccessLevel.SUPER_ADMIN.canManageAccess)
+        assertTrue(AccessLevel.ADMIN.canManageAccess)
+        belowAdmin.forEach { assertFalse("${'$'}it must not manage access", it.canManageAccess) }
+    }
+
     @Test
     fun `admin cannot create another admin or a super admin`() {
-        for (target in listOf(AccessLevel.MANAGER, AccessLevel.STAFF, AccessLevel.VIEWER)) {
+        for (target in belowAdmin) {
             assertFalse(AccessLevel.ADMIN.canAssign(target, AccessLevel.ADMIN))
             assertFalse(AccessLevel.ADMIN.canAssign(target, AccessLevel.SUPER_ADMIN))
         }
@@ -43,10 +69,9 @@ class AccessLevelTest {
     }
 
     @Test
-    fun `admin may grade everyone below admin`() {
-        val below = listOf(AccessLevel.MANAGER, AccessLevel.STAFF, AccessLevel.VIEWER)
-        for (target in below) {
-            for (next in below) {
+    fun `admin may grade everyone below admin, including the new levels`() {
+        for (target in belowAdmin) {
+            for (next in belowAdmin) {
                 assertTrue(AccessLevel.ADMIN.canAssign(target, next))
             }
         }
@@ -54,7 +79,7 @@ class AccessLevelTest {
 
     @Test
     fun `nobody below admin may assign anything`() {
-        for (actor in listOf(AccessLevel.MANAGER, AccessLevel.STAFF, AccessLevel.VIEWER)) {
+        for (actor in belowAdmin) {
             assertFalse(actor.canManageAccess)
             for (target in everyLevel) {
                 for (next in everyLevel) {
@@ -79,5 +104,9 @@ class AccessLevelTest {
         assertEquals(AccessLevel.SUPER_ADMIN, AccessLevel.fromName("SUPER_ADMIN"))
         assertEquals(AccessLevel.ADMIN, AccessLevel.fromName("admin"))
         assertEquals(AccessLevel.MANAGER, AccessLevel.fromName(" Manager "))
+        assertEquals(AccessLevel.ACCOUNTANT, AccessLevel.fromName("ACCOUNTANT"))
+        assertEquals(AccessLevel.SUPPORT_STAFF, AccessLevel.fromName("support_staff"))
+        // The old name is gone; anything unrecognised must fail closed, not guess.
+        assertEquals(AccessLevel.VIEWER, AccessLevel.fromName("STAFF"))
     }
 }

@@ -48,12 +48,26 @@ data class UserProfile(
  * Ordered from most to least privileged so comparisons stay readable, and stored by name
  * rather than ordinal - inserting a level later must not silently re-grade everybody.
  */
-enum class AccessLevel(val label: String, val description: String) {
-    SUPER_ADMIN("Super Admin", "Full access, and can appoint or remove Admins"),
-    ADMIN("Admin", "Full access, and can set access for everyone below Admin"),
-    MANAGER("Manager", "Can add and edit designs, stock and pricing"),
-    STAFF("Staff", "Can add and edit designs and stock, but not pricing"),
-    VIEWER("Viewer", "Can look at the catalogue but change nothing");
+/**
+ * The organisation, most privileged first.
+ *
+ * [tier] carries the hierarchy rather than the declaration order, because Manager and
+ * Accountant are PEERS - both sit exactly one level below Admin, neither above the other.
+ * Listing one before the other is a display choice, and using ordinal as rank would quietly
+ * turn that choice into a demotion.
+ */
+enum class AccessLevel(val label: String, val description: String, val tier: Int) {
+    SUPER_ADMIN("Super Admin", "Above all. Can appoint or remove Admins", tier = 0),
+    ADMIN("Admin", "Full access, and can set access for everyone below Admin", tier = 1),
+    MANAGER("Manager", "Can add and edit designs, stock and pricing", tier = 2),
+    ACCOUNTANT("Accountant", "Can see and edit pricing and costs across the catalogue", tier = 2),
+    SUPPORT_STAFF("Support Staff", "Can add and edit designs and stock, but not pricing", tier = 3),
+
+    // Not in the requested hierarchy, and deliberately kept: something has to be the
+    // fail-closed answer when a role cannot be read, and it must grant the least possible.
+    // Promoting an unreadable role to Support Staff would mean a Firestore outage handing
+    // out edit rights.
+    VIEWER("Viewer", "Can look at the catalogue but change nothing", tier = 99);
 
     /** May open the access-management screen at all. */
     val canManageAccess: Boolean get() = this == SUPER_ADMIN || this == ADMIN
