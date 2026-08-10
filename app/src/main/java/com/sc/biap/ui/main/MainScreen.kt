@@ -36,6 +36,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.launch
+import com.sc.biap.data.AccessLevel
+import com.sc.biap.data.AccessLevelStore
 import com.sc.biap.data.SyncStatus
 import com.sc.biap.security.AppLock
 import androidx.compose.ui.Alignment
@@ -56,6 +58,7 @@ import androidx.navigation3.runtime.NavKey
 import coil3.compose.rememberAsyncImagePainter
 import com.sc.biap.AddDesign
 import com.sc.biap.DesignDetail
+import com.sc.biap.AccessManagement
 import com.sc.biap.Profile
 import com.sc.biap.data.BusinessIntelligenceData
 import com.sc.biap.data.DefaultDataRepository
@@ -113,6 +116,11 @@ fun MainScreen(
     }
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
+
+    // Drives whether the access-management entry is offered at all. Hiding it is a
+    // courtesy, not the control: firestore.rules refuses the writes regardless.
+    var myAccessLevel by remember { mutableStateOf(AccessLevel.DEFAULT) }
+    LaunchedEffect(Unit) { myAccessLevel = AccessLevelStore.current().level }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -362,6 +370,15 @@ fun MainScreen(
                                             onItemClick(Profile)
                                         }
                                     )
+                                    if (myAccessLevel.canManageAccess) {
+                                        DropdownMenuItem(
+                                            text = { Text("Team Access") },
+                                            onClick = {
+                                                showMenu = false
+                                                onItemClick(AccessManagement)
+                                            }
+                                        )
+                                    }
                                     DropdownMenuItem(
                                         text = { Text("Sign Out") },
                                         onClick = {
@@ -421,6 +438,15 @@ fun MainScreen(
                                         onItemClick(Profile)
                                     }
                                 )
+                                if (myAccessLevel.canManageAccess) {
+                                    DropdownMenuItem(
+                                        text = { Text("Team Access") },
+                                        onClick = {
+                                            showMenu = false
+                                            onItemClick(AccessManagement)
+                                        }
+                                    )
+                                }
                                 DropdownMenuItem(
                                     text = { Text("Sign Out") },
                                     onClick = {

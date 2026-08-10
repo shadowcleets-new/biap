@@ -23,6 +23,7 @@ import com.sc.biap.ui.main.MainScreen
 import com.sc.biap.ui.main.SplashScreen
 import com.sc.biap.ui.design.AddDesignScreen
 import com.sc.biap.ui.design.DesignDetailScreen
+import com.sc.biap.ui.profile.AccessManagementScreen
 import com.sc.biap.ui.profile.ProfileScreen
 import com.sc.biap.ui.rememberPerformanceProfile
 
@@ -113,6 +114,12 @@ fun MainNavigation() {
         }
         entry<Profile> {
           ProfileScreen(
+            onBack = { backStack.removeLastOrNull() },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<AccessManagement> {
+          AccessManagementScreen(
             onBack = { backStack.removeLastOrNull() },
             modifier = Modifier.safeDrawingPadding()
           )

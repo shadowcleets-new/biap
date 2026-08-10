@@ -1,33 +1,86 @@
 rules_version = '2';
 
-// Access levels only. Everything else about a user - their name, age, designation and
-// photo - lives with their catalogue in their own Google Drive appDataFolder and never
-// reaches Firestore. This file exists solely so a role is something the user cannot
-// award themselves.
+// Access levels, and just enough identity to tell colleagues apart when assigning one.
+//
+// Everything else about a person - age, designation, photo - lives with their catalogue in
+// their own Google Drive appDataFolder and never reaches Firestore. An admin assigning a
+// role needs to know WHO they are promoting, not their date of birth.
+//
+// These rules are the actual enforcement. The app mirrors them so it can disable controls
+// the server would reject, but if the two ever disagree, this file wins.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Declared inside this match because $(database) is only bound here.
-    function isAdmin() {
-      return request.auth != null
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN';
+    // Declared here because $(database) is only bound inside this match.
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : 'VIEWER';
+    }
+
+    function isAccessManager() {
+      return signedIn() && (myRole() == 'SUPER_ADMIN' || myRole() == 'ADMIN');
+    }
+
+    function isTopLevel(role) {
+      return role == 'SUPER_ADMIN' || role == 'ADMIN';
+    }
+
+    // Who may move somebody from targetRole to newRole.
+    //
+    // A Super Admin may set anything. An Admin manages everyone BELOW Admin only - they
+    // can neither touch a peer nor mint one. Without that second clause any Admin could
+    // appoint a deputy, and the distinction between the two top levels would not survive
+    // the first afternoon.
+    function canAssign(targetRole, newRole) {
+      return myRole() == 'SUPER_ADMIN'
+        || (myRole() == 'ADMIN' && !isTopLevel(targetRole) && !isTopLevel(newRole));
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
     }
 
     match /users/{uid} {
 
-      // A signed-in person may read their own role, and admins may read anyone's so they
-      // can see who currently has what.
-      allow read: if request.auth != null
-        && (request.auth.uid == uid || isAdmin());
+      // Everyone reads their own. Access managers read everyone, because assigning roles
+      // requires seeing who exists - a list you cannot read is a list you cannot manage.
+      allow read: if signedIn() && (request.auth.uid == uid || isAccessManager());
 
-      // Only an admin writes roles - including their own, so a non-admin can neither
-      // promote themselves nor demote anybody. The app ships NO write path whatsoever.
+      // First sign-in publishes an identity record. role is pinned to VIEWER here, so a
+      // new account cannot arrive pre-promoted by a tampered client.
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role == 'VIEWER';
+
+      // Updating your OWN record: identity only. The role must come out unchanged, which
+      // is what stops anyone promoting themselves no matter what the app sends.
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role == resource.data.role;
+
+      // An access manager changing SOMEBODY ELSE'S role.
       //
-      // BOOTSTRAPPING: this means the first admin cannot be created from the app or by
-      // any client, which is the point. Create that first users/<uid> document with
-      // role: "ADMIN" in the Firebase Console, which bypasses these rules by design.
-      allow write: if isAdmin();
+      // request.auth.uid != uid is deliberate: nobody edits their own level, not even a
+      // Super Admin. It removes self-promotion as a category, and stops the last Super
+      // Admin demoting themselves and leaving the organisation with no one who can
+      // appoint another.
+      //
+      // Restricted to the role fields, so this path cannot be used to rewrite a
+      // colleague's name while holding the door open.
+      allow update: if isAccessManager()
+        && request.auth.uid != uid
+        && canAssign(resource.data.role, request.resource.data.role)
+        && changedKeys().hasOnly(['role', 'roleUpdatedAt', 'roleUpdatedBy']);
+
+      // Nobody deletes an access record from a client. Removing someone's role silently
+      // returns them to VIEWER by the fail-closed default, which is a change that should
+      // be made deliberately and visibly rather than by deletion.
+      allow delete: if false;
     }
 
     // Anything outside /users is denied by default - no catch-all required.

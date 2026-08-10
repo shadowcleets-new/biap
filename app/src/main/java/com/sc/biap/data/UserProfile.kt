@@ -49,10 +49,32 @@ data class UserProfile(
  * rather than ordinal - inserting a level later must not silently re-grade everybody.
  */
 enum class AccessLevel(val label: String, val description: String) {
-    ADMIN("Admin", "Full access, and can set what everyone else may do"),
+    SUPER_ADMIN("Super Admin", "Full access, and can appoint or remove Admins"),
+    ADMIN("Admin", "Full access, and can set access for everyone below Admin"),
     MANAGER("Manager", "Can add and edit designs, stock and pricing"),
     STAFF("Staff", "Can add and edit designs and stock, but not pricing"),
     VIEWER("Viewer", "Can look at the catalogue but change nothing");
+
+    /** May open the access-management screen at all. */
+    val canManageAccess: Boolean get() = this == SUPER_ADMIN || this == ADMIN
+
+    /**
+     * Whether this level may move [target] to [newLevel].
+     *
+     * Mirrors firestore.rules exactly. The rules are what actually enforce this - these
+     * checks only stop the app offering a change it knows the server will reject, so the
+     * user gets a disabled control instead of a failure after the fact. If the two ever
+     * disagree, the server wins and the app is the one that is wrong.
+     */
+    fun canAssign(target: AccessLevel, newLevel: AccessLevel): Boolean = when (this) {
+        // A Super Admin may set anything for anyone.
+        SUPER_ADMIN -> true
+        // An Admin manages everyone BELOW Admin, and cannot mint peers or superiors.
+        // Without this, any Admin could promote themselves a deputy and the distinction
+        // between the two top levels would not survive the first afternoon.
+        ADMIN -> !target.canManageAccess && !newLevel.canManageAccess
+        else -> false
+    }
 
     companion object {
         /**
@@ -67,3 +89,18 @@ enum class AccessLevel(val label: String, val description: String) {
             entries.firstOrNull { it.name.equals(raw?.trim(), ignoreCase = true) } ?: DEFAULT
     }
 }
+
+/**
+ * A person in the organisation as an access-manager sees them.
+ *
+ * Carries only what is needed to tell one colleague from another when assigning a role.
+ * Their age, designation and photo stay in their own Drive folder and are none of an
+ * admin's business.
+ */
+data class OrgMember(
+    val uid: String,
+    val displayName: String,
+    val contact: String,
+    val level: AccessLevel,
+    val isSelf: Boolean,
+)

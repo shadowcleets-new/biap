@@ -191,6 +191,14 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                     // Retry any photo that exists on this device but never reached Storage.
                     repositoryScope.launch { backfillPendingImageUploads(dao) }
 
+                    // Announce this account in the access directory so an admin can find
+                    // and grade them. Creates the record at VIEWER; the role itself is only
+                    // ever written by an access manager, and only server-side rules decide
+                    // whether that write is allowed.
+                    if (userKey != null) {
+                        repositoryScope.launch { AccessLevelStore.publishIdentity() }
+                    }
+
                     // Start collecting from Room Flow and updating UI state Flow
                     dbCollectionJob = repositoryScope.launch {
                         combine(
