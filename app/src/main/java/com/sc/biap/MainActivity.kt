@@ -22,12 +22,14 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
 import com.google.firebase.auth.auth
 import com.google.firebase.initialize
 import androidx.fragment.app.FragmentActivity
+import com.sc.biap.security.AccountLinker
 import com.sc.biap.security.AppLock
 import com.sc.biap.security.BiometricGate
 import com.sc.biap.theme.BiapTheme
@@ -272,16 +274,29 @@ fun EmailAuthScreen(
                 isLoading = true
                 errorMessage = ""
 
-                if (isSignUp) {
-                    auth.createUserWithEmailAndPassword(email, password)
+                val alreadySignedIn = auth.currentUser != null
+                when {
+                    // Adding an email address to the account already in use. Creating one
+                    // here instead would strand the user on a second, empty account.
+                    alreadySignedIn -> {
+                        AccountLinker.signInOrLink(
+                            auth,
+                            EmailAuthProvider.getCredential(email, password)
+                        ) { error ->
+                            errorMessage = error ?: ""
+                            if (error != null) isLoading = false
+                        }
+                    }
+
+                    isSignUp -> auth.createUserWithEmailAndPassword(email, password)
                         .addOnFailureListener { e ->
-                            errorMessage = "Authentication failed"
+                            errorMessage = e.localizedMessage ?: "Could not create the account"
                             isLoading = false
                         }
-                } else {
-                    auth.signInWithEmailAndPassword(email, password)
+
+                    else -> auth.signInWithEmailAndPassword(email, password)
                         .addOnFailureListener { e ->
-                            errorMessage = "Authentication failed"
+                            errorMessage = e.localizedMessage ?: "Sign-in failed"
                             isLoading = false
                         }
                 }
@@ -394,10 +409,11 @@ fun PhoneAuthScreen(
                     val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
                         override fun onVerificationCompleted(credential: com.google.firebase.auth.PhoneAuthCredential) {
                             isLoading = false
-                            auth.signInWithCredential(credential)
-                                .addOnFailureListener {
-                                    errorMessage = "Auto sign-in failed. Enter OTP manually."
-                                }
+                            // Links to the account already in use rather than switching to a
+                            // separate phone-only account with its own empty catalogue.
+                            AccountLinker.signInOrLink(auth, credential) { error ->
+                                errorMessage = error ?: ""
+                            }
                         }
 
                         override fun onVerificationFailed(e: com.google.firebase.FirebaseException) {
@@ -489,11 +505,13 @@ fun PhoneAuthScreen(
                     errorMessage = ""
 
                     val credential = PhoneAuthProvider.getCredential(verificationId, otpCode)
-                    auth.signInWithCredential(credential)
-                        .addOnFailureListener {
-                            errorMessage = "Invalid OTP. Try again."
-                            isLoading = false
-                        }
+                    AccountLinker.signInOrLink(auth, credential) { error ->
+                        // A wrong code and an already-taken number are different problems and
+                        // need different wording, so the reason is reported rather than
+                        // flattened into "Invalid OTP".
+                        errorMessage = error ?: ""
+                        if (error != null) isLoading = false
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -555,11 +573,10 @@ fun GoogleSignInScreen(
                 if (account?.idToken != null) {
                     isLoading = true
                     val credential = GoogleAuthProvider.getCredential(account.idToken, null)
-                    auth.signInWithCredential(credential)
-                        .addOnFailureListener {
-                            errorMessage = "Authentication failed"
-                            isLoading = false
-                        }
+                    AccountLinker.signInOrLink(auth, credential) { error ->
+                        errorMessage = error ?: ""
+                        if (error != null) isLoading = false
+                    }
                 } else {
                     errorMessage = "Sign in failed"
                 }
