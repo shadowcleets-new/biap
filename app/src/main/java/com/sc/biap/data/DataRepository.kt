@@ -30,6 +30,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import com.google.firebase.auth.FirebaseAuth
 import com.sc.biap.security.DatabaseKey
+import com.sc.biap.security.LegacyDatabaseMigrator
 import com.sc.biap.security.PassphraseStore
 import com.sc.biap.security.SyncPassphrase
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
@@ -323,6 +324,12 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             shmFile.delete()
         }
         
+        // A plaintext database can arrive at any time - Google Auto Backup restored one
+        // during testing, right after the app was reinstalled. Encrypt it in place BEFORE
+        // Room sees it, so it is never preserved as a readable copy by the recovery path
+        // below. Cheap no-op when the file is already encrypted or absent.
+        LegacyDatabaseMigrator.migrateIfPlaintext(context, dbFile, DatabaseKey.getOrCreate(context))
+
         fun buildAndVerify(): AppDatabase {
             val db = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
                 .addMigrations(*AppDatabase.ALL_MIGRATIONS)
