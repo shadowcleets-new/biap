@@ -22,7 +22,10 @@ plugins {
 
 android {
     namespace = "com.sc.biap"
-    compileSdk = 36
+    // 37 required by material3 1.5.0-alpha (Expressive). targetSdk stays 36 on
+    // purpose: compileSdk only changes what we can compile against, targetSdk changes
+    // runtime behaviour, and there is no reason to take that risk here.
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.sc.biap"
         minSdk = 24

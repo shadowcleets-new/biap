@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -143,6 +144,7 @@ fun AuthNavigationScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AuthChoiceScreen(
     onEmailSelected: () -> Unit,
@@ -172,6 +174,7 @@ fun AuthChoiceScreen(
 
         Button(
             onClick = onEmailSelected,
+            shapes = ButtonDefaults.shapes(),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
@@ -183,6 +186,7 @@ fun AuthChoiceScreen(
 
         OutlinedButton(
             onClick = onGoogleSelected,
+            shapes = ButtonDefaults.shapes(),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
@@ -194,6 +198,7 @@ fun AuthChoiceScreen(
 
         OutlinedButton(
             onClick = onPhoneSelected,
+            shapes = ButtonDefaults.shapes(),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
@@ -203,6 +208,7 @@ fun AuthChoiceScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun EmailAuthScreen(
     auth: FirebaseAuth,
@@ -307,10 +313,9 @@ fun EmailAuthScreen(
             enabled = !isLoading
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    strokeWidth = 2.dp
+                LoadingIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
             } else {
                 Text(if (isSignUp) "Create Account" else "Sign In")
@@ -339,6 +344,7 @@ fun EmailAuthScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PhoneAuthScreen(
     auth: FirebaseAuth,
@@ -456,10 +462,9 @@ fun PhoneAuthScreen(
                 enabled = !isLoading
             ) {
                 if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
+                    LoadingIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 } else {
                     Text("Send OTP")
@@ -519,10 +524,9 @@ fun PhoneAuthScreen(
                 enabled = !isLoading
             ) {
                 if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
+                    LoadingIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 } else {
                     Text("Verify OTP")
@@ -553,6 +557,7 @@ fun PhoneAuthScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun GoogleSignInScreen(
     googleSignInClient: GoogleSignInClient,
@@ -636,10 +641,9 @@ fun GoogleSignInScreen(
             enabled = !isLoading
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    strokeWidth = 2.dp
+                LoadingIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
             } else {
                 Text("Open Google Account Selector")
