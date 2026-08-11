@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -96,7 +97,7 @@ private val EmptyStateTextWidth = 280.dp
 private val DesignCardImageHeight = 140.dp
 private val ThumbnailSpinnerStroke = 2.dp
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MainScreen(
     onItemClick: (NavKey) -> Unit,
@@ -254,7 +255,7 @@ fun MainScreen(
                             }
                         }
                     },
-                    shape = AtelierShapes.CornerMedium,
+                    shapes = ButtonDefaults.shapes(shape = AtelierShapes.CornerMedium),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary
@@ -335,9 +336,8 @@ fun MainScreen(
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 } else {
-                                    CircularProgressIndicator(
+                                    LoadingIndicator(
                                         modifier = Modifier.size(SyncSpinnerLarge),
-                                        strokeWidth = SyncSpinnerStroke,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -414,11 +414,12 @@ fun MainScreen(
                         // account menu (and Sign Out with it) has to be reachable in this branch
                         // too, not only once a Google account exists.
                         Button(
+                            shapes = ButtonDefaults.shapes(shape = CircleShape),
                             onClick = {
                                 AppLock.beginTrustedFlow()
                                 googleSignInLauncher.launch(authManager.getSignInIntent())
                             },
-                            shape = CircleShape,
+
                             contentPadding = PaddingValues(horizontal = AtelierSpacing.Cozy, vertical = 6.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -495,7 +496,7 @@ fun MainScreen(
         when (state) {
             MainScreenUiState.Loading -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    LoadingIndicator()
                 }
             }
             is MainScreenUiState.Success -> {
@@ -586,8 +587,9 @@ internal fun MainScreenContent(
                 if (query.isEmpty()) {
                     Spacer(Modifier.height(AtelierSpacing.Large))
                     Button(
+                        shapes = ButtonDefaults.shapes(shape = AtelierShapes.CornerMedium),
                         onClick = { onItemClick(AddDesign) },
-                        shape = AtelierShapes.CornerMedium,
+
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary
@@ -621,6 +623,7 @@ internal fun MainScreenContent(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun DesignCard(design: Design, onClick: () -> Unit) {
     val totalStock = design.sizeInventories.sumOf { it.stock }
