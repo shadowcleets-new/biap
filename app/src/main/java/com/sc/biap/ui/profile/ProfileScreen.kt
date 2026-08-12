@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,7 +79,7 @@ private fun defaultProfileViewModel(): ProfileViewModel {
     return viewModel { ProfileViewModel(DefaultDataRepository.getInstance(context)) }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ProfileScreen(
     onBack: () -> Unit,
@@ -113,8 +114,7 @@ fun ProfileScreen(
                     Button(
                         onClick = viewModel::save,
                         enabled = state.isDirty && !state.isSaving,
-                        shape = AtelierShapes.CornerMedium
-                    ) {
+                        shapes = ButtonDefaults.shapes(shape = AtelierShapes.CornerMedium)) {
                         Icon(
                             Icons.Default.Done,
                             contentDescription = null,
@@ -173,6 +173,7 @@ fun ProfileScreen(
 
 // #region 4. Photo & Identity Header
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ProfileHeader(
     photoRef: String?,
@@ -260,6 +261,7 @@ private fun ProfileHeader(
 
 // #region 5. Personal Details
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun PersonalDetailsCard(
     firstName: String,
@@ -337,6 +339,7 @@ private fun PersonalDetailsCard(
  * Worth showing plainly: these used to become separate accounts with separate catalogues,
  * so seeing them listed together is the visible proof that they are now one identity.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SignInMethodsCard(methods: List<SignInMethod>) {
     SectionCard {
@@ -387,6 +390,7 @@ private fun SignInMethodsCard(methods: List<SignInMethod>) {
  * A level the holder can change is not a permission, and this app keeps roles in Firestore
  * precisely so the person they apply to cannot edit them.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AccessLevelCard(level: AccessLevel, confirmed: Boolean) {
     SectionCard {
@@ -450,6 +454,7 @@ private fun AccessLevelCard(level: AccessLevel, confirmed: Boolean) {
 // #region 8. Helper Utilities
 
 /** One silhouette for every card on this screen, defined once so they cannot drift apart. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SectionCard(content: @Composable () -> Unit) {
     Card(

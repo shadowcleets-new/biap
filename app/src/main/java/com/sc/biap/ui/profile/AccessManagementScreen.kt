@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,7 +36,7 @@ import com.sc.biap.theme.titleLargeStrong
 private val RowSpinnerSize = 20.dp
 private val LockedIconSize = 18.dp
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AccessManagementScreen(
     onBack: () -> Unit,
@@ -73,7 +74,7 @@ fun AccessManagementScreen(
                 .fillMaxSize()
         ) {
             when {
-                state.isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                state.isLoading -> LoadingIndicator(Modifier.align(Alignment.Center))
 
                 // Reached without permission - possible if a level changed while the screen
                 // was open. Says so plainly rather than showing an empty list.
@@ -112,6 +113,7 @@ fun AccessManagementScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun MemberRow(
     member: OrgMember,
@@ -149,7 +151,7 @@ private fun MemberRow(
             }
 
             when {
-                isPending -> CircularProgressIndicator(Modifier.size(RowSpinnerSize), strokeWidth = 2.dp)
+                isPending -> LoadingIndicator(Modifier.size(RowSpinnerSize))
 
                 locked -> Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -175,7 +177,7 @@ private fun MemberRow(
                 }
 
                 else -> Box {
-                    TextButton(onClick = { expanded = true }) {
+                    TextButton(shapes = ButtonDefaults.shapes(), onClick = { expanded = true }) {
                         Text(member.level.label, style = MaterialTheme.typography.labelLargeStrong)
                         Icon(Icons.Default.ArrowDropDown, contentDescription = "Change access level")
                     }
@@ -212,6 +214,7 @@ private fun MemberRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun NotPermitted(modifier: Modifier = Modifier) {
     Column(
