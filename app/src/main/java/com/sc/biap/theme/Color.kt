@@ -1,49 +1,73 @@
 package com.sc.biap.theme
- 
+
 import androidx.compose.ui.graphics.Color
- 
-// Heritage Theme Brand Colors (Contemporary Heritage luxury warm palette)
-val HeritageLightPrimary = Color(0xFF1C1B18)     // Warm Charcoal
-val HeritageLightOnPrimary = Color(0xFFFFFFFF)
-val HeritageLightPrimaryContainer = Color(0xFFF5F2E9) // Canvas Cream
-val HeritageLightOnPrimaryContainer = Color(0xFF1C1B18)
-val HeritageLightSecondary = Color(0xFF79684C)   // Muted Bronze (adjusted for >4.5:1 contrast)
+
+/**
+ * @file Color.kt
+ * @description BIAP palette — instrumentation, not fashion.
+ *
+ * Values come from the BIAP identity spec designed in Lovable. The constant NAMES are
+ * unchanged from the previous "Contemporary Heritage" palette on purpose: they are
+ * referenced from a dozen files, and renaming them would be a large diff that changes
+ * nothing a user can see. Only the values moved.
+ *
+ * THE IDEA:
+ *   Deep blue-black ink rather than pure black, so surfaces stack in four legible layers
+ *   under workshop lighting: background -> surface -> raised -> outline.
+ *
+ *   Brass (#E8B23A) is the single brand voice. It is deliberately reserved for identity,
+ *   focus and primary action so it never competes with the data on screen. Cyan carries
+ *   data emphasis instead. Status colours are tuned to similar perceptual weight so a
+ *   stock table reads at a glance rather than one colour shouting over the others.
+ *
+ * CONTRAST:
+ *   Text pairings hold WCAG AA. Brass and cyan both take INK as their "on" colour rather
+ *   than white - white on brass fails, and that mistake is easy to make later.
+ */
+
+// --- Light -----------------------------------------------------------------
+val HeritageLightPrimary = Color(0xFFE8B23A)          // brass - brand voice
+val HeritageLightOnPrimary = Color(0xFF0B0F14)        // ink, NOT white: white on brass fails AA
+val HeritageLightPrimaryContainer = Color(0xFFFBEFD3) // pale brass (derived tint of primary)
+val HeritageLightOnPrimaryContainer = Color(0xFF4A3708)
+val HeritageLightSecondary = Color(0xFF2C7C97)        // cyan, darkened for AA on light surfaces
 val HeritageLightOnSecondary = Color(0xFFFFFFFF)
-val HeritageLightTertiary = Color(0xFF5C5B57)    // Dark Charcoal Gray
+val HeritageLightTertiary = Color(0xFF5A6875)         // muted
 val HeritageLightOnTertiary = Color(0xFFFFFFFF)
-val HeritageLightBackground = Color(0xFFFBF9F4)  // Warm Cream Background
-val HeritageLightOnBackground = Color(0xFF1C1B18)
-val HeritageLightSurface = Color(0xFFFFFFFF)     // Pure Ivory Surface
-val HeritageLightOnSurface = Color(0xFF1C1B18)
-val HeritageLightSurfaceVariant = Color(0xFFF5F2E9)
-val HeritageLightOnSurfaceVariant = Color(0xFF444340)
-val HeritageLightOutline = Color(0xFF6C6A64)      // Dust Grey for WCAG contrast compliance (>4.5:1)
+val HeritageLightBackground = Color(0xFFF4F6F8)
+val HeritageLightOnBackground = Color(0xFF0B0F14)
+val HeritageLightSurface = Color(0xFFFFFFFF)
+val HeritageLightOnSurface = Color(0xFF0B0F14)
+val HeritageLightSurfaceVariant = Color(0xFFE9EDF1)
+val HeritageLightOnSurfaceVariant = Color(0xFF5A6875)
+val HeritageLightOutline = Color(0xFF97A3AF)          // >3:1 against light surfaces
 
-val HeritageDarkPrimary = Color(0xFFF5F2E9)      // Canvas Cream
-val HeritageDarkOnPrimary = Color(0xFF121314)
-val HeritageDarkPrimaryContainer = Color(0xFF1F2022) // Deep charcoal surface
-val HeritageDarkOnPrimaryContainer = Color(0xFFF5F2E9)
-val HeritageDarkSecondary = Color(0xFFB8A78A)    // Soft Bronze Accent
-val HeritageDarkOnSecondary = Color(0xFF121314)
-val HeritageDarkTertiary = Color(0xFF8D8C8A)     // Light Slate Gray
-val HeritageDarkOnTertiary = Color(0xFF121314)
-val HeritageDarkBackground = Color(0xFF121314)   // Midnight Slate Background
-val HeritageDarkOnBackground = Color(0xFFF5F2E9)
-val HeritageDarkSurface = Color(0xFF18191B)      // Dark Obsidian Surface
-val HeritageDarkOnSurface = Color(0xFFF5F2E9)
-val HeritageDarkSurfaceVariant = Color(0xFF1F2022)
-val HeritageDarkOnSurfaceVariant = Color(0xFFD1CFC7)
-val HeritageDarkOutline = Color(0xFF8D8C8A)      // Compliance outline (>3:1)
+// --- Dark (the design's primary mode) ---------------------------------------
+val HeritageDarkPrimary = Color(0xFFE8B23A)           // brass
+val HeritageDarkOnPrimary = Color(0xFF0B0F14)
+val HeritageDarkPrimaryContainer = Color(0xFF1C2531)  // raised
+val HeritageDarkOnPrimaryContainer = Color(0xFFE8B23A)
+val HeritageDarkSecondary = Color(0xFF4CB3D4)         // cyan - data emphasis
+val HeritageDarkOnSecondary = Color(0xFF0B0F14)
+val HeritageDarkTertiary = Color(0xFF8A9AAB)          // muted
+val HeritageDarkOnTertiary = Color(0xFF0B0F14)
+val HeritageDarkBackground = Color(0xFF0B0F14)        // ink
+val HeritageDarkOnBackground = Color(0xFFE9EEF4)
+val HeritageDarkSurface = Color(0xFF131A22)
+val HeritageDarkOnSurface = Color(0xFFE9EEF4)
+val HeritageDarkSurfaceVariant = Color(0xFF1C2531)    // raised
+val HeritageDarkOnSurfaceVariant = Color(0xFF8A9AAB)
+val HeritageDarkOutline = Color(0xFF2A3542)
 
-// Warning Colors (WCAG 2.1 AA compliant)
-val HeritageLightWarning = Color(0xFFC65100)
-val HeritageDarkWarning = Color(0xFFFFB74D)
+// --- Status -----------------------------------------------------------------
+// Warning and danger sit close in hue on purpose; weight and context separate them.
+val HeritageLightWarning = Color(0xFFB06A12)          // darkened for AA on light
+val HeritageDarkWarning = Color(0xFFE8963A)
 
-// Success Colors (WCAG 2.1 AA compliant, chosen the same way as the warning pair:
-// deep on light backgrounds, light on dark backgrounds)
-val HeritageLightSuccess = Color(0xFF1B5E20)
-val HeritageDarkSuccess = Color(0xFF81C784)
+val HeritageLightSuccess = Color(0xFF1F7A55)          // darkened for AA on light
+val HeritageDarkSuccess = Color(0xFF3FB27F)
 
-// Decorative glow gradient endpoints (referenced by AtelierTheme brushes)
-val HeritageGlowGreyLight = Color(0xFFD1CFC7)   // Light Outline Grey
-val HeritageGlowCharcoalDark = Color(0xFF3C3D40) // Muted Charcoal
+// --- Decorative --------------------------------------------------------------
+// Gradient endpoints for AtelierTheme brushes.
+val HeritageGlowGreyLight = Color(0xFFDBE1E8)
+val HeritageGlowCharcoalDark = Color(0xFF1C2531)
