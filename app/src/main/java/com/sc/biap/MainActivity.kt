@@ -31,6 +31,7 @@ import com.google.firebase.auth.auth
 import com.google.firebase.initialize
 import androidx.fragment.app.FragmentActivity
 import com.sc.biap.security.AccountLinker
+import com.sc.biap.ui.auth.AuthChoiceScreen
 import com.sc.biap.ui.VerticalButtonGroup
 import com.sc.biap.ui.rememberVerticalButtonGroupShapes
 import com.sc.biap.security.AppLock
@@ -143,72 +144,6 @@ fun AuthNavigationScreen(
             onPhoneSelected = { authMethod = "phone" },
             onGoogleSelected = { authMethod = "google" }
         )
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun AuthChoiceScreen(
-    onEmailSelected: () -> Unit,
-    onPhoneSelected: () -> Unit,
-    onGoogleSelected: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            "BIAP",
-            style = MaterialTheme.typography.displayLarge,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Text(
-            "Ethnic Wear Operations",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(top = 8.dp, bottom = 48.dp)
-        )
-
-        // One connected group, stacked. ButtonGroup itself is horizontal-only, so the
-        // group's shape spec is rotated a quarter turn - see VerticalButtonGroup.
-        val groupShapes = rememberVerticalButtonGroupShapes(count = 3)
-
-        VerticalButtonGroup {
-            Button(
-                onClick = onEmailSelected,
-                shapes = ButtonDefaults.shapes(shape = groupShapes[0]),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Text("Sign In with Email", style = MaterialTheme.typography.labelLarge)
-            }
-
-            OutlinedButton(
-                onClick = onGoogleSelected,
-                shapes = ButtonDefaults.shapes(shape = groupShapes[1]),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Text("Sign In with Google", style = MaterialTheme.typography.labelLarge)
-            }
-
-            OutlinedButton(
-                onClick = onPhoneSelected,
-                shapes = ButtonDefaults.shapes(shape = groupShapes[2]),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Text("Sign In with Phone", style = MaterialTheme.typography.labelLarge)
-            }
-        }
     }
 }
 
