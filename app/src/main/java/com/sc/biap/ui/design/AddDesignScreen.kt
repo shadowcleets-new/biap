@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -133,7 +134,7 @@ private fun defaultAddDesignViewModel(): AddDesignViewModel {
     return viewModel { AddDesignViewModel(DefaultDataRepository.getInstance(context)) }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AddDesignScreen(
     onBack: () -> Unit,
@@ -295,7 +296,7 @@ fun AddDesignScreen(
 
 // #region 4. Top Bar
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AddDesignTopBar(
     canSave: Boolean,
@@ -313,7 +314,7 @@ private fun AddDesignTopBar(
             Button(
                 onClick = onSave,
                 enabled = canSave,
-                shape = AtelierShapes.CornerMedium,
+                shapes = ButtonDefaults.shapes(shape = AtelierShapes.CornerMedium),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -335,6 +336,7 @@ private fun AddDesignTopBar(
 // #region 5. Photo
 
 /** Tapping anywhere on the panel opens the source chooser, empty or not. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DesignPhotoPicker(
     imagePath: String?,
@@ -396,6 +398,7 @@ private fun DesignPhotoPicker(
 
 // #region 6. Basic Details
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun BasicDetailsCard(
     name: String,
@@ -438,6 +441,7 @@ private fun BasicDetailsCard(
  * The size matrix. Turning a size on reveals its own stock and price row, because
  * an atelier prices per size - an XXL is not the same money as an S.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SizeScaleAndPricingCard(
     availableSizes: List<String>,
@@ -526,6 +530,7 @@ private fun SizeScaleAndPricingCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SizeScaleChipRow(
     availableSizes: List<String>,
@@ -570,6 +575,7 @@ private fun SizeScaleChipRow(
  * typed while only well-formed values are pushed upward, so a half-typed price can
  * never be read back as a different amount.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SizeInventoryRow(
     size: String,
@@ -656,6 +662,7 @@ private fun SizeInventoryRow(
 
 // #region 8. Karigars
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun KarigarAssignmentCard(
     karigars: List<String>,
@@ -759,6 +766,7 @@ private fun KarigarAssignmentCard(
 
 // #region 9. Attributes & Custom Fields
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AttributesAndCustomFieldsCard(
     customFields: Map<String, String>,
@@ -823,6 +831,7 @@ private fun AttributesAndCustomFieldsCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AttributeScopeTabs(
     selectedTab: Int,
@@ -866,6 +875,7 @@ private fun AttributeScopeTabs(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AttributeFieldRow(
     label: String,
@@ -900,6 +910,7 @@ private fun AttributeFieldRow(
 }
 
 /** Composes a new attribute: name, which garment it belongs to, and whether it is global. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun CustomFieldComposer(
     onAddField: (String, Boolean) -> Unit
@@ -967,7 +978,7 @@ private fun CustomFieldComposer(
                 }
             },
             modifier = Modifier.minimumInteractiveComponentSize(),
-            shape = AtelierShapes.CornerMedium,
+            shapes = ButtonDefaults.shapes(shape = AtelierShapes.CornerMedium),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer
@@ -983,6 +994,7 @@ private fun CustomFieldComposer(
 
 // #region 10. Dialogs
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DiscardChangesDialog(
     onDiscard: () -> Unit,
@@ -995,8 +1007,7 @@ private fun DiscardChangesDialog(
             Text("You have unsaved changes that will be lost. Are you sure you want to discard them?")
         },
         confirmButton = {
-            TextButton(
-                onClick = onDiscard,
+            TextButton(shapes = ButtonDefaults.shapes(), onClick = onDiscard,
                 colors = ButtonDefaults.textButtonColors(
                     contentColor = MaterialTheme.colorScheme.error
                 )
@@ -1005,12 +1016,13 @@ private fun DiscardChangesDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onKeepEditing) { Text("Keep Editing") }
+            TextButton(shapes = ButtonDefaults.shapes(), onClick = onKeepEditing) { Text("Keep Editing") }
         }
     )
 }
 
 /** Gallery or camera. Kept as a dialog so the choice is explicit rather than a guess. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun PhotoSourceDialog(
     onDismiss: () -> Unit,
@@ -1027,8 +1039,7 @@ private fun PhotoSourceDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .minimumInteractiveComponentSize(),
-                    shape = AtelierShapes.CornerMedium
-                ) {
+                    shapes = ButtonDefaults.shapes(shape = AtelierShapes.CornerMedium)) {
                     Text("Choose from Gallery")
                 }
 
@@ -1037,15 +1048,13 @@ private fun PhotoSourceDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .minimumInteractiveComponentSize(),
-                    shape = AtelierShapes.CornerMedium
-                ) {
+                    shapes = ButtonDefaults.shapes(shape = AtelierShapes.CornerMedium)) {
                     Text("Take Photo with Camera")
                 }
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = onDismiss,
+            TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss,
                 modifier = Modifier.minimumInteractiveComponentSize()
             ) {
                 Text("Cancel")
@@ -1054,6 +1063,7 @@ private fun PhotoSourceDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun RemoveSizeDialog(
     size: String,
@@ -1067,8 +1077,7 @@ private fun RemoveSizeDialog(
             Text("This will clear the price and stock values configured for this size. Are you sure you want to remove it?")
         },
         confirmButton = {
-            TextButton(
-                onClick = onConfirm,
+            TextButton(shapes = ButtonDefaults.shapes(), onClick = onConfirm,
                 colors = ButtonDefaults.textButtonColors(
                     contentColor = MaterialTheme.colorScheme.error
                 ),
@@ -1078,8 +1087,7 @@ private fun RemoveSizeDialog(
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = onDismiss,
+            TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss,
                 modifier = Modifier.minimumInteractiveComponentSize()
             ) {
                 Text("Cancel")
@@ -1088,6 +1096,7 @@ private fun RemoveSizeDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun CustomSizeDialog(
     availableSizes: List<String>,
@@ -1121,15 +1130,14 @@ private fun CustomSizeDialog(
             )
         },
         confirmButton = {
-            Button(
-                onClick = { if (canAdd) onAdd(normalizedInput) },
+            Button(shapes = ButtonDefaults.shapes(), onClick = { if (canAdd) onAdd(normalizedInput) },
                 enabled = canAdd
             ) {
                 Text("Add")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) { Text("Cancel") }
         }
     )
 }
@@ -1138,6 +1146,7 @@ private fun CustomSizeDialog(
 // #region 11. Helper Utilities
 
 /** Every card on this form shares one silhouette; defined once so they cannot drift apart. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SectionCard(content: @Composable () -> Unit) {
     Card(
