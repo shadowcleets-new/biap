@@ -7,6 +7,8 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
+import com.materialkolor.PaletteStyle
+import com.materialkolor.rememberDynamicColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -87,14 +89,35 @@ fun BiapTheme(
   dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
+  // Material generates the whole tonal palette from ONE brand seed.
+  //
+  // Every container role - primaryContainer, secondaryContainer, tertiaryContainer and
+  // their "on" pairs - is derived on the same hue family at correct tonal distances. That
+  // matters for Expressive specifically: its look comes from content sitting inside filled
+  // tonal containers rather than on flat surfaces, and hand-picking a dozen tints that
+  // stay harmonious AND accessible in both light and dark is work nobody wins at.
+  //
+  // Seeded from the brass in the mark, not from the wallpaper. Google's own Expressive
+  // demos are wallpaper-seeded, which is why they all read purple; a business tool wants
+  // one identity on every phone.
   val colorScheme =
     when {
       dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
         val context = LocalContext.current
         if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
       }
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
+      else -> rememberDynamicColorScheme(
+        seedColor = BiapSeed,
+        isDark = darkTheme,
+        isAmoled = false,
+        // Fidelity, NOT PaletteStyle.Expressive - the name is a trap. That style
+        // deliberately hue-ROTATES away from the seed, which turned brass into purple on
+        // device. It refers to the palette algorithm, not the M3 Expressive design system;
+        // the Expressive LOOK comes from MaterialExpressiveTheme, the shapes and the
+        // Emphasized type roles, none of which care which hue the palette carries.
+        // Fidelity keeps primary faithful to the brand colour.
+        style = PaletteStyle.Fidelity,
+      )
     }
 
   // Same colours and type; what this adds is the expressive MotionScheme, so every
@@ -106,8 +129,18 @@ fun BiapTheme(
   )
 }
 
+/**
+ * Expressive corner scale.
+ *
+ * Material 3 Expressive reads as soft, generous containers rather than tight rectangles -
+ * that shape language is doing as much work as the colour. These were 8/12/16dp, which
+ * fought it. Pill is a true stadium: Compose caps a percent-based corner at half the
+ * shorter side, so it stays a pill at any height.
+ */
 object AtelierShapes {
-    val CornerSmall = RoundedCornerShape(8.dp)
-    val CornerMedium = RoundedCornerShape(12.dp)
-    val CornerLarge = RoundedCornerShape(16.dp)
+    val CornerSmall = RoundedCornerShape(12.dp)
+    val CornerMedium = RoundedCornerShape(20.dp)
+    val CornerLarge = RoundedCornerShape(28.dp)
+    val CornerExtraLarge = RoundedCornerShape(36.dp)
+    val Pill = RoundedCornerShape(percent = 50)
 }

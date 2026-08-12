@@ -1,5 +1,6 @@
 package com.sc.biap.theme
 
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -10,49 +11,42 @@ import androidx.compose.ui.unit.sp
 // SansSerif for body, labels and dense UI text.
 val Typography = Typography(
     displayLarge = TextStyle(
-        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 57.sp,
         lineHeight = 64.sp,
         letterSpacing = (-0.25).sp
     ),
     displayMedium = TextStyle(
-        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 45.sp,
         lineHeight = 52.sp,
         letterSpacing = 0.sp
     ),
     displaySmall = TextStyle(
-        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 36.sp,
         lineHeight = 44.sp,
         letterSpacing = 0.sp
     ),
     headlineLarge = TextStyle(
-        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 32.sp,
         lineHeight = 40.sp,
         letterSpacing = 0.sp
     ),
     headlineMedium = TextStyle(
-        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 28.sp,
         lineHeight = 36.sp,
         letterSpacing = 0.sp
     ),
     headlineSmall = TextStyle(
-        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Normal,
         fontSize = 24.sp,
         lineHeight = 32.sp,
         letterSpacing = 0.sp
     ),
     titleLarge = TextStyle(
-        fontFamily = FontFamily.Serif,
         fontWeight = FontWeight.Medium,
         fontSize = 22.sp,
         lineHeight = 28.sp,
@@ -129,24 +123,31 @@ val Typography = Typography(
  * If the project later moves to material3 1.5.x, these become one-line aliases to the
  * real Expressive tokens and every call site is already correct.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 val Typography.headlineSmallStrong: TextStyle
-    get() = headlineSmall.copy(fontWeight = FontWeight.Bold)
+    get() = headlineSmallEmphasized
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 val Typography.titleLargeStrong: TextStyle
-    get() = titleLarge.copy(fontWeight = FontWeight.Bold)
+    get() = titleLargeEmphasized
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 val Typography.titleMediumStrong: TextStyle
-    get() = titleMedium.copy(fontWeight = FontWeight.Bold)
+    get() = titleMediumEmphasized
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 val Typography.titleSmallStrong: TextStyle
-    get() = titleSmall.copy(fontWeight = FontWeight.SemiBold)
+    get() = titleSmallEmphasized
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 val Typography.bodyMediumStrong: TextStyle
-    get() = bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+    get() = bodyMediumEmphasized
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 val Typography.bodySmallStrong: TextStyle
-    get() = bodySmall.copy(fontWeight = FontWeight.Bold)
+    get() = bodySmallEmphasized
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 val Typography.labelLargeStrong: TextStyle
-    get() = labelLarge.copy(fontWeight = FontWeight.Bold)
+    get() = labelLargeEmphasized
 // #endregion

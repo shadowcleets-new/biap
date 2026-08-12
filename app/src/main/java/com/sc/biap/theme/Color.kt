@@ -71,3 +71,12 @@ val HeritageDarkSuccess = Color(0xFF3FB27F)
 // Gradient endpoints for AtelierTheme brushes.
 val HeritageGlowGreyLight = Color(0xFFDBE1E8)
 val HeritageGlowCharcoalDark = Color(0xFF1C2531)
+
+/**
+ * The single seed Material expands into the full tonal palette.
+ *
+ * This is the brass from the Aperture mark. Everything else - every container tint, every
+ * "on" colour, light and dark - is derived from it, so the identity and the interface can
+ * never drift apart.
+ */
+val BiapSeed = Color(0xFFE8B23A)

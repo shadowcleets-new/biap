@@ -24,6 +24,7 @@ androidxSecurity = "1.1.0-alpha06"
 firebase = "33.6.0"
 androidxDataStore = "1.1.1"
 androidxBiometric = "1.1.0"
+materialKolor = "2.0.2"
 sqlcipher = "4.6.1"
 androidxSqlite = "2.4.0"
 
@@ -42,6 +43,7 @@ androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-ru
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }
 androidx-lifecycle-process = { module = "androidx.lifecycle:lifecycle-process", version.ref = "androidxLifecycle" }
 androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "androidxBiometric" }
+material-kolor = { module = "com.materialkolor:material-kolor", version.ref = "materialKolor" }
 sqlcipher = { module = "net.zetetic:sqlcipher-android", version.ref = "sqlcipher" }
 androidx-sqlite = { module = "androidx.sqlite:sqlite", version.ref = "androidxSqlite" }
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTest" }

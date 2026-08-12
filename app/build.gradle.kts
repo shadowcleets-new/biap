@@ -170,6 +170,10 @@ dependencies {
   // designs, costs and margins readable by anyone with file access to the phone.
   implementation(libs.sqlcipher)
   implementation(libs.androidx.sqlite)
+  // Generates the full Material tonal palette from one brand seed colour.
+  // The HCT maths Material uses is internal to compose-material3, so this is the
+  // supported way to seed a scheme from a fixed brand colour rather than wallpaper.
+  implementation(libs.material.kolor)
   implementation(libs.androidx.biometric)
   implementation(libs.androidx.lifecycle.process)
 
