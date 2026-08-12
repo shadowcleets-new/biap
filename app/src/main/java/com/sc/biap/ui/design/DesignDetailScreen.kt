@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -79,7 +80,7 @@ private val EmptyStateIconSize = 40.dp
 private val OverlayIconSize = 20.dp
 private val RemoveIconSize = 18.dp
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun DesignDetailScreen(
     designId: String,
@@ -153,7 +154,7 @@ fun DesignDetailScreen(
     when (val uiState = state) {
         DesignDetailUiState.Loading -> {
             DetailStatusScaffold(title = "Loading...", onBack = onBack, modifier = modifier) {
-                CircularProgressIndicator()
+                LoadingIndicator()
             }
         }
         DesignDetailUiState.NotFound -> {
@@ -370,6 +371,7 @@ fun DesignDetailScreen(
  * caller keeps ownership of the exact statement order - dismissing before launching is
  * load-bearing, and splitting it into "dismiss, then act" would change behaviour.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ImageSourceSelectorDialog(
     onDismiss: () -> Unit,
@@ -384,22 +386,20 @@ private fun ImageSourceSelectorDialog(
                 Button(
                     onClick = onChooseGallery,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = AtelierShapes.CornerMedium
-                ) {
+                    shapes = ButtonDefaults.shapes(shape = AtelierShapes.CornerMedium)) {
                     Text("Choose from Gallery")
                 }
 
                 Button(
                     onClick = onTakePhoto,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = AtelierShapes.CornerMedium
-                ) {
+                    shapes = ButtonDefaults.shapes(shape = AtelierShapes.CornerMedium)) {
                     Text("Take Photo with Camera")
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) {
                 Text("Cancel")
             }
         }
@@ -414,6 +414,7 @@ private fun ImageSourceSelectorDialog(
  * Owns its own tab selection and new-field inputs; only the field map crosses the
  * boundary, hoisted so the parent still drives the save.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SpecificationsCard(
     design: Design,
@@ -600,7 +601,7 @@ private fun SpecificationsCard(
                             }
                         },
                         modifier = Modifier.align(Alignment.End),
-                        shape = AtelierShapes.CornerMedium,
+                        shapes = ButtonDefaults.shapes(shape = AtelierShapes.CornerMedium),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer
@@ -623,6 +624,7 @@ private fun SpecificationsCard(
  * per-row stock/price text buffers are all local. Only the resulting size list crosses the
  * boundary, so the parent still owns what gets saved.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SizeStockPriceEditorCard(
     editSizes: List<SizeInventory>,
@@ -817,8 +819,7 @@ private fun SizeStockPriceEditorCard(
                         )
                     },
                     confirmButton = {
-                        Button(
-                            onClick = {
+                        Button(shapes = ButtonDefaults.shapes(), onClick = {
                                 if (newSizeInput.isNotBlank() && !sizeExists) {
                                     val norm = newSizeInput.trim().uppercase()
                                     if (!availableSizes.contains(norm)) {
@@ -843,8 +844,7 @@ private fun SizeStockPriceEditorCard(
                         }
                     },
                     dismissButton = {
-                        TextButton(
-                            onClick = { showCustomSizeDialog = false },
+                        TextButton(shapes = ButtonDefaults.shapes(), onClick = { showCustomSizeDialog = false },
                             modifier = Modifier.minimumInteractiveComponentSize()
                         ) {
                             Text("Cancel")
@@ -859,8 +859,7 @@ private fun SizeStockPriceEditorCard(
                     title = { Text("Remove Size $sizeToRemove?") },
                     text = { Text("This will clear the price and stock values configured for this size. Are you sure you want to remove it?") },
                     confirmButton = {
-                        TextButton(
-                            onClick = {
+                        TextButton(shapes = ButtonDefaults.shapes(), onClick = {
                                 val inventory = editSizes.find { it.size == sizeToRemove }
                                 if (inventory != null) {
                                     sizeCache[sizeToRemove!!] = inventory
@@ -877,8 +876,7 @@ private fun SizeStockPriceEditorCard(
                         }
                     },
                     dismissButton = {
-                        TextButton(
-                            onClick = { sizeToRemove = null },
+                        TextButton(shapes = ButtonDefaults.shapes(), onClick = { sizeToRemove = null },
                             modifier = Modifier.minimumInteractiveComponentSize()
                         ) {
                             Text("Cancel")
@@ -896,6 +894,7 @@ private fun SizeStockPriceEditorCard(
  * Reads nothing but the design. The selected-size index is local and keyed on design.id
  * rather than the design object, so a background sync refresh does not reset the choice.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun InventoryPricingCard(design: Design) {
     Card(
@@ -1002,6 +1001,7 @@ private fun InventoryPricingCard(design: Design) {
  * Its working copy and the new-name input are local; only the confirmed list crosses
  * back out, so the parent still owns what gets saved.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun KarigarEditorDialog(
     design: Design,
@@ -1089,8 +1089,7 @@ AlertDialog(
         }
     },
     confirmButton = {
-        Button(
-            onClick = {
+        Button(shapes = ButtonDefaults.shapes(), onClick = {
                 if (isEditing) {
                     onEditKarigarsChange(tempKarigars)
                 } else {
@@ -1103,7 +1102,7 @@ AlertDialog(
         }
     },
     dismissButton = {
-        TextButton(onClick = onDismiss) {
+        TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) {
             Text("Cancel")
         }
     }
@@ -1113,6 +1112,7 @@ AlertDialog(
 /**
  * Shows the karigars assigned to this design, with an edit affordance.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AssignedKarigarsCard(
     design: Design,
@@ -1179,6 +1179,7 @@ Card(
 /**
  * Design name and category - an editable form in edit mode, a heading otherwise.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun TitleCategoryCard(
     design: Design,
@@ -1253,6 +1254,7 @@ if (isEditing) {
  * While editing, a freshly picked LOCAL photo deliberately outranks the uploaded one -
  * otherwise replacing a photo would still show the old image until sync caught up.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DesignImageCard(
     design: Design,
@@ -1311,7 +1313,7 @@ Box(
             }
         }
 
-        DesignImageState.Loading -> CircularProgressIndicator()
+        DesignImageState.Loading -> LoadingIndicator()
 
         DesignImageState.Unavailable -> PhotoUnavailable(onRetry = detailImage.retry)
 
@@ -1337,6 +1339,7 @@ Box(
  * that never needed it. The retry is here because the earlier behaviour - resolve once, then
  * stay blank forever - turned a moment without signal into a permanently empty frame.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun PhotoUnavailable(onRetry: () -> Unit) {
     Column(
@@ -1359,8 +1362,7 @@ private fun PhotoUnavailable(onRetry: () -> Unit) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        TextButton(
-            onClick = onRetry,
+        TextButton(shapes = ButtonDefaults.shapes(), onClick = onRetry,
             modifier = Modifier.minimumInteractiveComponentSize()
         ) {
             Icon(
@@ -1380,6 +1382,7 @@ private fun PhotoUnavailable(onRetry: () -> Unit) {
  * The overwrite action is passed in whole rather than reconstructed here, so the caller
  * keeps ownership of what "overwrite" means and in what order it happens.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SaveConflictDialog(
     onDismiss: () -> Unit,
@@ -1390,15 +1393,14 @@ private fun SaveConflictDialog(
         title = { Text("Design Changed During Edit") },
         text = { Text("This design was updated by a sync while you were editing. Save anyway and overwrite those changes?") },
         confirmButton = {
-            TextButton(
-                onClick = onOverwrite,
+            TextButton(shapes = ButtonDefaults.shapes(), onClick = onOverwrite,
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
                 Text("Overwrite")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) {
                 Text("Cancel")
             }
         }
@@ -1412,6 +1414,7 @@ private fun SaveConflictDialog(
  * an automatic dismiss would reorder the statements, and the order matters: deleteDesign()
  * flips uiState to NotFound on the next emission.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DeleteDesignDialog(
     onDismiss: () -> Unit,
@@ -1422,15 +1425,14 @@ private fun DeleteDesignDialog(
         title = { Text("Delete Design") },
         text = { Text("Are you sure you want to delete this design? This action cannot be undone.") },
         confirmButton = {
-            TextButton(
-                onClick = onConfirmDelete,
+            TextButton(shapes = ButtonDefaults.shapes(), onClick = onConfirmDelete,
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
                 Text("Delete")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) {
                 Text("Cancel")
             }
         }
@@ -1444,7 +1446,7 @@ private fun DeleteDesignDialog(
  * Carries its own @OptIn because TopAppBar is experimental and a top-level composable does
  * NOT inherit the file-level opt-in.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DetailStatusScaffold(
     title: String,
