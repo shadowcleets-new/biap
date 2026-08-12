@@ -7,8 +7,6 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
-import com.materialkolor.PaletteStyle
-import com.materialkolor.rememberDynamicColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -85,43 +83,30 @@ object AtelierTheme {
 @Composable
 fun BiapTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color stays OFF to protect the Contemporary Heritage brand identity.
-  dynamicColor: Boolean = false,
+  /**
+   * Seed the palette from the device wallpaper. ON by default.
+   *
+   * This is what Material 3 Expressive actually does, and why every screen in Google's
+   * announcement reads purple - their wallpaper was purple, not their brand. The colours
+   * are supposed to be picked automatically and follow the person using the phone.
+   */
+  dynamicColor: Boolean = true,
   content: @Composable () -> Unit,
 ) {
-  // Material generates the whole tonal palette from ONE brand seed.
-  //
-  // Every container role - primaryContainer, secondaryContainer, tertiaryContainer and
-  // their "on" pairs - is derived on the same hue family at correct tonal distances. That
-  // matters for Expressive specifically: its look comes from content sitting inside filled
-  // tonal containers rather than on flat surfaces, and hand-picking a dozen tints that
-  // stay harmonious AND accessible in both light and dark is work nobody wins at.
-  //
-  // Seeded from the brass in the mark, not from the wallpaper. Google's own Expressive
-  // demos are wallpaper-seeded, which is why they all read purple; a business tool wants
-  // one identity on every phone.
   val colorScheme =
     when {
+      // API 31+: Material derives the entire tonal system from the wallpaper.
       dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
         val context = LocalContext.current
         if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
       }
-      else -> rememberDynamicColorScheme(
-        seedColor = BiapSeed,
-        isDark = darkTheme,
-        isAmoled = false,
-        // Fidelity, NOT PaletteStyle.Expressive - the name is a trap. That style
-        // deliberately hue-ROTATES away from the seed, which turned brass into purple on
-        // device. It refers to the palette algorithm, not the M3 Expressive design system;
-        // the Expressive LOOK comes from MaterialExpressiveTheme, the shapes and the
-        // Emphasized type roles, none of which care which hue the palette carries.
-        // Fidelity keeps primary faithful to the brand colour.
-        style = PaletteStyle.Fidelity,
-      )
+      // Below 31 there is no wallpaper extraction, so fall back to Material's own
+      // baseline scheme rather than inventing a brand hue - picking one here would
+      // reintroduce exactly the fixed colour this is meant to avoid.
+      darkTheme -> darkColorScheme()
+      else -> lightColorScheme()
     }
 
-  // Same colours and type; what this adds is the expressive MotionScheme, so every
-  // Material component animates on spring curves instead of standard easing.
   MaterialExpressiveTheme(
     colorScheme = colorScheme,
     typography = Typography,
