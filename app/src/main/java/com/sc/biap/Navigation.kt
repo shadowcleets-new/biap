@@ -20,7 +20,6 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.sc.biap.ui.PerformanceProfile
 import com.sc.biap.ui.main.MainScreen
-import com.sc.biap.ui.main.SplashScreen
 import com.sc.biap.ui.design.AddDesignScreen
 import com.sc.biap.ui.design.DesignDetailScreen
 import com.sc.biap.ui.profile.AccessManagementScreen
@@ -29,7 +28,7 @@ import com.sc.biap.ui.rememberPerformanceProfile
 
 @Composable
 fun MainNavigation() {
-  val backStack = rememberNavBackStack(Splash)
+  val backStack = rememberNavBackStack(Main)
   val profile = rememberPerformanceProfile()
 
   NavDisplay(
@@ -91,15 +90,6 @@ fun MainNavigation() {
     },
     entryProvider =
       entryProvider {
-        entry<Splash> {
-          SplashScreen(
-            onSplashComplete = {
-              backStack.removeLastOrNull()
-              backStack.add(Main)
-            },
-            modifier = Modifier.fillMaxSize()
-          )
-        }
         entry<Main> {
           MainScreen(
             onItemClick = { navKey -> backStack.add(navKey) },
