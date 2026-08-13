@@ -23,6 +23,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,38 +48,24 @@ import androidx.compose.ui.unit.sp
  *   the ends where items meet stay tight. That run of shapes is what says "these belong
  *   together", which is why there are no dividers here - they would be saying it twice.
  *
- *   The library exposes this as MenuDefaults.itemShape(index, count) with matching
- *   leading/middle/trailing shapes. It is built by hand here for one reason: the account
- *   header is not a menu item and must not be shaped or highlighted like one, and the
- *   destructive Sign out sits in its own group with its own colour. Both would fight the
- *   stock grouping helper.
+ * THE SHAPES COME FROM MATERIAL, NOT FROM CONSTANTS HERE:
+ *   MenuDefaults.itemShape(index, count) is a pure position-to-shape calculation, so this
+ *   file never hardcodes a radius and inherits any change Google makes to the menu shape
+ *   scale. The same goes for the gap between groups and the item container colour.
+ *
+ *   Only the CONTAINER composable is ours. DropdownMenuGroup assumes everything inside it is
+ *   a menu item sharing one colour, which the account header (not an item, no ripple) and
+ *   Sign out (its own colour, its own group) both break. Those are layout decisions; the
+ *   geometry is still Material's.
  *
  * COLOUR CARRIES MEANING, NOT DECORATION:
- *   Ordinary destinations sit on surfaceContainerHigh. Sign out sits on errorContainer,
+ *   Ordinary destinations sit on the standard group colour. Sign out sits on errorContainer,
  *   alone, separated by a real gap - it is the one item you cannot undo by tapping again.
  */
 
 private val MenuWidth = 268.dp
 private val ItemHeight = 56.dp
-private val GroupRadius = 22.dp
-private val JoinRadius = 6.dp
 private val ItemGap = 2.dp
-
-/** Where an item sits in its group, which is the only thing that decides its shape. */
-private enum class Slot { SINGLE, FIRST, MIDDLE, LAST }
-
-private fun Slot.shape(): RoundedCornerShape = when (this) {
-    Slot.SINGLE -> RoundedCornerShape(GroupRadius)
-    Slot.FIRST -> RoundedCornerShape(
-        topStart = GroupRadius, topEnd = GroupRadius,
-        bottomStart = JoinRadius, bottomEnd = JoinRadius,
-    )
-    Slot.MIDDLE -> RoundedCornerShape(JoinRadius)
-    Slot.LAST -> RoundedCornerShape(
-        topStart = JoinRadius, topEnd = JoinRadius,
-        bottomStart = GroupRadius, bottomEnd = GroupRadius,
-    )
-}
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -125,85 +113,93 @@ fun AccountMenu(
             }
 
             // --- destinations, one group ------------------------------------
-            MenuAction(
-                icon = Icons.Default.Sync,
-                label = if (isSyncing) "Syncing…" else "Sync with Drive",
-                slot = Slot.FIRST,
-                enabled = !isSyncing,
-                onClick = onSync,
-                // The spinner replaces the icon rather than sitting beside it, so the row
-                // never changes width while a sync runs.
-                busy = isSyncing,
-            )
-            MenuAction(
-                icon = Icons.Default.Person,
-                label = "Profile",
-                slot = Slot.MIDDLE,
-                onClick = onProfile,
-            )
-            if (canManageAccess) {
+            //
+            // Built as a list so the index and count fed to MenuDefaults.itemShape() are
+            // always correct. Team Access appears conditionally, and hardcoding positions
+            // around it is exactly how a group ends up with two rounded ends in the middle.
+            val destinations = buildList {
+                add(
+                    MenuEntry(
+                        icon = Icons.Default.Sync,
+                        label = if (isSyncing) "Syncing…" else "Sync with Drive",
+                        enabled = !isSyncing,
+                        // The spinner replaces the icon rather than sitting beside it, so
+                        // the row never changes width while a sync runs.
+                        busy = isSyncing,
+                        onClick = onSync,
+                    )
+                )
+                add(MenuEntry(Icons.Default.Person, "Profile", onClick = onProfile))
+                if (canManageAccess) {
+                    add(MenuEntry(Icons.Default.Groups, "Team Access", onClick = onTeamAccess))
+                }
+                add(MenuEntry(Icons.Default.Settings, "Settings", onClick = onSettings))
+            }
+
+            destinations.forEachIndexed { index, entry ->
                 MenuAction(
-                    icon = Icons.Default.Groups,
-                    label = "Team Access",
-                    slot = Slot.MIDDLE,
-                    onClick = onTeamAccess,
+                    entry = entry,
+                    shape = MenuDefaults.itemShape(index, destinations.size).shape,
+                    container = MenuDefaults.groupStandardContainerColor,
                 )
             }
-            MenuAction(
-                icon = Icons.Default.Settings,
-                label = "Settings",
-                slot = Slot.LAST,
-                onClick = onSettings,
-            )
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(MenuDefaults.GroupSpacing))
 
             // --- the one you cannot undo, alone ------------------------------
             MenuAction(
-                icon = Icons.AutoMirrored.Filled.Logout,
-                label = "Sign out",
-                slot = Slot.SINGLE,
+                entry = MenuEntry(
+                    icon = Icons.AutoMirrored.Filled.Logout,
+                    label = "Sign out",
+                    onClick = onSignOut,
+                ),
+                // A group of one: Material gives it both ends rounded.
+                shape = MenuDefaults.itemShape(0, 1).shape,
                 container = scheme.errorContainer,
                 content = scheme.onErrorContainer,
-                onClick = onSignOut,
             )
         }
     }
 }
 
+/** One row's worth of content, so position and shape stay the caller's business. */
+private data class MenuEntry(
+    val icon: ImageVector,
+    val label: String,
+    val enabled: Boolean = true,
+    val busy: Boolean = false,
+    val onClick: () -> Unit,
+)
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun MenuAction(
-    icon: ImageVector,
-    label: String,
-    slot: Slot,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    busy: Boolean = false,
-    container: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    entry: MenuEntry,
+    shape: Shape,
+    container: Color,
     content: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val fg = if (enabled) content else scheme.onSurfaceVariant
+    val fg = if (entry.enabled) content else scheme.onSurfaceVariant
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = ItemHeight)
-            .clip(slot.shape())
+            .clip(shape)
             .background(container)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = entry.enabled, onClick = entry.onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        if (busy) {
+        if (entry.busy) {
             LoadingIndicator(modifier = Modifier.size(22.dp), color = fg)
         } else {
-            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
+            Icon(entry.icon, contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
         }
         Text(
-            text = label,
+            text = entry.label,
             style = MaterialTheme.typography.titleSmallEmphasized,
             color = fg,
             maxLines = 1,
