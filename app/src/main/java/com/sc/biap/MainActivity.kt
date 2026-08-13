@@ -51,6 +51,7 @@ import com.sc.biap.ui.rememberVerticalButtonGroupShapes
 import com.sc.biap.security.AppLock
 import com.sc.biap.security.BiometricGate
 import com.sc.biap.theme.BiapTheme
+import com.sc.biap.theme.ThemePreference
 import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
 
@@ -80,6 +81,10 @@ class MainActivity : FragmentActivity() {
         // Gate the catalogue behind the device lock. No-ops on a device with no biometric
         // and no PIN, rather than making the data unreachable.
         AppLock.install(this)
+
+        // Read before the first composition, so the app does not paint one theme and then
+        // flip to another a frame later.
+        ThemePreference.load(this)
 
         auth = Firebase.auth
 

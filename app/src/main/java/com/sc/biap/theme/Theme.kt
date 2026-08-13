@@ -1,5 +1,9 @@
 package com.sc.biap.theme
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,10 +17,17 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
 import com.sc.biap.ui.PerformanceProfile
 import com.sc.biap.ui.rememberPerformanceProfile
@@ -83,6 +94,14 @@ object AtelierTheme {
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun BiapTheme(
+  /**
+   * Resolved from [ThemePreference] and the power state, not passed in by callers.
+   *
+   * AUTO follows the system, except while battery saver is on, when it drops to AMOLED -
+   * true black costs an OLED panel almost nothing to display. An explicit choice is always
+   * honoured, including a choice of Light while saving power: overriding somebody's stated
+   * preference to save a little battery is the app deciding it knows better.
+   */
   darkTheme: Boolean = isSystemInDarkTheme(),
   /**
    * Seed the palette from the device wallpaper. ON by default.
@@ -94,19 +113,50 @@ fun BiapTheme(
   dynamicColor: Boolean = true,
   content: @Composable () -> Unit,
 ) {
-  val colorScheme =
+  val context = LocalContext.current
+  val mode by ThemePreference.mode.collectAsState()
+  val powerSaving = rememberPowerSaveMode()
+
+  // AUTO is the only mode battery saver may override. Anything explicit is left alone.
+  val resolved = when (mode) {
+    ThemeMode.AUTO -> if (powerSaving) ThemeMode.AMOLED else if (darkTheme) ThemeMode.DARK else ThemeMode.LIGHT
+    else -> mode
+  }
+  val isDark = resolved != ThemeMode.LIGHT
+
+  val base =
     when {
       // API 31+: Material derives the entire tonal system from the wallpaper.
       dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
       }
       // Below 31 there is no wallpaper extraction, so fall back to Material's own
       // baseline scheme rather than inventing a brand hue - picking one here would
       // reintroduce exactly the fixed colour this is meant to avoid.
-      darkTheme -> darkColorScheme()
+      isDark -> darkColorScheme()
       else -> lightColorScheme()
     }
+
+  /**
+   * AMOLED is the dark scheme with its backgrounds pulled to true black.
+   *
+   * Derived rather than hand-written so it keeps the wallpaper-seeded hues - only the
+   * surfaces that cover large areas go to #000000, which is what actually saves power on an
+   * OLED panel, since a black pixel is an unlit pixel. The container roles stay slightly
+   * lifted; flattening those too would erase the elevation the whole layout depends on.
+   */
+  val colorScheme = if (resolved == ThemeMode.AMOLED) {
+    base.copy(
+      background = Color.Black,
+      surface = Color.Black,
+      surfaceDim = Color.Black,
+      surfaceContainerLowest = Color.Black,
+      surfaceContainerLow = base.surfaceContainerLowest,
+      surfaceContainer = base.surfaceContainerLow,
+    )
+  } else {
+    base
+  }
 
   MaterialExpressiveTheme(
     colorScheme = colorScheme,
@@ -143,4 +193,37 @@ object AtelierShapes {
     val CornerLarge = RoundedCornerShape(28.dp)
     val CornerExtraLarge = RoundedCornerShape(36.dp)
     val Pill = RoundedCornerShape(percent = 50)
+}
+
+/**
+ * Whether the device is in battery saver, kept live.
+ *
+ * Registered as a receiver rather than read once: battery saver turns on by itself at a
+ * threshold, and a theme that only noticed at launch would sit in the wrong mode for the
+ * rest of the session.
+ */
+@Composable
+private fun rememberPowerSaveMode(): Boolean {
+  val context = LocalContext.current
+  val power = remember {
+    context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+  }
+  var saving by remember { mutableStateOf(power?.isPowerSaveMode ?: false) }
+
+  DisposableEffect(power) {
+    if (power == null) return@DisposableEffect onDispose {}
+    val receiver = object : BroadcastReceiver() {
+      override fun onReceive(c: Context?, i: Intent?) {
+        saving = power.isPowerSaveMode
+      }
+    }
+    ContextCompat.registerReceiver(
+      context,
+      receiver,
+      IntentFilter(android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED),
+      ContextCompat.RECEIVER_NOT_EXPORTED,
+    )
+    onDispose { runCatching { context.unregisterReceiver(receiver) } }
+  }
+  return saving
 }

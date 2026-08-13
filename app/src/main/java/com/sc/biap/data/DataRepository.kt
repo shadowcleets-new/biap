@@ -100,6 +100,25 @@ interface DataRepository {
     /** Store the passphrase that wraps the sync key, then retry the sync. */
     fun setSyncPassphrase(passphrase: CharArray)
     fun hasSyncPassphrase(): Boolean
+
+    /**
+     * Re-wrap the SAME sync key under a new passphrase. The backup stays readable.
+     *
+     * Returns null on success, or a reason to show.
+     */
+    suspend fun changeSyncPassphrase(current: CharArray, new: CharArray): String?
+
+    /**
+     * Abandon the unreadable backup and publish a fresh one from this device.
+     *
+     * For a passphrase nobody can supply any more. Both Drive files are OVERWRITTEN in
+     * place, so a Drive folder never accumulates orphaned backups however many times this
+     * is used.
+     */
+    suspend fun resetSyncPassphrase(new: CharArray): String?
+
+    /** Designs held locally. Reset refuses when this is zero - see [resetSyncPassphrase]. */
+    fun localDesignCount(): Int
     fun signOut(onComplete: () -> Unit)
     fun resetSyncStatus()
 
@@ -492,6 +511,114 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     }
 
     override fun hasSyncPassphrase(): Boolean = PassphraseStore.isSet(context)
+
+    override fun localDesignCount(): Int = _biData.value.designs.size
+
+    /**
+     * Change the passphrase while keeping the backup readable.
+     *
+     * The sync KEY is never regenerated - only the envelope around it. That is the whole
+     * point: the catalogue in Drive stays encrypted under the same key, so it remains
+     * decryptable and no other device is orphaned. Only sync_key.enc is rewritten, and it is
+     * rewritten IN PLACE using its existing file id, so Drive gains no second copy.
+     */
+    override suspend fun changeSyncPassphrase(
+        current: CharArray,
+        new: CharArray,
+    ): String? = withContext(Dispatchers.IO) {
+        if (new.size < SyncPassphrase.MIN_LENGTH) {
+            return@withContext "Use at least ${SyncPassphrase.MIN_LENGTH} characters."
+        }
+        val token = authManager.getAccessToken()
+            ?: return@withContext "Could not reach Google Drive. Check your connection."
+
+        val keyFileId = driveSyncManager.searchFile(token, KEY_FILE_WRAPPED)
+            ?: return@withContext "No backup found on Drive yet. Sync once first."
+
+        val envelope = driveSyncManager.downloadFile(token, keyFileId)?.trim()
+            ?: return@withContext "Could not read the backup key from Drive."
+
+        val syncKey = SyncPassphrase.unwrap(envelope, current)
+        if (syncKey == null || !EncryptionUtils.isValidKey(syncKey)) {
+            return@withContext "That is not your current passphrase."
+        }
+
+        val rewrapped = SyncPassphrase.wrap(syncKey, new)
+        // Existing id passed deliberately: this REPLACES the envelope rather than adding one.
+        if (driveSyncManager.uploadFile(token, rewrapped, keyFileId, KEY_FILE_WRAPPED) == null) {
+            return@withContext "Could not save the new passphrase to Drive."
+        }
+
+        PassphraseStore.save(context, new)
+        return@withContext null
+    }
+
+    /**
+     * Start the backup over under a new passphrase, for a passphrase that is simply gone.
+     *
+     * WHY THIS CANNOT "RECOVER" ANYTHING:
+     *   The old envelope can only be opened by the old passphrase. Without it the existing
+     *   ciphertext is unreadable by anyone, including us. So there is nothing to recover -
+     *   only a choice between leaving dead ciphertext in Drive forever, or replacing it.
+     *
+     * WHY IT DOES NOT ACCUMULATE:
+     *   Both files are overwritten at their EXISTING file ids. However many times somebody
+     *   forgets, the Drive folder still holds exactly one sync_key.enc and one
+     *   bi_data.json.enc. The bytes being replaced were permanently undecryptable, so
+     *   nothing of value is destroyed.
+     *
+     * WHY IT REFUSES ON AN EMPTY DEVICE:
+     *   With no local designs there is nothing to re-upload, so this would trade an
+     *   unreadable backup for an empty one - and if another device still holds the old
+     *   passphrase, that device could have restored it. Guarded by the caller via
+     *   [localDesignCount].
+     */
+    override suspend fun resetSyncPassphrase(new: CharArray): String? = withContext(Dispatchers.IO) {
+        if (new.size < SyncPassphrase.MIN_LENGTH) {
+            return@withContext "Use at least ${SyncPassphrase.MIN_LENGTH} characters."
+        }
+        if (_biData.value.designs.isEmpty()) {
+            return@withContext "There are no designs on this phone to back up."
+        }
+        val token = authManager.getAccessToken()
+            ?: return@withContext "Could not reach Google Drive. Check your connection."
+
+        // A brand-new key. The old one is unreachable, so it cannot be carried forward.
+        val freshKey = EncryptionUtils.generateRandomKey()
+
+        val keyFileId = driveSyncManager.searchFile(token, KEY_FILE_WRAPPED)
+        if (driveSyncManager.uploadFile(
+                token,
+                SyncPassphrase.wrap(freshKey, new),
+                keyFileId,
+                KEY_FILE_WRAPPED,
+            ) == null
+        ) {
+            return@withContext "Could not save the new key to Drive."
+        }
+
+        // Re-encrypt this device's catalogue under the new key and overwrite the data file
+        // too - otherwise the new key would point at ciphertext it cannot open.
+        val payload = json.encodeToString(_biData.value)
+        val encrypted = runCatching { EncryptionUtils.encryptWithKey(payload, freshKey) }
+            .getOrNull()
+            ?: return@withContext "Could not encrypt the catalogue."
+
+        val dataFileId = driveSyncManager.searchFile(token)
+        if (driveSyncManager.uploadFile(token, encrypted, dataFileId, "bi_data.json.enc") == null) {
+            return@withContext "Could not upload the new backup."
+        }
+
+        // Any plaintext key left by an ancient build would now unlock nothing, but leaving
+        // it implies otherwise.
+        driveSyncManager.searchFile(token, KEY_FILE_LEGACY)?.let {
+            driveSyncManager.deleteFile(token, it)
+        }
+
+        PassphraseStore.save(context, new)
+        _lastSyncAt.value = System.currentTimeMillis()
+        return@withContext null
+    }
 
     override fun resetSyncStatus() {
         _syncStatus.value = SyncStatus.Idle
