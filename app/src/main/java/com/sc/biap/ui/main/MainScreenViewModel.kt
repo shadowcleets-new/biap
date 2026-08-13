@@ -69,11 +69,14 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
         val categoryOk = filters.category == null || design.category == filters.category
         archiveOk && attentionOk && categoryOk
       }
-      // Attention first: sizes fully out outrank sizes merely low, then alphabetical so the
-      // order is stable and a design does not wander between refreshes.
+      // Attention first: sizes fully out outrank sizes merely low. WITHIN a group the most
+      // recently touched design comes first, so something just added or edited appears at
+      // the top of where you are looking rather than alphabetically buried halfway down.
+      // Alphabetical was the original tiebreak and it made new designs effectively invisible.
       .sortedWith(
         compareByDescending<com.sc.biap.data.Design> { it.stats().outSizes }
           .thenByDescending { it.stats().lowSizes }
+          .thenByDescending { it.updatedAt }
           .thenBy { it.name.lowercase() }
       )
 
@@ -83,6 +86,10 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
       categories = active.map { it.category }.filter { it.isNotBlank() }.distinct().sorted(),
       filters = filters,
       archivedCount = data.designs.count { it.isArchived },
+      // The size of the whole active catalogue, NOT of the filtered view. The header reads
+      // this, and a count that shrinks when you tap a filter looks exactly like designs
+      // going missing.
+      totalCount = active.size,
     )
     out
   }
@@ -125,6 +132,7 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
 
   val authManager get() = dataRepository.authManager
   val isSyncing: StateFlow<Boolean> = dataRepository.isSyncing
+  val lastSyncAt: StateFlow<Long> = dataRepository.lastSyncAt
   val syncStatus: StateFlow<com.sc.biap.data.SyncStatus> = dataRepository.syncStatus
 
   fun syncWithGoogleDrive() {
@@ -178,5 +186,7 @@ sealed interface MainScreenUiState {
     val categories: List<String> = emptyList(),
     val filters: CatalogueFilters = CatalogueFilters(),
     val archivedCount: Int = 0,
+    /** Every active design, regardless of the filters currently applied. */
+    val totalCount: Int = 0,
   ) : MainScreenUiState
 }

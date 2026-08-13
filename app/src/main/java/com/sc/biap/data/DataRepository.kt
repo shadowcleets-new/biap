@@ -92,6 +92,9 @@ interface DataRepository {
     // Google Auth & Drive Sync
     val authManager: AuthManager
     val isSyncing: StateFlow<Boolean>
+
+    /** Epoch millis of the last completed sync, or 0 if none since launch. */
+    val lastSyncAt: StateFlow<Long>
     val syncStatus: StateFlow<SyncStatus>
     fun syncWithGoogleDrive()
     /** Store the passphrase that wraps the sync key, then retry the sync. */
@@ -142,6 +145,17 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val _isSyncing = MutableStateFlow(false)
     override val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
+    /**
+     * When a sync last actually completed. 0 means "not since this launch".
+     *
+     * Kept because the catalogue header claims to show it. It previously showed the newest
+     * design's edit time instead, which looks identical most of the time and is wrong exactly
+     * when it matters - after a sync that changed nothing, or a sync that silently failed.
+     * A header that reports success it cannot observe is worse than one that says nothing.
+     */
+    private val _lastSyncAt = MutableStateFlow(0L)
+    override val lastSyncAt: StateFlow<Long> = _lastSyncAt.asStateFlow()
     private val _syncStatus = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
     override val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
     private var driveFileId: String? = null
@@ -541,6 +555,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                         }
                         androidx.work.WorkInfo.State.SUCCEEDED -> {
                             _isSyncing.value = false
+                            _lastSyncAt.value = System.currentTimeMillis()
                             _syncStatus.value = SyncStatus.Success("Sync completed successfully.")
                             return@collect   // terminal: stop observing
                         }

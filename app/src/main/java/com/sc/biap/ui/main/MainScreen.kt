@@ -153,17 +153,32 @@ fun MainScreen(
     }
 
     val pullState = rememberPullToRefreshState()
-    // "48 designs · updated 09:12" - the catalogue's own state, under its name.
-    val catalogueStatusLine: (MainScreenUiState, Boolean) -> String = { s, syncing ->
-        val designs = (s as? MainScreenUiState.Success)?.data?.designs.orEmpty()
+    val lastSyncAt by viewModel.lastSyncAt.collectAsStateWithLifecycle()
+
+    /**
+     * "48 designs · synced 09:12".
+     *
+     * Two things this deliberately gets right, having got both wrong first time round:
+     *
+     *  - The count is the WHOLE catalogue, not the filtered view. A number that drops when
+     *    you tap a filter is indistinguishable from designs disappearing.
+     *  - The time is a real sync completion, not the newest design's edit time. The old
+     *    version read "UPDATED 19:08" off the last edit, so it sat frozen while syncs
+     *    succeeded behind it - a header reporting success it never actually observed.
+     *
+     * Says "not synced yet" rather than inventing a time when none is known.
+     */
+    val catalogueStatusLine: (MainScreenUiState, Boolean, Long) -> String = { s, syncing, syncedAt ->
+        val total = (s as? MainScreenUiState.Success)?.totalCount ?: 0
+        val designs = if (total == 1) "1 DESIGN" else "$total DESIGNS"
         when {
-            syncing -> "SYNCING"
-            designs.isEmpty() -> "NO DESIGNS YET"
+            syncing -> "SYNCING…"
+            total == 0 -> "NO DESIGNS YET"
+            syncedAt == 0L -> "$designs · NOT SYNCED YET"
             else -> {
-                val newest = designs.maxOf { it.updatedAt }
                 val stamp = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-                    .format(java.util.Date(newest))
-                "${designs.size} DESIGNS · UPDATED $stamp"
+                    .format(java.util.Date(syncedAt))
+                "$designs · SYNCED $stamp"
             }
         }
     }
@@ -299,7 +314,7 @@ fun MainScreen(
     Scaffold(
         topBar = {
             CatalogueHeader(
-                statusLine = catalogueStatusLine(state, isSyncing),
+                statusLine = catalogueStatusLine(state, isSyncing, lastSyncAt),
                 actions = {
                     if (currentUser != null) {
                         Row(
