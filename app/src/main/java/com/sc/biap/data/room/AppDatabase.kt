@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DeletedCustomFieldEntity::class,
         UserProfileEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -75,7 +75,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v5 -> v6: archiving, which replaced deletion as the way to retire a design.
+         *
+         * Two columns rather than one. `archivedAt` is the state (0 = active);
+         * `archiveUpdatedAt` records when that state last changed, so sync can resolve the
+         * flag on its own clock. Without the second column, a device editing a price while
+         * holding a stale archive state would drag it along and silently un-archive the
+         * design - the same trap the image pointer already avoids.
+         *
+         * Purely additive, defaulted to 0, so every existing design reads as active.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE designs ADD COLUMN archivedAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE designs ADD COLUMN archiveUpdatedAt INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         /** Every migration the app knows about. Pass to `addMigrations(*ALL_MIGRATIONS)`. */
-        val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4, MIGRATION_4_5)
+        val ALL_MIGRATIONS: Array<Migration> =
+            arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
     }
 }

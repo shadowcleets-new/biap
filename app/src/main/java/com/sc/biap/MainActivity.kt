@@ -8,12 +8,18 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -31,13 +37,29 @@ import com.google.firebase.auth.auth
 import com.google.firebase.initialize
 import androidx.fragment.app.FragmentActivity
 import com.sc.biap.security.AccountLinker
+import com.sc.biap.ui.auth.AuthBackButton
 import com.sc.biap.ui.auth.AuthChoiceScreen
+import com.sc.biap.ui.auth.AuthErrorLine
+import com.sc.biap.ui.auth.AuthField
+import com.sc.biap.ui.auth.AuthInfoCard
+import com.sc.biap.ui.auth.AuthPrimaryAction
+import com.sc.biap.ui.auth.AuthScaffold
+import com.sc.biap.ui.auth.AuthTitle
+import com.sc.biap.ui.auth.OtpCell
 import com.sc.biap.ui.VerticalButtonGroup
 import com.sc.biap.ui.rememberVerticalButtonGroupShapes
 import com.sc.biap.security.AppLock
 import com.sc.biap.security.BiometricGate
 import com.sc.biap.theme.BiapTheme
+import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
+
+/**
+ * How long a sign-in request may sit with no answer before the UI takes the button back.
+ *
+ * Under Firebase's own 120s timeout on purpose, so the person regains control first.
+ */
+private const val STALLED_REQUEST_MS = 90_000L
 
 // FragmentActivity rather than ComponentActivity: BiometricPrompt attaches to the
 // fragment manager, and there is no supported way to show it from a bare ComponentActivity.
@@ -159,61 +181,16 @@ fun EmailAuthScreen(
     var errorMessage by remember { mutableStateOf("") }
     var isSignUp by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            if (isSignUp) "Create Account" else "Sign In",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        OutlinedTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = { Text("Email") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            enabled = !isLoading,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
-        )
-
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Password") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            enabled = !isLoading,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-        )
-
-        if (errorMessage.isNotEmpty()) {
-            Text(
-                errorMessage,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 12.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
+    AuthScaffold(actions = {
+        AuthPrimaryAction(
+            label = if (isSignUp) "Create account" else "Sign in",
+            loadingLabel = if (isSignUp) "Creating..." else "Signing in...",
+            isLoading = isLoading,
+            enabled = true,
             onClick = {
                 if (email.isBlank() || password.isBlank()) {
                     errorMessage = "Email and password required"
-                    return@Button
+                    return@AuthPrimaryAction
                 }
 
                 isLoading = true
@@ -245,40 +222,67 @@ fun EmailAuthScreen(
                             isLoading = false
                         }
                 }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-            enabled = !isLoading
+            }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (isLoading) {
-                LoadingIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            } else {
-                Text(if (isSignUp) "Create Account" else "Sign In")
+            Text(
+                text = if (isSignUp) "Already registered?" else "No account yet?",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(
+                shapes = ButtonDefaults.shapes(),
+                onClick = { isSignUp = !isSignUp },
+                enabled = !isLoading
+            ) {
+                Text(if (isSignUp) "Sign in" else "Create account")
             }
         }
+    }) {
+        AuthBackButton(onBack = onBack)
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        AuthTitle(
+            title = if (isSignUp) "Create account" else "Sign in",
+            supporting = if (isSignUp) {
+                "Your admin still decides what you can see."
+            } else {
+                "Use the address your admin registered."
+            }
+        )
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        AuthField(
+            value = email,
+            onValueChange = { email = it },
+            label = "Email",
+            isError = errorMessage.isNotEmpty(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+        )
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        TextButton(onClick = { isSignUp = !isSignUp }, enabled = !isLoading) {
-            Text(
-                if (isSignUp) "Already have an account? Sign in" else "Don't have an account? Sign up"
-            )
-        }
+        AuthField(
+            value = password,
+            onValueChange = { password = it },
+            label = "Password",
+            isError = errorMessage.isNotEmpty(),
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+        )
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        OutlinedButton(
-            onClick = onBack,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-            enabled = !isLoading
-        ) {
-            Text("Back")
+        if (errorMessage.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            AuthErrorLine(errorMessage)
         }
     }
 }
@@ -290,6 +294,11 @@ fun PhoneAuthScreen(
     activity: Activity,
     onBack: () -> Unit
 ) {
+    // The dial code is a separate field with the local one already filled in. Retyping
+    // "+91" on every attempt is pure friction, and pre-filling the whole field instead
+    // would leave the caret sitting in front of it half the time.
+    var dialCode by remember { mutableStateOf("+91") }
+    var localNumber by remember { mutableStateOf("") }
     var phoneNumber by remember { mutableStateOf("") }
     var otpCode by remember { mutableStateOf("") }
     var otpSent by remember { mutableStateOf(false) }
@@ -298,61 +307,72 @@ fun PhoneAuthScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            "Phone Sign In",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
+    /**
+     * Held while the reCAPTCHA challenge is in front of us.
+     *
+     * Phone verification hands the screen to a browser tab, which is indistinguishable from
+     * the user leaving BIAP - so the app lock arms itself, and on return the fingerprint
+     * prompt replaces this screen, taking the pending verification down with it. The Google
+     * sign-in path already brackets its picker this way; this path never did, which is why
+     * it hung rather than failed.
+     */
+    var lockHeld by remember { mutableStateOf(false) }
 
-        Spacer(modifier = Modifier.height(24.dp))
+    fun releaseLock() {
+        if (lockHeld) {
+            AppLock.endTrustedFlow()
+            lockHeld = false
+        }
+    }
 
+    // A request that never comes back must not leave the button dead forever.
+    //
+    // Every path Firebase tells us about clears isLoading, but "tells us about" is the weak
+    // part: if the challenge is dismissed, or the tab never redirects back, no callback
+    // arrives at all and the spinner runs until the app is killed. Not hypothetical - it is
+    // what stranded this screen.
+    //
+    // 90 seconds because someone may genuinely be solving a reCAPTCHA and must not have it
+    // cancelled from under them, and because Firebase gives itself 120, so control comes
+    // back before its own timeout would.
+    LaunchedEffect(isLoading) {
+        if (!isLoading) return@LaunchedEffect
+        delay(STALLED_REQUEST_MS)
+        releaseLock()
+        isLoading = false
+        errorMessage = "That took too long. Check your connection and try again."
+    }
+
+    AuthScaffold(actions = {
         if (!otpSent) {
-            OutlinedTextField(
-                value = phoneNumber,
-                onValueChange = { phoneNumber = it },
-                label = { Text("Phone Number (+91XXXXXXXXXX)") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                enabled = !isLoading,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-            )
-
-            if (errorMessage.isNotEmpty()) {
-                Text(
-                    errorMessage,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(
+            AuthPrimaryAction(
+                label = "Send code",
+                loadingLabel = "Sending...",
+                isLoading = isLoading,
+                enabled = true,
                 onClick = {
-                    if (phoneNumber.isBlank()) {
+                    // Built here rather than trusted from the field: people paste numbers
+                    // with spaces, dashes and a leading 0, and all three are recoverable.
+                    val code = dialCode.filter { it.isDigit() }
+                    val local = localNumber.filter { it.isDigit() }.trimStart('0')
+                    val e164 = "+$code$local"
+
+                    if (local.isBlank()) {
                         errorMessage = "Phone number required"
-                        return@Button
+                        return@AuthPrimaryAction
                     }
-                    if (!phoneNumber.matches(Regex("^\\+\\d{1,3}\\d{6,14}$"))) {
-                        errorMessage = "Invalid format. Use: +91XXXXXXXXXX"
-                        return@Button
+                    if (!e164.matches(Regex("^\\+\\d{1,3}\\d{6,14}$"))) {
+                        errorMessage = "That number does not look right. Check the digits."
+                        return@AuthPrimaryAction
                     }
+                    phoneNumber = e164
 
                     isLoading = true
                     errorMessage = ""
 
                     val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
                         override fun onVerificationCompleted(credential: com.google.firebase.auth.PhoneAuthCredential) {
+                            releaseLock()
                             isLoading = false
                             // Links to the account already in use rather than switching to a
                             // separate phone-only account with its own empty catalogue.
@@ -362,6 +382,7 @@ fun PhoneAuthScreen(
                         }
 
                         override fun onVerificationFailed(e: com.google.firebase.FirebaseException) {
+                            releaseLock()
                             isLoading = false
                             errorMessage = when {
                                 e.message?.contains("reCAPTCHA") == true ->
@@ -378,71 +399,48 @@ fun PhoneAuthScreen(
                             newVerificationId: String,
                             token: PhoneAuthProvider.ForceResendingToken
                         ) {
+                            releaseLock()
                             verificationId = newVerificationId
                             resendToken = token
                             otpSent = true
                             isLoading = false
                             errorMessage = ""
                         }
+
+                        override fun onCodeAutoRetrievalTimeOut(id: String) {
+                            // The SMS auto-reader gave up. Harmless by itself - the code can
+                            // still be typed - but if a spinner is somehow still running at
+                            // this point, nothing further is coming, so release the button.
+                            releaseLock()
+                            isLoading = false
+                        }
                     }
 
                     val options = PhoneAuthOptions.newBuilder(auth)
-                        .setPhoneNumber(phoneNumber)
+                        .setPhoneNumber(e164)
                         .setTimeout(120L, TimeUnit.SECONDS)
                         .setActivity(activity)
                         .setCallbacks(callbacks)
                         .build()
 
+                    // Claimed BEFORE the call, because the browser tab can appear before it
+                    // returns. Every callback above releases it, as does the stall watchdog.
+                    AppLock.beginTrustedFlow()
+                    lockHeld = true
+
                     PhoneAuthProvider.verifyPhoneNumber(options)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                enabled = !isLoading
-            ) {
-                if (isLoading) {
-                    LoadingIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Text("Send OTP")
                 }
-            }
+            )
         } else {
-            Text(
-                "OTP sent to $phoneNumber",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(bottom = 24.dp)
-            )
-
-            OutlinedTextField(
-                value = otpCode,
-                onValueChange = { otpCode = it },
-                label = { Text("Enter 6-digit OTP") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                enabled = !isLoading,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-            )
-
-            if (errorMessage.isNotEmpty()) {
-                Text(
-                    errorMessage,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(
+            AuthPrimaryAction(
+                label = "Verify",
+                loadingLabel = "Verifying...",
+                isLoading = isLoading,
+                enabled = true,
                 onClick = {
                     if (otpCode.isBlank() || otpCode.length != 6) {
                         errorMessage = "Enter 6-digit OTP"
-                        return@Button
+                        return@AuthPrimaryAction
                     }
 
                     isLoading = true
@@ -456,42 +454,104 @@ fun PhoneAuthScreen(
                         errorMessage = error ?: ""
                         if (error != null) isLoading = false
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                enabled = !isLoading
+                }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
             ) {
-                if (isLoading) {
-                    LoadingIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Text("Verify OTP")
+                TextButton(
+                    onClick = { otpSent = false; errorMessage = "" },
+                    enabled = !isLoading
+                ) {
+                    Text("Use a different number")
                 }
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            TextButton(onClick = {
-                otpSent = false
-                errorMessage = ""
-            }, enabled = !isLoading) {
-                Text("Use different number")
-            }
         }
+    }) {
+        // Back steps out of the code screen first, not straight out of sign-in - a mistyped
+        // number is the common case and re-sending an SMS to correct it is not free.
+        AuthBackButton(
+            onBack = if (otpSent) ({ otpSent = false; errorMessage = "" }) else onBack
+        )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(28.dp))
 
-        OutlinedButton(
-            onClick = onBack,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-            enabled = !isLoading
-        ) {
-            Text("Back")
+        if (!otpSent) {
+            AuthTitle(
+                title = "Your number",
+                supporting = "We send a 6-digit code by SMS."
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                AuthField(
+                    value = dialCode,
+                    onValueChange = { entry ->
+                        // Always exactly one leading '+', then digits.
+                        dialCode = "+" + entry.filter { it.isDigit() }.take(3)
+                    },
+                    label = "Code",
+                    isError = errorMessage.isNotEmpty(),
+                    modifier = Modifier.width(116.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                )
+                AuthField(
+                    value = localNumber,
+                    onValueChange = { entry -> localNumber = entry.filter { it.isDigit() }.take(14) },
+                    label = "Phone number",
+                    isError = errorMessage.isNotEmpty(),
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                )
+            }
+
+            if (errorMessage.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                AuthErrorLine(errorMessage)
+            }
+        } else {
+            AuthTitle(
+                title = "Enter code",
+                supporting = "Sent to $phoneNumber"
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // The six cells ARE the field: a real text field sits underneath with its own
+            // rendering suppressed, so the platform keyboard and SMS autofill still work.
+            val otpFocus = remember { FocusRequester() }
+            BasicTextField(
+                value = otpCode,
+                onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) otpCode = it },
+                enabled = !isLoading,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                cursorBrush = SolidColor(Color.Transparent),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(otpFocus),
+                decorationBox = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        repeat(6) { index ->
+                            OtpCell(
+                                digit = otpCode.getOrNull(index),
+                                isNext = index == otpCode.length,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            )
+            LaunchedEffect(Unit) { otpFocus.requestFocus() }
+
+            if (errorMessage.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                AuthErrorLine(errorMessage)
+            }
         }
     }
 }
@@ -533,72 +593,79 @@ fun GoogleSignInScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            "Google Sign In",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Spacer(modifier = Modifier.height(48.dp))
-
-        Text(
-            "Select your Google account to continue",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
-        if (errorMessage.isNotEmpty()) {
-            Text(
-                errorMessage,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 24.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(48.dp))
-
-        Button(
+    AuthScaffold(actions = {
+        AuthPrimaryAction(
+            label = "Continue with Google",
+            loadingLabel = "Opening...",
+            isLoading = isLoading,
+            enabled = true,
             onClick = {
                 isLoading = true
                 errorMessage = ""
                 val signInIntent = googleSignInClient.signInIntent
                 AppLock.beginTrustedFlow()
                 googleSignInLauncher.launch(signInIntent)
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-            enabled = !isLoading
-        ) {
-            if (isLoading) {
-                LoadingIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            } else {
-                Text("Open Google Account Selector")
             }
-        }
+        )
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        OutlinedButton(
-            onClick = onBack,
+        Text(
+            "Access is still governed by your BIAP role.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }) {
+        AuthBackButton(onBack = onBack)
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // Google's mark keeps its own brand colour; the badge behind it takes the theme.
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-            enabled = !isLoading
+                .size(72.dp)
+                .clip(MaterialShapes.Sunny.toShape())
+                .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+            contentAlignment = Alignment.Center
         ) {
-            Text("Back")
+            Text(
+                "G",
+                style = MaterialTheme.typography.headlineSmallEmphasized,
+                color = Color(0xFF4285F4)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        AuthTitle(
+            title = "Connect Google",
+            supporting = "Signing in also sets up encrypted backup."
+        )
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // Say what is actually granted before the picker opens, not after.
+        AuthInfoCard(
+            title = "Your identity",
+            body = "Name and email, used to recognise you across devices."
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        AuthInfoCard(
+            title = "Drive backup",
+            body = "An app-private folder holds your encrypted catalogue. Nothing else in Drive is visible to BIAP.",
+            highlighted = true
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        AuthInfoCard(
+            title = "Nothing is shared",
+            body = "No contacts, no posting, no access to your other files."
+        )
+
+        if (errorMessage.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            AuthErrorLine(errorMessage)
         }
     }
 }

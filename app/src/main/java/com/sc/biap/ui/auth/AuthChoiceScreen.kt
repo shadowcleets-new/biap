@@ -76,13 +76,7 @@ fun AuthChoiceScreen(
 ) {
     val scheme = MaterialTheme.colorScheme
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(scheme.surface)
-            .padding(horizontal = 24.dp)
-            .padding(top = 24.dp, bottom = 32.dp)
-    ) {
+    AuthScaffold(modifier = modifier) {
         // --- identity ------------------------------------------------------
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(

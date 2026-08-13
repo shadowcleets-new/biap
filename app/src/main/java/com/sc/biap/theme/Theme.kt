@@ -7,6 +7,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -109,6 +110,20 @@ fun BiapTheme(
 
   MaterialExpressiveTheme(
     colorScheme = colorScheme,
+    // Stated rather than left to the default, because it is the whole point of the language.
+    //
+    // Expressive replaces duration-based easing with springs, and splits them in two:
+    // SPATIAL springs (position, size, shape) run at damping 0.6-0.8 so movement overshoots
+    // slightly and settles - that overshoot IS the liveliness. EFFECTS springs (colour,
+    // opacity) are pinned at damping 1.0 so a tint never wobbles.
+    //
+    // Values read out of ExpressiveMotionTokens in material3 1.5.0-alpha25:
+    //   spatial  default 0.8/380   fast 0.6/800   slow 0.8/200
+    //   effects  default 1.0/1600  fast 1.0/3800  slow 1.0/800
+    //
+    // Applied app-wide on purpose. Two motion personalities in one app reads as a bug
+    // rather than a choice.
+    motionScheme = MotionScheme.expressive(),
     typography = Typography,
     content = content
   )

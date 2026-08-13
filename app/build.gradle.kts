@@ -151,6 +151,7 @@ dependencies {
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
   implementation(libs.coil.compose)
+  implementation(libs.coil.network.okhttp)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.androidx.material.icons.extended)
   implementation(libs.okhttp)

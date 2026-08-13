@@ -56,23 +56,78 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
 
+    // --- invitations ---------------------------------------------------------
+    //
+    // An invite is written before its subject has an account, so it is filed under their
+    // phone number rather than a uid. request.auth.token.phone_number is minted by Firebase
+    // only after it has verified that number by SMS, so a client cannot claim to be someone
+    // else's invite - which is what makes it safe to let an invitee apply their own role.
+
+    function myPhone() {
+      return request.auth.token.phone_number;
+    }
+
+    function hasInvite() {
+      return signedIn()
+        && myPhone() != null
+        && exists(/databases/$(database)/documents/invites/$(myPhone()));
+    }
+
+    function invitedRole() {
+      return get(/databases/$(database)/documents/invites/$(myPhone())).data.role;
+    }
+
+    match /invites/{phone} {
+
+      // Managers see the pending list. The invitee reads only the one addressed to them,
+      // which is all they need to accept it.
+      allow read: if isAccessManager() || (signedIn() && myPhone() == phone);
+
+      // An invite must not be a way around canAssign. VIEWER stands in as the target's
+      // current level because that is what someone with no account starts from - so an
+      // Admin can invite a Manager but cannot mint an Admin by writing an invite instead
+      // of assigning a role.
+      allow create, update: if isAccessManager()
+        && canAssign('VIEWER', request.resource.data.role);
+
+      // Withdrawn by a manager, or consumed by the person accepting it. Consumption is why
+      // the invitee gets delete: a grant that outlives its use would follow a recycled
+      // phone number to whoever gets it next.
+      allow delete: if isAccessManager() || (signedIn() && myPhone() == phone);
+    }
+
     match /users/{uid} {
 
       // Everyone reads their own. Access managers read everyone, because assigning roles
       // requires seeing who exists - a list you cannot read is a list you cannot manage.
       allow read: if signedIn() && (request.auth.uid == uid || isAccessManager());
 
-      // First sign-in publishes an identity record. role is pinned to VIEWER here, so a
-      // new account cannot arrive pre-promoted by a tampered client.
+      // First sign-in publishes an identity record. role is pinned to VIEWER, so a new
+      // account cannot arrive pre-promoted by a tampered client - UNLESS there is an invite
+      // addressed to this account's own Firebase-verified phone number, in which case it may
+      // start at exactly the level that invite names and no other.
       allow create: if signedIn()
         && request.auth.uid == uid
-        && request.resource.data.role == 'VIEWER';
+        && (request.resource.data.role == 'VIEWER'
+            || (hasInvite() && request.resource.data.role == invitedRole()));
 
       // Updating your OWN record: identity only. The role must come out unchanged, which
       // is what stops anyone promoting themselves no matter what the app sends.
       allow update: if signedIn()
         && request.auth.uid == uid
         && request.resource.data.role == resource.data.role;
+
+      // Accepting an invite that arrived after the account already existed.
+      //
+      // Narrow on purpose: only onto a record still at VIEWER, only to the level in the
+      // invite for this account's verified number, and only the role fields. It can promote
+      // someone who was waiting; it cannot alter anybody who already has a real level.
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && resource.data.role == 'VIEWER'
+        && hasInvite()
+        && request.resource.data.role == invitedRole()
+        && changedKeys().hasOnly(['role', 'roleUpdatedAt', 'roleUpdatedBy']);
 
       // An access manager changing SOMEBODY ELSE'S role.
       //

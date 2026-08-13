@@ -79,25 +79,50 @@ object AccessLevelStore {
      *
      * Called on sign-in. Creates the record at VIEWER - which the rules also pin, so a
      * tampered client cannot arrive pre-promoted - and afterwards only ever refreshes the
-     * name and contact. The role is deliberately absent from the update path: a write that
-     * carries a role is a write the server rejects for anyone editing their own record.
+     * name and contact. The role is deliberately absent from the ordinary update path: a
+     * write that carries a role is a write the server rejects for anyone editing their own
+     * record.
+     *
+     * THE ONE EXCEPTION IS AN INVITE.
+     *   A person invited by phone may set their own role, once, to the level named in the
+     *   invite addressed to their own number. That is safe because the number in the invite
+     *   is matched against the one Firebase itself put in the token after verifying it by
+     *   SMS - the client never asserts who it is. See [InviteStore] and firestore.rules.
      */
     suspend fun publishIdentity(): Unit = withContext(Dispatchers.IO) {
         val user = FirebaseAuth.getInstance().currentUser ?: return@withContext
         try {
             val document = users.document(user.uid)
             val existing = document.get().await()
+            val invited = InviteStore.invitedLevelFor(user)
 
             if (!existing.exists()) {
                 document.set(
                     mapOf(
-                        FIELD_ROLE to AccessLevel.DEFAULT.name,
+                        FIELD_ROLE to (invited ?: AccessLevel.DEFAULT).name,
                         FIELD_NAME to displayNameOf(user),
                         FIELD_CONTACT to contactOf(user),
                     )
                 ).await()
-                Log.i(TAG, "published identity for uid=${user.uid} at ${AccessLevel.DEFAULT}")
+                Log.i(TAG, "published identity for uid=${user.uid} at ${invited ?: AccessLevel.DEFAULT}")
+                if (invited != null) InviteStore.consume(user)
                 return@withContext
+            }
+
+            // An invite that arrives after the account already exists - someone signed in
+            // before being invited. Only ever applied to a record still sitting at the
+            // fail-closed default, so an invite can never quietly DEMOTE an existing member.
+            val current = AccessLevel.fromName(existing.getString(FIELD_ROLE))
+            if (invited != null && current == AccessLevel.DEFAULT && invited != AccessLevel.DEFAULT) {
+                document.update(
+                    mapOf(
+                        FIELD_ROLE to invited.name,
+                        FIELD_ROLE_UPDATED_AT to FieldValue.serverTimestamp(),
+                        FIELD_ROLE_UPDATED_BY to user.uid,
+                    )
+                ).await()
+                Log.i(TAG, "applied invite for uid=${user.uid}: $invited")
+                InviteStore.consume(user)
             }
 
             // Identity only. Including the role here would be rejected the moment it

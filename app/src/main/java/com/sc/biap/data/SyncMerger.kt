@@ -21,20 +21,31 @@ object SyncMerger {
         // LWW would mean an edit to any field (a price, a karigar) drags that writer's older
         // imageRef along with it and silently discards a newer photo someone else uploaded.
         // Winning the record and winning the photo are two different questions.
+        // The archive flag is resolved independently too, for exactly the same reason: a
+        // device holding a stale archive state that edits a price would otherwise drag that
+        // state along and silently un-archive - or worse, re-archive - the design.
         val allDesigns = (localData.designs + remoteData.designs)
             .groupBy { it.id }
             .mapValues { (_, designsList) ->
                 val winner = designsList.maxByOrNull { it.updatedAt }!!
                 val newestImage = designsList.maxByOrNull { it.imageUpdatedAt }!!
+                val newestArchive = designsList.maxByOrNull { it.archiveUpdatedAt }!!
+
+                var resolved = winner
                 if (newestImage.imageUpdatedAt > winner.imageUpdatedAt) {
-                    winner.copy(
+                    resolved = resolved.copy(
                         imageRef = newestImage.imageRef,
                         imageUpdatedAt = newestImage.imageUpdatedAt,
                         imageUpdatedBy = newestImage.imageUpdatedBy
                     )
-                } else {
-                    winner
                 }
+                if (newestArchive.archiveUpdatedAt > winner.archiveUpdatedAt) {
+                    resolved = resolved.copy(
+                        archivedAt = newestArchive.archivedAt,
+                        archiveUpdatedAt = newestArchive.archiveUpdatedAt
+                    )
+                }
+                resolved
             }
         val mergedDesigns = allDesigns.values.filter { design ->
             val deletedAt = mergedDeleted[design.id] ?: -1L

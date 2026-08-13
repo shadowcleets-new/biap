@@ -17,7 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.CloudOff
@@ -86,6 +88,14 @@ fun DesignDetailScreen(
     designId: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Open with this size already selected, set when a size cell in the catalogue was tapped.
+     *
+     * The inventory card already picks one size at a time, so a deep link is simply a
+     * different starting selection - no scrolling, no highlight overlay, no second way of
+     * showing the same thing.
+     */
+    focusSize: String? = null,
     viewModel: DesignDetailViewModel = defaultDesignDetailViewModel(designId)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -259,12 +269,34 @@ fun DesignDetailScreen(
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
-                                IconButton(onClick = { showDeleteDialog = true }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Delete",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
+                                // Archive, not delete. A discontinued design is the record of
+                                // what the workshop actually made - its costs, prices and
+                                // karigars are history worth keeping. Permanent deletion is
+                                // still reachable, but only from the archived state, so it
+                                // takes a deliberate second decision.
+                                if (design.isArchived) {
+                                    IconButton(onClick = { viewModel.setArchived(false) }) {
+                                        Icon(
+                                            Icons.Default.Unarchive,
+                                            contentDescription = "Restore to catalogue",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    IconButton(onClick = { showDeleteDialog = true }) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete permanently",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                } else {
+                                    IconButton(onClick = { viewModel.setArchived(true) }) {
+                                        Icon(
+                                            Icons.Default.Archive,
+                                            contentDescription = "Archive",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -303,7 +335,10 @@ fun DesignDetailScreen(
                             onEditSizesChange = { editSizes = it },
                         )
                     } else {
-                        InventoryPricingCard(design = design)
+                        if (design.isArchived) {
+                            ArchivedNotice()
+                        }
+                        InventoryPricingCard(design = design, focusSize = focusSize)
                     }
 
                     AssignedKarigarsCard(
@@ -894,9 +929,48 @@ private fun SizeStockPriceEditorCard(
  * Reads nothing but the design. The selected-size index is local and keyed on design.id
  * rather than the design object, so a background sync refresh does not reset the choice.
  */
+/**
+ * Says plainly that this design is out of the working catalogue, and why that is reversible.
+ *
+ * Tonal rather than an error colour: archiving is a normal, intended act, not a fault.
+ */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun InventoryPricingCard(design: Design) {
+private fun ArchivedNotice() {
+    Card(
+        shape = AtelierShapes.CornerLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(AtelierSpacing.Base),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
+        ) {
+            Icon(
+                Icons.Default.Archive,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Column {
+                Text("Archived", style = MaterialTheme.typography.titleMediumStrong)
+                Text(
+                    "Hidden from the catalogue. Its stock and prices are kept, and it can be " +
+                        "restored at any time.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun InventoryPricingCard(design: Design, focusSize: String? = null) {
     Card(
         shape = AtelierShapes.CornerLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -920,7 +994,16 @@ private fun InventoryPricingCard(design: Design) {
                 // Keyed on the design ID (not the object) so a background sync
                 // refresh does not reset the user's selection; clamped as a
                 // value instead of writing state during composition (BUG-16).
-                var selectedSizeIndexRaw by remember(design.id) { mutableStateOf(0) }
+                var selectedSizeIndexRaw by remember(design.id) {
+                    // Start on the size the catalogue was asking about, if it was asking.
+                    // coerceAtLeast(0) covers a size that has since been renamed or removed -
+                    // arriving at the first size is better than arriving at nothing.
+                    mutableStateOf(
+                        sortedInventories
+                            .indexOfFirst { it.size.equals(focusSize, ignoreCase = true) }
+                            .coerceAtLeast(0)
+                    )
+                }
                 val selectedSizeIndex = selectedSizeIndexRaw.coerceIn(0, (sortedInventories.size - 1).coerceAtLeast(0))
 
                 val activeInventory = sortedInventories.getOrNull(selectedSizeIndex)
@@ -1422,8 +1505,14 @@ private fun DeleteDesignDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete Design") },
-        text = { Text("Are you sure you want to delete this design? This action cannot be undone.") },
+        title = { Text("Delete permanently?") },
+        text = {
+            Text(
+                "This destroys the design and its whole size, price and karigar history on " +
+                    "every device. It cannot be undone. If you only want it out of the " +
+                    "catalogue, close this and leave it archived instead."
+            )
+        },
         confirmButton = {
             TextButton(shapes = ButtonDefaults.shapes(), onClick = onConfirmDelete,
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)

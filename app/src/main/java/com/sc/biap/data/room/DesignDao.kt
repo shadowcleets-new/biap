@@ -49,6 +49,17 @@ interface DesignDao {
     @Query("SELECT imageRef FROM designs WHERE id = :id")
     suspend fun getImageRef(id: String): String?
 
+    /**
+     * Archive or restore. Pass 0 as [archivedAt] to restore.
+     *
+     * [changedAt] is written to archiveUpdatedAt so sync can resolve the flag on its own
+     * clock, independently of edits to the rest of the record. Deliberately does NOT touch
+     * updatedAt: archiving is not an edit to the design's contents, and bumping it would let
+     * an archive action win a merge against a genuine price change made elsewhere.
+     */
+    @Query("UPDATE designs SET archivedAt = :archivedAt, archiveUpdatedAt = :changedAt WHERE id = :id")
+    suspend fun setArchived(id: String, archivedAt: Long, changedAt: Long)
+
     @Query("DELETE FROM designs WHERE id = :id")
     suspend fun deleteDesign(id: String)
 

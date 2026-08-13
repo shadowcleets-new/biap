@@ -4,6 +4,35 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!--
+      Package visibility for the phone sign-in fallback.
+
+      Phone verification first asks Play Integrity to vouch for the app. A build installed
+      over adb was never distributed by Google Play, so Play cannot recognise it and the
+      server answers ALTERNATE_CLIENT_IDENTIFIER_REQUIRED. Firebase then falls back to a
+      reCAPTCHA challenge, which it shows in a Custom Tab.
+
+      Since Android 11 an app cannot see another app unless it declares the intent it wants
+      to resolve. Without these two entries the browser lookup returns nothing, the challenge
+      is never displayed, and the SDK quietly retries the request WITHOUT a verification
+      token - which the server rejects as MISSING_CLIENT_IDENTIFIER. The visible symptom is
+      "reCAPTCHA verification failed" even though every console setting is correct.
+
+      androidx.browser carries this declaration from 1.5.0 onward; the version resolved here
+      transitively is 1.4.0, which does not, so it is declared explicitly rather than left to
+      depend on which version some other library happens to pull in.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"

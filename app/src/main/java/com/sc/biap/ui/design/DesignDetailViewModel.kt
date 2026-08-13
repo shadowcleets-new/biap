@@ -36,6 +36,12 @@ class DesignDetailViewModel(
         }
     }
 
+    /** Retire the design, or bring it back. The ordinary alternative to deleting it. */
+    fun setArchived(archived: Boolean) {
+        repository.setDesignArchived(designId, archived)
+    }
+
+    /** Destroy it for good. Offered only once a design is already archived. */
     fun deleteDesign() {
         repository.deleteDesign(designId)
     }

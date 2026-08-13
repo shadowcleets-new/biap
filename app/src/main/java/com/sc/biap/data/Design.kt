@@ -27,8 +27,27 @@ data class Design(
     val sizeInventories: List<SizeInventory> = emptyList(),
     val customFields: Map<String, String> = emptyMap(),
     val karigars: List<String> = emptyList(),
+    /**
+     * When this design was archived, or 0 if it is active.
+     *
+     * Archiving replaced deletion as the ordinary way to retire a design: a discontinued
+     * style is history worth keeping, not a mistake to erase. Its stock, prices and karigars
+     * stay readable, it simply leaves the working catalogue.
+     */
+    val archivedAt: Long = 0L,
+    /**
+     * When [archivedAt] last changed - NOT when the design last changed.
+     *
+     * Carried separately for the same reason [imageUpdatedAt] is. Whole-record last-write-wins
+     * would mean someone editing a price on a device holding a stale archive state drags that
+     * stale state along and silently un-archives the design. Winning the record and winning
+     * the archive flag are two different questions.
+     */
+    val archiveUpdatedAt: Long = 0L,
     val updatedAt: Long = System.currentTimeMillis()
-)
+) {
+    val isArchived: Boolean get() = archivedAt > 0L
+}
 
 @Serializable
 data class BusinessIntelligenceData(

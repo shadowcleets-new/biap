@@ -22,7 +22,10 @@ data class DesignEntity(
     // Added in schema v4 - see AppDatabase.MIGRATION_3_4
     val imageRef: String? = null,
     val imageUpdatedAt: Long = 0L,
-    val imageUpdatedBy: String? = null
+    val imageUpdatedBy: String? = null,
+    // Added in schema v6 - see AppDatabase.MIGRATION_5_6
+    val archivedAt: Long = 0L,
+    val archiveUpdatedAt: Long = 0L
 )
 
 @Entity(
@@ -110,6 +113,8 @@ fun DesignWithInventories.toDomain(): Design {
         sizeInventories = inventories.map { it.toDomain() },
         customFields = design.customFields,
         karigars = design.karigars,
+        archivedAt = design.archivedAt,
+        archiveUpdatedAt = design.archiveUpdatedAt,
         updatedAt = design.updatedAt
     )
 }
@@ -133,6 +138,8 @@ fun Design.toEntity(): DesignEntity {
         imageUpdatedBy = imageUpdatedBy,
         customFields = customFields,
         karigars = karigars,
+        archivedAt = archivedAt,
+        archiveUpdatedAt = archiveUpdatedAt,
         updatedAt = updatedAt
     )
 }

@@ -127,6 +127,7 @@ fun MainNavigation() {
         entry<DesignDetail> { key ->
           DesignDetailScreen(
             designId = key.designId,
+            focusSize = key.focusSize,
             onBack = { backStack.removeLastOrNull() },
             modifier = Modifier.safeDrawingPadding()
           )

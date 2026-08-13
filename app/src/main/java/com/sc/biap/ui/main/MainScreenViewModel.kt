@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sc.biap.data.DataRepository
 import com.sc.biap.data.BusinessIntelligenceData
+import com.sc.biap.data.CatalogueSummary
+import com.sc.biap.data.stats
+import com.sc.biap.data.summarise
 import com.sc.biap.ui.main.MainScreenUiState.Success
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -12,16 +15,21 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 
 class MainScreenViewModel(private val dataRepository: DataRepository) : ViewModel() {
   private val _searchQuery = MutableStateFlow("")
   val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
+  private val _filters = MutableStateFlow(CatalogueFilters())
+  val filters: StateFlow<CatalogueFilters> = _filters.asStateFlow()
+
   val uiState: StateFlow<MainScreenUiState> = combine(
     dataRepository.biData,
-    _searchQuery
-  ) { data, query ->
-    val result: MainScreenUiState = if (query.isBlank()) {
+    _searchQuery,
+    _filters
+  ) { data, query, filters ->
+    val searched: MainScreenUiState = if (query.isBlank()) {
       Success(data)
     } else {
       val filteredDesigns = data.designs.filter { design ->
@@ -48,13 +56,67 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
       }
       Success(data.copy(designs = filteredDesigns))
     }
-    result
+
+    // The summary counts the WHOLE active catalogue, never the filtered view - otherwise
+    // filtering to "needs attention" would proudly report that nothing needs attention.
+    val active = data.designs.filterNot { it.isArchived }
+    val summary = active.summarise()
+
+    val visible = (searched as? Success)?.data?.designs.orEmpty()
+      .filter { design ->
+        val archiveOk = if (filters.showArchived) design.isArchived else !design.isArchived
+        val attentionOk = !filters.attentionOnly || design.stats().needsAttention
+        val categoryOk = filters.category == null || design.category == filters.category
+        archiveOk && attentionOk && categoryOk
+      }
+      // Attention first: sizes fully out outrank sizes merely low, then alphabetical so the
+      // order is stable and a design does not wander between refreshes.
+      .sortedWith(
+        compareByDescending<com.sc.biap.data.Design> { it.stats().outSizes }
+          .thenByDescending { it.stats().lowSizes }
+          .thenBy { it.name.lowercase() }
+      )
+
+    val out: MainScreenUiState = Success(
+      data = data.copy(designs = visible),
+      summary = summary,
+      categories = active.map { it.category }.filter { it.isNotBlank() }.distinct().sorted(),
+      filters = filters,
+      archivedCount = data.designs.count { it.isArchived },
+    )
+    out
   }
     .catch { emit(MainScreenUiState.Error(it)) }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MainScreenUiState.Loading)
 
   fun updateSearchQuery(query: String) {
     _searchQuery.value = query
+  }
+
+  fun toggleAttentionFilter() {
+    _filters.update { it.copy(attentionOnly = !it.attentionOnly) }
+  }
+
+  fun toggleArchivedFilter() {
+    // Archived and "needs attention" together would be a view of retired stock nobody is
+    // going to restock, so entering the archive clears the attention filter.
+    _filters.update {
+      if (it.showArchived) it.copy(showArchived = false)
+      else CatalogueFilters(showArchived = true)
+    }
+  }
+
+  fun selectCategory(category: String?) {
+    _filters.update { it.copy(category = if (it.category == category) null else category) }
+  }
+
+  fun clearFilters() {
+    _filters.value = CatalogueFilters()
+  }
+
+  /** Retire a design, or bring it back. Replaces deletion as the ordinary action. */
+  fun setArchived(id: String, archived: Boolean) {
+    dataRepository.setDesignArchived(id, archived)
   }
 
   fun deleteDesign(id: String) {
@@ -95,10 +157,26 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
   }
 }
 
+/** What the chip row is currently narrowing the catalogue to. */
+data class CatalogueFilters(
+  val attentionOnly: Boolean = false,
+  val category: String? = null,
+  /** Archived designs are hidden from the working catalogue until asked for by name. */
+  val showArchived: Boolean = false,
+) {
+  val isAny: Boolean get() = attentionOnly || category != null || showArchived
+}
+
 sealed interface MainScreenUiState {
   object Loading : MainScreenUiState
 
   data class Error(val throwable: Throwable) : MainScreenUiState
 
-  data class Success(val data: BusinessIntelligenceData) : MainScreenUiState
+  data class Success(
+    val data: BusinessIntelligenceData,
+    val summary: CatalogueSummary = CatalogueSummary(0, 0, 0),
+    val categories: List<String> = emptyList(),
+    val filters: CatalogueFilters = CatalogueFilters(),
+    val archivedCount: Int = 0,
+  ) : MainScreenUiState
 }

@@ -1,28 +1,11 @@
 package com.sc.biap.ui.main
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Inventory
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.*
@@ -43,41 +26,27 @@ import com.sc.biap.data.SyncStatus
 import com.sc.biap.security.AppLock
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
-import coil3.compose.rememberAsyncImagePainter
 import com.sc.biap.AddDesign
 import com.sc.biap.DesignDetail
 import com.sc.biap.AccessManagement
 import com.sc.biap.Profile
-import com.sc.biap.data.BusinessIntelligenceData
 import com.sc.biap.data.DefaultDataRepository
-import com.sc.biap.data.Design
-import com.sc.biap.theme.AtelierTheme
 import com.sc.biap.theme.AtelierShapes
 import com.sc.biap.theme.AtelierSpacing
-import com.sc.biap.theme.bodyMediumStrong
 import com.sc.biap.theme.bodySmallStrong
-import com.sc.biap.theme.glowBrush
 import com.sc.biap.theme.titleMediumStrong
-import java.io.File
-import com.sc.biap.util.FileUtils
-import com.sc.biap.ui.DesignImageState
-import com.sc.biap.ui.rememberDesignImage
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import com.sc.biap.ui.ProfileAvatar
 import com.sc.biap.ui.rememberPerformanceProfile
 import com.sc.biap.ui.PerformanceProfile
-import androidx.compose.ui.platform.LocalConfiguration
 
 @Composable
 fun defaultMainScreenViewModel(): MainScreenViewModel {
@@ -85,17 +54,11 @@ fun defaultMainScreenViewModel(): MainScreenViewModel {
     return viewModel { MainScreenViewModel(DefaultDataRepository.getInstance(context)) }
 }
 
-// Component metrics and artwork geometry: intrinsic sizes, deliberately off the
-// AtelierSpacing scale, which governs layout rhythm rather than component size.
+// Component metrics: intrinsic sizes, deliberately off the AtelierSpacing scale, which
+// governs layout rhythm rather than component size.
 private val SyncSpinnerSmall = 20.dp
 private val SyncSpinnerLarge = 28.dp
 private val SyncSpinnerStroke = 2.dp
-private val EmptyStateGlowSize = 96.dp
-private val EmptyStateIconSize = 48.dp
-private val EmptyStateGap = 20.dp
-private val EmptyStateTextWidth = 280.dp
-private val DesignCardImageHeight = 140.dp
-private val ThumbnailSpinnerStroke = 2.dp
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -189,6 +152,21 @@ fun MainScreen(
         )
     }
 
+    val pullState = rememberPullToRefreshState()
+    // "48 designs · updated 09:12" - the catalogue's own state, under its name.
+    val catalogueStatusLine: (MainScreenUiState, Boolean) -> String = { s, syncing ->
+        val designs = (s as? MainScreenUiState.Success)?.data?.designs.orEmpty()
+        when {
+            syncing -> "SYNCING"
+            designs.isEmpty() -> "NO DESIGNS YET"
+            else -> {
+                val newest = designs.maxOf { it.updatedAt }
+                val stamp = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                    .format(java.util.Date(newest))
+                "${designs.size} DESIGNS · UPDATED $stamp"
+            }
+        }
+    }
     var showMenu by remember { mutableStateOf(false) }
     var showMergePrompt by remember { mutableStateOf(false) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
@@ -320,45 +298,49 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Product Portfolio", style = MaterialTheme.typography.titleLarge) },
+            CatalogueHeader(
+                statusLine = catalogueStatusLine(state, isSyncing),
                 actions = {
                     if (currentUser != null) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
                         ) {
-                            if (isSyncing) {
-                                if (profile == PerformanceProfile.LOW_POWER) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(SyncSpinnerSmall),
-                                        strokeWidth = SyncSpinnerStroke,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                            // Syncing is a STATE of this button, not a separate spinner that
+                            // replaces it - so the control never disappears out from under a
+                            // finger already reaching for it.
+                            CircleAction(
+                                onClick = { if (!isSyncing) viewModel.syncWithGoogleDrive() },
+                                container = if (isSyncing) {
+                                    MaterialTheme.colorScheme.primaryContainer
                                 } else {
-                                    LoadingIndicator(
-                                        modifier = Modifier.size(SyncSpinnerLarge),
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            } else {
-                                IconButton(onClick = { viewModel.syncWithGoogleDrive() }) {
-                                    Icon(Icons.Default.Sync, contentDescription = "Sync Now")
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                },
+                            ) {
+                                if (isSyncing) {
+                                    if (profile == PerformanceProfile.LOW_POWER) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(SyncSpinnerSmall),
+                                            strokeWidth = SyncSpinnerStroke,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    } else {
+                                        LoadingIndicator(
+                                            modifier = Modifier.size(SyncSpinnerLarge),
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                } else {
+                                    Icon(Icons.Default.Sync, contentDescription = "Sync now")
                                 }
                             }
                             Box {
                                 IconButton(onClick = { showMenu = true }) {
-                                    if (currentUser?.photoUrl != null) {
-                                        Image(
-                                            painter = rememberAsyncImagePainter(currentUser!!.photoUrl),
-                                            contentDescription = "Profile",
-                                            modifier = Modifier
-                                                .size(AtelierSpacing.Double)
-                                                .clip(CircleShape)
-                                        )
-                                    } else {
-                                        Icon(Icons.Default.AccountCircle, contentDescription = "Profile", modifier = Modifier.size(AtelierSpacing.Double))
-                                    }
+                                    ProfileAvatar(
+                                        photoUrl = currentUser?.photoUrl,
+                                        size = AtelierSpacing.Double,
+                                        tint = LocalContentColor.current
+                                    )
                                 }
                                 DropdownMenu(
                                     expanded = showMenu,
@@ -481,13 +463,18 @@ fun MainScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            // Extended and labelled, in the saturated primary role. A bare "+" is a guess;
+            // this screen has one obvious thing to add and can afford to say so.
+            ExtendedFloatingActionButton(
                 onClick = { onItemClick(AddDesign) },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                shape = AtelierShapes.CornerLarge
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = RoundedCornerShape(26.dp),
+                modifier = Modifier.height(64.dp),
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Design")
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(Modifier.width(AtelierSpacing.Compact))
+                Text("Add design", style = MaterialTheme.typography.titleMedium)
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -500,25 +487,72 @@ fun MainScreen(
                 }
             }
             is MainScreenUiState.Success -> {
-                val data = (state as MainScreenUiState.Success).data
-                Column(
+                val success = state as MainScreenUiState.Success
+                val data = success.data
+
+                // Pull to refresh AND the toolbar button, not one or the other. Pull is the
+                // gesture people reach for; the button is the only way to sync a catalogue
+                // that is empty and therefore has nothing to pull.
+                PullToRefreshBox(
+                    isRefreshing = isSyncing,
+                    onRefresh = { viewModel.syncWithGoogleDrive() },
+                    state = pullState,
                     modifier = Modifier
                         .padding(paddingValues)
-                        .fillMaxSize()
-                ) {
-                    if (isSyncing) {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        .fillMaxSize(),
+                    indicator = {
+                        // The Expressive indicator, which morphs through a sequence of shapes,
+                        // rather than the legacy circular spinner.
+                        PullToRefreshDefaults.LoadingIndicator(
+                            state = pullState,
+                            isRefreshing = isSyncing,
+                            modifier = Modifier.align(Alignment.TopCenter),
+                        )
                     }
-                    SearchBarField(
-                        query = searchQuery,
-                        onQueryChange = { viewModel.updateSearchQuery(it) }
-                    )
-                    MainScreenContent(
-                        data = data,
-                        query = searchQuery,
-                        onItemClick = onItemClick,
-                        modifier = Modifier.weight(1f)
-                    )
+                ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        CatalogueSearchField(
+                            query = searchQuery,
+                            onQueryChange = { viewModel.updateSearchQuery(it) },
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                        )
+
+                        if (data.designs.isEmpty()) {
+                            CatalogueEmptyState(
+                                query = searchQuery,
+                                filters = success.filters,
+                                onAddDesign = { onItemClick(AddDesign) },
+                                onClearFilters = { viewModel.clearFilters() },
+                                modifier = Modifier.weight(1f),
+                            )
+                        } else {
+                            CatalogueList(
+                                designs = data.designs,
+                                onOpenDesign = { onItemClick(DesignDetail(it.id)) },
+                                onOpenSize = { design, size ->
+                                    onItemClick(DesignDetail(design.id, focusSize = size.size))
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    AttentionBand(
+                                        summary = success.summary,
+                                        isActive = success.filters.attentionOnly,
+                                        onClick = { viewModel.toggleAttentionFilter() },
+                                    )
+                                    CatalogueFilterRow(
+                                        filters = success.filters,
+                                        categories = success.categories,
+                                        archivedCount = success.archivedCount,
+                                        onToggleAttention = { viewModel.toggleAttentionFilter() },
+                                        onToggleArchived = { viewModel.toggleArchivedFilter() },
+                                        onSelectCategory = { viewModel.selectCategory(it) },
+                                        modifier = Modifier.padding(horizontal = 0.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
             is MainScreenUiState.Error -> {
@@ -531,255 +565,4 @@ fun MainScreen(
             }
         }
     }
-}
-
-@Composable
-internal fun MainScreenContent(
-    data: BusinessIntelligenceData,
-    query: String,
-    onItemClick: (NavKey) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    if (data.designs.isEmpty()) {
-        Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(AtelierSpacing.Large)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(EmptyStateGlowSize)
-                        .background(
-                            brush = MaterialTheme.colorScheme.glowBrush,
-                            shape = CircleShape,
-                            alpha = 0.12f
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        if (query.isNotEmpty()) Icons.Default.SearchOff else Icons.Default.Inventory,
-                        contentDescription = "Empty stock",
-                        modifier = Modifier.size(EmptyStateIconSize),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Spacer(Modifier.height(EmptyStateGap))
-                Text(
-                    text = if (query.isNotEmpty()) "No results found" else "No designs added yet",
-                    style = MaterialTheme.typography.titleMediumStrong
-                )
-                Spacer(Modifier.height(AtelierSpacing.Compact))
-                Text(
-                    text = if (query.isNotEmpty()) {
-                        "We couldn't find anything matching \"$query\". Check for typos or search by category, size, or material."
-                    } else {
-                        "Tap the + button to upload design photos, set prices by size, and add custom fields."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.width(EmptyStateTextWidth),
-                    onTextLayout = {},
-                    textAlign = TextAlign.Center
-                )
-                if (query.isEmpty()) {
-                    Spacer(Modifier.height(AtelierSpacing.Large))
-                    Button(
-                        shapes = ButtonDefaults.shapes(shape = AtelierShapes.CornerMedium),
-                        onClick = { onItemClick(AddDesign) },
-
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(Modifier.width(AtelierSpacing.Compact))
-                        Text("Add Your First Design")
-                    }
-                }
-            }
-        }
-    } else {
-        val configuration = LocalConfiguration.current
-        val columnsCount = when {
-            configuration.screenWidthDp < 600 -> 2
-            configuration.screenWidthDp < 840 -> 3
-            else -> 4
-        }
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(columnsCount),
-            modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(AtelierSpacing.Base),
-            horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Base),
-            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Base)
-        ) {
-            items(data.designs) { design ->
-                DesignCard(design = design, onClick = { onItemClick(DesignDetail(design.id)) })
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun DesignCard(design: Design, onClick: () -> Unit) {
-    val totalStock = design.sizeInventories.sumOf { it.stock }
-    val prices = design.sizeInventories.map { it.price }
-    val priceText = when {
-        prices.isEmpty() -> "No Price"
-        prices.size == 1 -> "₹${FileUtils.formatPrice(prices.first())}"
-        else -> "₹${FileUtils.formatPrice(prices.minOrNull() ?: 0L)} - ₹${FileUtils.formatPrice(prices.maxOrNull() ?: 0L)}"
-    }
-
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val profile = rememberPerformanceProfile()
-    val animatedScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.95f else 1f,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
-        label = "scale"
-    )
-    val scale = if (profile == PerformanceProfile.LOW_POWER) {
-        if (isPressed) 0.95f else 1f
-    } else {
-        animatedScale
-    }
-
-
-    Card(
-        shape = AtelierShapes.CornerLarge,
-        border = BorderStroke(AtelierSpacing.Hairline, MaterialTheme.colorScheme.outline),
-        modifier = Modifier
-            .fillMaxWidth()
-            .scale(scale)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = LocalIndication.current,
-                onClick = onClick
-            ),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(DesignCardImageHeight)
-                    .clip(RoundedCornerShape(topStart = AtelierSpacing.Base, topEnd = AtelierSpacing.Base))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                when (val imageState = rememberDesignImage(design.imagePath, design.imageRef).state) {
-                    is DesignImageState.Ready -> Image(
-                        painter = rememberAsyncImagePainter(imageState.model),
-                        contentDescription = design.name,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-
-                    DesignImageState.Loading -> CircularProgressIndicator(
-                        modifier = Modifier.size(AtelierSpacing.Base),
-                        strokeWidth = ThumbnailSpinnerStroke
-                    )
-
-                    // A photo exists but this device could not fetch it. Deliberately
-                    // distinct from "no photo": that difference decides whether a design
-                    // needs re-shooting or just a working connection. Open it to retry.
-                    DesignImageState.Unavailable -> Icon(
-                        Icons.Default.CloudOff,
-                        contentDescription = "Photo unavailable - open the design to retry",
-                        modifier = Modifier.size(AtelierSpacing.Double),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    DesignImageState.Absent -> Icon(
-                        Icons.Default.Inventory,
-                        contentDescription = "No photo",
-                        modifier = Modifier.size(AtelierSpacing.Double),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                    )
-                }
-            }
-
-            Column(
-                modifier = Modifier.padding(AtelierSpacing.Cozy),
-                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Micro)
-            ) {
-                Text(
-                    text = design.name,
-                    style = MaterialTheme.typography.titleMediumStrong,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Text(
-                    text = design.category,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = priceText,
-                        style = MaterialTheme.typography.bodyMediumStrong
-                    )
-
-                    Text(
-                        text = "$totalStock items",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (totalStock == 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun SearchBarField(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        placeholder = { Text("Search by name, fabric, color, size...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)) },
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = AtelierSpacing.Base, vertical = AtelierSpacing.Compact),
-        leadingIcon = {
-            Icon(
-                Icons.Default.Search,
-                contentDescription = "Search",
-                tint = MaterialTheme.colorScheme.primary
-            )
-        },
-        trailingIcon = {
-            if (query.isNotEmpty()) {
-                IconButton(onClick = { onQueryChange("") }) {
-                    Icon(
-                        Icons.Default.Clear,
-                        contentDescription = "Clear search",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
-        singleLine = true,
-        shape = AtelierShapes.CornerMedium,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surface,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-            focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline
-        )
-    )
 }

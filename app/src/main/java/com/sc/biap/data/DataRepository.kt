@@ -80,6 +80,11 @@ interface DataRepository {
     suspend fun applyUploadedImage(designId: String, key: String, uploadedBy: String?): Boolean
     val biData: StateFlow<BusinessIntelligenceData>
     fun addOrUpdateDesign(design: Design)
+
+    /** Hide a design from the working catalogue, or bring it back. */
+    fun setDesignArchived(designId: String, archived: Boolean)
+
+    /** Destroy a design permanently. Offered only for designs already archived. */
     fun deleteDesign(designId: String)
     fun addGlobalCustomField(field: String)
     fun removeGlobalCustomField(field: String)
@@ -787,6 +792,23 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                     enqueueImageUpload(design.id, file.absolutePath)
                 }
             }
+        }
+    }
+
+    /**
+     * Retire a design without destroying it.
+     *
+     * This is what the delete button now does. A discontinued style is history worth keeping -
+     * its costs, prices and karigars are the record of what the workshop actually made - so
+     * the ordinary action hides it rather than erasing it. [deleteDesign] still exists for
+     * genuine mistakes, reachable only once a design is already archived.
+     */
+    override fun setDesignArchived(designId: String, archived: Boolean) {
+        repositoryScope.launch {
+            val dao = awaitDao() ?: return@launch
+            val now = System.currentTimeMillis()
+            dao.setArchived(designId, archivedAt = if (archived) now else 0L, changedAt = now)
+            triggerLocalBackup()
         }
     }
 
