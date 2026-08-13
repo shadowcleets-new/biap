@@ -1,6 +1,7 @@
 package com.sc.biap.ui.main
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,6 +27,7 @@ import com.sc.biap.data.SyncStatus
 import com.sc.biap.security.AppLock
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -36,6 +38,7 @@ import com.sc.biap.AddDesign
 import com.sc.biap.DesignDetail
 import com.sc.biap.AccessManagement
 import com.sc.biap.Profile
+import com.sc.biap.Settings
 import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.theme.AtelierShapes
 import com.sc.biap.theme.AtelierSpacing
@@ -350,59 +353,49 @@ fun MainScreen(
                                 }
                             }
                             Box {
-                                IconButton(onClick = { showMenu = true }) {
-                                    ProfileAvatar(
-                                        photoUrl = currentUser?.photoUrl,
-                                        size = AtelierSpacing.Double,
-                                        tint = LocalContentColor.current
-                                    )
-                                }
-                                DropdownMenu(
+                                // Sized to HeaderActionSize, matching the sync button beside
+                                // it. Not wrapped in an IconButton: that adds its own padding
+                                // and shrinks the avatar back inside the touch target, which
+                                // is what made it look undersized in the first place.
+                                ProfileAvatar(
+                                    photoUrl = currentUser?.photoUrl,
+                                    size = HeaderActionSize,
+                                    tint = LocalContentColor.current,
+                                    // Clipped before clickable so the ripple is a circle
+                                    // rather than a square behind a round avatar.
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .clickable { showMenu = true },
+                                )
+                                AccountMenu(
                                     expanded = showMenu,
-                                    onDismissRequest = { showMenu = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Signed in as:\n${currentUser?.email}") },
-                                        onClick = {},
-                                        enabled = false
-                                    )
-                                    DropdownMenuItem(
-                                        // Greyed out while a sync is in flight. The repository
-                                        // ignores the call anyway, but a dead-looking tap with
-                                        // no explanation is worse than a disabled item.
-                                        text = {
-                                            Text(if (isSyncing) "Syncing…" else "Sync with Drive")
-                                        },
-                                        enabled = !isSyncing,
-                                        onClick = {
-                                            showMenu = false
-                                            viewModel.syncWithGoogleDrive()
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Profile") },
-                                        onClick = {
-                                            showMenu = false
-                                            onItemClick(Profile)
-                                        }
-                                    )
-                                    if (myAccessLevel.canManageAccess) {
-                                        DropdownMenuItem(
-                                            text = { Text("Team Access") },
-                                            onClick = {
-                                                showMenu = false
-                                                onItemClick(AccessManagement)
-                                            }
-                                        )
-                                    }
-                                    DropdownMenuItem(
-                                        text = { Text("Sign Out") },
-                                        onClick = {
-                                            showMenu = false
-                                            viewModel.signOut {}
-                                        }
-                                    )
-                                }
+                                    onDismiss = { showMenu = false },
+                                    accountLabel = currentUser?.email
+                                        ?: appIdentityLabel
+                                        ?: "Signed in",
+                                    isSyncing = isSyncing,
+                                    canManageAccess = myAccessLevel.canManageAccess,
+                                    onSync = {
+                                        showMenu = false
+                                        viewModel.syncWithGoogleDrive()
+                                    },
+                                    onProfile = {
+                                        showMenu = false
+                                        onItemClick(Profile)
+                                    },
+                                    onTeamAccess = {
+                                        showMenu = false
+                                        onItemClick(AccessManagement)
+                                    },
+                                    onSettings = {
+                                        showMenu = false
+                                        onItemClick(Settings)
+                                    },
+                                    onSignOut = {
+                                        showMenu = false
+                                        viewModel.signOut {}
+                                    },
+                                )
                             }
                         }
                     } else {

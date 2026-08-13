@@ -81,6 +81,15 @@ private val BandRadius = 30.dp
 private val BadgeSize = 52.dp
 
 /**
+ * Every control in the header row is this size.
+ *
+ * Shared rather than written twice, because it already drifted once: the sync button was
+ * 48dp and the avatar 32dp, which read as a misalignment rather than a hierarchy. A single
+ * token is the only thing that stops that happening again.
+ */
+val HeaderActionSize = 48.dp
+
+/**
  * The screen title: a large name with a status line under it, not a Material app-bar title.
  *
  * The design puts the catalogue's own state - how many designs, when it last synced - directly
@@ -131,7 +140,7 @@ fun CircleAction(
 ) {
     Box(
         modifier = Modifier
-            .size(48.dp)
+            .size(HeaderActionSize)
             .clip(RoundedCornerShape(percent = 50))
             .background(container)
             .clickable(onClick = onClick),
@@ -245,11 +254,17 @@ fun AttentionBand(
                 color = content,
             )
             Text(
+                // Reads in designs throughout, because the line above it counts designs.
+                // "sold out" rather than "out of stock" - it is unambiguous about meaning
+                // nothing left at all, where "out of stock" invited the size reading.
                 text = if (clear) {
-                    "Nothing is out or running low."
+                    "Nothing is sold out or running low."
                 } else {
-                    "${summary.sizesOut} out of stock · ${summary.sizesLow} running low" +
-                        if (isActive) " · showing only these" else ""
+                    buildList {
+                        if (summary.designsOut > 0) add("${summary.designsOut} sold out")
+                        if (summary.designsLow > 0) add("${summary.designsLow} running low")
+                        if (isActive) add("showing only these")
+                    }.joinToString(" · ")
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = content.copy(alpha = 0.85f),

@@ -18,3 +18,4 @@ import kotlinx.serialization.Serializable
 ) : NavKey
 @Serializable data object Profile : NavKey
 @Serializable data object AccessManagement : NavKey
+@Serializable data object Settings : NavKey

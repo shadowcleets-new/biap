@@ -24,9 +24,21 @@ fun SizeInventory.state(): StockState = when {
 
 data class DesignStats(
     val units: Int,
-    /** Null when the design has no sizes at all, so callers must decide what to show. */
+    /**
+     * The cheapest and dearest sizes that actually carry a price.
+     *
+     * Null when NO size has been priced yet, so callers say "not priced" rather than "₹0".
+     */
     val minPrice: Long?,
     val maxPrice: Long?,
+    /**
+     * Sizes added but never given a price.
+     *
+     * A size sitting at 0 is a gap in data entry, not a garment being given away, so it is
+     * counted here and kept out of the range. Including it dragged the minimum to zero and
+     * made a design read "₹0 – ₹1,225", which is a price nobody ever set.
+     */
+    val unpricedSizes: Int,
     val outSizes: Int,
     val lowSizes: Int,
 ) {
@@ -42,30 +54,46 @@ data class DesignStats(
 }
 
 fun Design.stats(): DesignStats {
-    val prices = sizeInventories.map { it.price }
+    // Only priced sizes shape the range. minOrNull() over everything let a single unpriced
+    // size decide the floor.
+    val prices = sizeInventories.map { it.price }.filter { it > 0L }
     return DesignStats(
         units = sizeInventories.sumOf { it.stock },
         minPrice = prices.minOrNull(),
         maxPrice = prices.maxOrNull(),
+        unpricedSizes = sizeInventories.count { it.price <= 0L },
         outSizes = sizeInventories.count { it.state() == StockState.OUT },
         lowSizes = sizeInventories.count { it.state() == StockState.LOW },
     )
 }
 
-/** The one-line summary above the list: how much of the catalogue wants looking at. */
+/**
+ * The one-line summary above the list: how much of the catalogue wants looking at.
+ *
+ * EVERY FIGURE HERE COUNTS DESIGNS, NOT SIZES.
+ *   The headline is about designs, so the numbers under it must be too. Counting sizes
+ *   instead said "1 out of stock" about a design holding 42 units, purely because one of its
+ *   five sizes had never been stocked. A design is out of stock when there is nothing left of
+ *   it at all - not when one size is empty. Per-size gaps are the row's business, and the
+ *   row already shows them.
+ */
 data class CatalogueSummary(
     val designsNeedingAttention: Int,
-    val sizesOut: Int,
-    val sizesLow: Int,
+    /** Designs with no stock whatsoever. Genuinely sold out. */
+    val designsOut: Int,
+    /** Designs still sellable, but with a size empty or running down. */
+    val designsLow: Int,
 ) {
     val isClear: Boolean get() = designsNeedingAttention == 0
 }
 
 fun List<Design>.summarise(): CatalogueSummary {
     val stats = map { it.stats() }
+    val soldOut = stats.count { it.units == 0 }
     return CatalogueSummary(
         designsNeedingAttention = stats.count { it.needsAttention },
-        sizesOut = stats.sumOf { it.outSizes },
-        sizesLow = stats.sumOf { it.lowSizes },
+        designsOut = soldOut,
+        // Needs attention but is not sold out: still has stock, just thin somewhere.
+        designsLow = stats.count { it.needsAttention && it.units > 0 },
     )
 }

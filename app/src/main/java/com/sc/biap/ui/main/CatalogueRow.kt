@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,6 +40,7 @@ import com.sc.biap.data.SizeInventory
 import com.sc.biap.data.StockState
 import com.sc.biap.data.state
 import com.sc.biap.data.stats
+import com.sc.biap.util.SizeUtils
 
 /**
  * @file CatalogueRow.kt
@@ -58,15 +60,21 @@ import com.sc.biap.data.stats
  *   rather than scanning.
  */
 
-private val ThumbSize = 88.dp
-private val ThumbRadius = 30.dp
-private val CellSize = 44.dp
-private val CellWidth = 44.dp
+/**
+ * The thumbnail is PORTRAIT, not square.
+ *
+ * These photographs are full-length shots of a garment on a model. Cropping them to a square
+ * takes the head and the hem - the two ends of the thing you are trying to recognise. A 3:4
+ * frame matches how the pictures are actually taken, so the whole outfit survives the crop.
+ */
+private val ThumbWidth = 104.dp
+private val ThumbHeight = 138.dp
+private val ThumbRadius = 26.dp
+private val CellSize = 52.dp
+private val CellWidth = 52.dp
 private val CellGap = 6.dp
 private val RowRadius = 28.dp
 
-/** Beyond this the cells no longer fit a phone width, so the rest collapse into a +N. */
-private const val MAX_VISIBLE_SIZES = 6
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -109,11 +117,11 @@ fun CatalogueRow(
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Box(
                 modifier = Modifier
-                    .size(ThumbSize)
+                    .size(width = ThumbWidth, height = ThumbHeight)
                     .clip(RoundedCornerShape(ThumbRadius))
                     .background(scheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center,
-            ) { thumbnail(ThumbSize) }
+            ) { thumbnail(ThumbWidth) }
 
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.Top) {
@@ -157,7 +165,12 @@ fun CatalogueRow(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    PriceRange(stats.minPrice, stats.maxPrice, modifier = Modifier.weight(1f))
+                    PriceRange(
+                        min = stats.minPrice,
+                        max = stats.maxPrice,
+                        unpriced = stats.unpricedSizes,
+                        modifier = Modifier.weight(1f),
+                    )
                     if (design.isArchived) ArchivedTag() else AttentionTag(stats.outSizes, stats.lowSizes)
                 }
             }
@@ -171,27 +184,49 @@ fun CatalogueRow(
 }
 
 /**
- * The size matrix. Every size the design actually has, in the order the atelier entered them.
+ * The size matrix. Every size the design has, ordered along the size ladder (S, M, L, XL,
+ * XXL, 3XL...) rather than by the order somebody happened to type them in.
  *
- * Past [MAX_VISIBLE_SIZES] the remainder collapses into a single +N cell rather than scrolling
+ * Past what fits, the remainder collapses into a single +N cell rather than scrolling
  * or wrapping. Scrolling hides sizes behind a gesture nobody would think to make, and wrapping
  * makes rows different heights - which destroys the shared alignment that is the whole reason
  * this is a row.
  */
 @Composable
 private fun SizeMatrix(sizes: List<SizeInventory>, onSizeClick: (SizeInventory) -> Unit) {
-    val visible = sizes.take(MAX_VISIBLE_SIZES)
-    val hidden = sizes.size - visible.size
+    // Ordered by the size ladder, not by the order they happened to be typed in. Raw entry
+    // order put 3XL and 5XL ahead of L, which reads as broken rather than as a choice.
+    // SizeUtils already owns this ladder - the detail screen has always sorted this way.
+    val ordered = remember(sizes) { sizes.sortedBy { SizeUtils.getSizeSortWeight(it.size) } }
 
-    // Fixed-width cells, left aligned - NOT stretched to fill the row. Stretching makes a
-    // design with three sizes draw three fat slabs and one with six draw six narrow ones, so
-    // the cells stop being comparable between rows. A fixed cell means a glance down the list
-    // compares like with like, which is the entire job of this strip.
-    Row(horizontalArrangement = Arrangement.spacedBy(CellGap)) {
-        visible.forEach { inventory ->
-            SizeCell(inventory = inventory, onClick = { onSizeClick(inventory) })
+    // How many cells fit is MEASURED, not assumed. A hardcoded count plus a fixed cell width
+    // overflows the moment the phone is narrower than the one it was designed on - and these
+    // cells are deliberately fixed-width, so they cannot shrink to compensate.
+    BoxWithConstraints {
+        val slot = CellWidth + CellGap
+        val capacity = ((maxWidth + CellGap) / slot).toInt().coerceAtLeast(1)
+
+        val visible: List<SizeInventory>
+        val hidden: Int
+        if (ordered.size <= capacity) {
+            visible = ordered
+            hidden = 0
+        } else {
+            // One slot has to pay for the "+N" cell itself.
+            visible = ordered.take((capacity - 1).coerceAtLeast(1))
+            hidden = ordered.size - visible.size
         }
-        if (hidden > 0) OverflowCell(hidden)
+
+        // Fixed-width cells, left aligned - NOT stretched to fill the row. Stretching makes a
+        // design with three sizes draw three fat slabs and one with six draw six narrow ones,
+        // so the cells stop being comparable between rows. A fixed cell means a glance down
+        // the list compares like with like, which is the entire job of this strip.
+        Row(horizontalArrangement = Arrangement.spacedBy(CellGap)) {
+            visible.forEach { inventory ->
+                SizeCell(inventory = inventory, onClick = { onSizeClick(inventory) })
+            }
+            if (hidden > 0) OverflowCell(hidden)
+        }
     }
 }
 
@@ -294,26 +329,38 @@ private fun OverflowCell(hidden: Int) {
     }
 }
 
+/**
+ * The price, and an honest account of what is missing from it.
+ *
+ * A size with no price is a gap in data entry, not a free garment, so it never enters the
+ * range. But silently dropping it would be its own kind of lie - the range would look
+ * complete when it is not. So the count of unpriced sizes rides along underneath, quietly,
+ * where it prompts without shouting.
+ */
 @Composable
-private fun PriceRange(min: Long?, max: Long?, modifier: Modifier = Modifier) {
+private fun PriceRange(min: Long?, max: Long?, unpriced: Int, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
-    if (min == null || max == null) {
+    Column(modifier = modifier) {
         Text(
-            text = "No sizes yet",
-            style = MaterialTheme.typography.bodyMedium,
-            color = scheme.onSurfaceVariant,
-            modifier = modifier,
+            text = when {
+                min == null || max == null -> "Not priced yet"
+                min == max -> rupees(min)
+                else -> "${rupees(min)} – ${rupees(max)}"
+            },
+            style = MaterialTheme.typography.titleMedium,
+            color = if (min == null) scheme.onSurfaceVariant else scheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
-        return
+        if (unpriced > 0 && min != null) {
+            Text(
+                text = if (unpriced == 1) "1 size unpriced" else "$unpriced sizes unpriced",
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
     }
-    Text(
-        text = if (min == max) rupees(min) else "${rupees(min)} – ${rupees(max)}",
-        style = MaterialTheme.typography.titleMedium,
-        color = scheme.onSurface,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = modifier,
-    )
 }
 
 @Composable

@@ -57,18 +57,44 @@ object AppLock {
 
     private var enabled = false
 
+    /** The lifecycle observer is attached once per process, regardless of [enabled]. */
+    private var observing = false
+
+    /**
+     * Turn the lock off for this process and unlock immediately.
+     *
+     * Called when the owner switches it off in Settings. Unlocking here matters: leaving the
+     * gate up after disabling it would strand them behind a lock they just removed.
+     */
+    fun disable() {
+        enabled = false
+        _isLocked.value = false
+        backgroundedAt = 0L
+    }
+
+    /** Turn the lock back on. Does not lock the current session - they are looking at it. */
+    fun enable(context: Context) {
+        if (!canAuthenticate(context)) return
+        enabled = true
+        backgroundedAt = 0L
+    }
+
     /**
      * Begin gating the app, if this device can actually authenticate.
      *
      * Safe to call more than once; only the first call takes effect.
      */
     fun install(context: Context) {
-        if (enabled) return
+        if (observing) return
         if (!canAuthenticate(context)) return
 
-        enabled = true
+        // Honour the owner's choice. Defaults to on, so this only skips the lock for someone
+        // who deliberately turned it off in Settings.
+        val wanted = AppLockPreference.load(context)
+        observing = true
+        enabled = wanted
         // Starts locked: a cold start is exactly the case this protects against.
-        _isLocked.value = true
+        _isLocked.value = wanted
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStop(owner: LifecycleOwner) {
@@ -77,6 +103,9 @@ object AppLock {
             }
 
             override fun onStart(owner: LifecycleOwner) {
+                // Re-checked here rather than only at install: the owner can switch the lock
+                // off mid-session, and a stale observer would keep re-locking them.
+                if (!enabled) return
                 if (trustedFlowDepth > 0) return
                 // backgroundedAt of 0 means we were never away; nothing to re-lock for.
                 if (backgroundedAt == 0L) return
