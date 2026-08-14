@@ -192,6 +192,18 @@ fun DesignPhotoPager(
                     iconSize = 40.dp,
                 )
             }
+
+            // Which photo the catalogue row and the order carousel are using is a fact worth
+            // stating on the record, not something to infer from position.
+            if (state.currentPage == 0 && photos.size > 1) {
+                OverlayPill("COVER", Modifier.align(Alignment.TopStart).padding(16.dp))
+            }
+            if (photos.size > 1) {
+                OverlayPill(
+                    "${state.currentPage + 1} / ${photos.size}",
+                    Modifier.align(Alignment.TopEnd).padding(16.dp),
+                )
+            }
         }
 
         if (photos.size > 1) {
@@ -212,6 +224,23 @@ fun DesignPhotoPager(
                 }
             }
         }
+    }
+}
+
+/** A label that has to stay readable on top of a photograph of anything. */
+@Composable
+private fun OverlayPill(text: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 

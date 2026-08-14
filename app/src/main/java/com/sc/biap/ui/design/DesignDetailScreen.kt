@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.rememberAsyncImagePainter
@@ -46,6 +47,7 @@ import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.data.Design
 import com.sc.biap.data.DesignPhoto
 import com.sc.biap.data.SizeInventory
+import com.sc.biap.data.stats
 import com.sc.biap.ui.DesignImageState
 import com.sc.biap.ui.rememberDesignImage
 import com.sc.biap.security.AppLock
@@ -338,7 +340,7 @@ fun DesignDetailScreen(
                         onCategoryChange = { editCategory = it },
                     )
 
-                    // Inventory & Pricing Card
+                    // Inventory & Pricing
                     if (isEditing) {
                         SizeStockPriceEditorCard(
                             editSizes = editSizes,
@@ -346,17 +348,64 @@ fun DesignDetailScreen(
                         )
                     } else {
                         if (design.isArchived) {
-                            ArchivedNotice()
+                            ArchivedBanner()
                         }
-                        InventoryPricingCard(design = design, focusSize = focusSize)
+                        // The WHOLE matrix, every size, always. This screen used to show one
+                        // size at a time behind chips, which made it thinner than the
+                        // catalogue row it was opened from.
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            SectionHeading("Inventory & pricing")
+                            MatrixHeader(design)
+                            SizeMatrix(
+                                design = design,
+                                // Tapping a size goes straight to editing it. The per-size
+                                // detail card this replaces existed only to reveal what is
+                                // now permanently on screen - keeping it would have meant
+                                // tapping a row to see the row.
+                                onSizeClick = { if (!design.isArchived) isEditing = true },
+                            )
+                            UnpricedBanner(
+                                sizes = design.sizeInventories
+                                    .filter { it.price <= 0L }
+                                    .sortedBy { SizeUtils.getSizeSortWeight(it.size) }
+                                    .map { it.size },
+                            )
+                        }
                     }
 
-                    AssignedKarigarsCard(
-                        design = design,
-                        isEditing = isEditing,
-                        editKarigars = editKarigars,
-                        onManageKarigars = { showEditKarigarsDialog = true },
-                    )
+                    if (isEditing) {
+                        AssignedKarigarsCard(
+                            design = design,
+                            isEditing = true,
+                            editKarigars = editKarigars,
+                            onManageKarigars = { showEditKarigarsDialog = true },
+                        )
+                    } else if (design.karigars.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                SectionHeading("Karigars", modifier = Modifier.weight(1f))
+                                if (!design.isArchived) {
+                                    Text(
+                                        "Edit",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.clickable { isEditing = true },
+                                    )
+                                }
+                            }
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                design.karigars.forEach { name ->
+                                    KarigarChip(name = name, editing = false, onRemove = {})
+                                }
+                            }
+                        }
+                    }
 
                     if (showEditKarigarsDialog) {
                         KarigarEditorDialog(
@@ -369,12 +418,26 @@ fun DesignDetailScreen(
                         )
                     }
 
-                    SpecificationsCard(
-                        design = design,
-                        isEditing = isEditing,
-                        editCustomFields = editCustomFields,
-                        onEditCustomFieldsChange = { editCustomFields = it },
-                    )
+                    if (isEditing) {
+                        SpecificationsCard(
+                            design = design,
+                            isEditing = true,
+                            editCustomFields = editCustomFields,
+                            onEditCustomFieldsChange = { editCustomFields = it },
+                        )
+                    } else {
+                        val groups = remember(design.customFields) {
+                            groupAttributes(design.customFields)
+                        }
+                        if (groups.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                SectionHeading("Attributes")
+                                groups.forEach { (title, rows) ->
+                                    AttributeGroup(title = title, rows = rows, editing = false)
+                                }
+                            }
+                        }
+                    }
 
                     if (showSourceSelector) {
                         ImageSourceSelectorDialog(
@@ -1316,26 +1379,32 @@ if (isEditing) {
         }
     }
 } else {
-    Card(
-        shape = AtelierShapes.CornerLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    // No card around the name. It is the title of the page, not an item on it - boxing it
+    // made it read as one more row rather than the thing every row belongs to.
+    val stats = design.stats()
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(AtelierSpacing.Base),
-            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
-        ) {
-            Text(
-                text = design.name,
-                style = MaterialTheme.typography.headlineSmallStrong,
-                color = MaterialTheme.colorScheme.primary
-            )
-            SuggestionChip(
-                onClick = {},
-                label = { Text(design.category) },
-                shape = AtelierShapes.CornerSmall
-            )
+        Text(
+            text = design.name,
+            style = MaterialTheme.typography.headlineMediumEmphasized,
+            color = MaterialTheme.colorScheme.onSurface,
+            letterSpacing = (-0.8).sp,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (design.category.isNotBlank()) OutlinePill(design.category)
+            // At most ONE state pill, and the unpriced one wins. A size nobody can quote is
+            // a worse problem than a size running low, and it is the one the catalogue row
+            // has no room to say.
+            when {
+                stats.unpricedSizes > 0 -> StatePill(
+                    "${stats.unpricedSizes} size${if (stats.unpricedSizes == 1) "" else "s"} unpriced"
+                )
+                stats.outSizes > 0 -> StatePill(
+                    "${stats.outSizes} size${if (stats.outSizes == 1) "" else "s"} out"
+                )
+            }
         }
     }
 }
@@ -1368,8 +1437,12 @@ private fun DesignImageCard(
 
     Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)) {
         if (photos.isEmpty()) {
-            DesignPhotoEmptyPanel(
-                onClick = { if (isEditing) onPickImage() },
+            // A record, not a gap. The detail screen says the design has no photograph and
+            // offers to fix it; the capture form's panel is a different message for a
+            // different moment and does not belong here.
+            NoPhotoBlock(
+                canAdd = isEditing,
+                onAdd = onPickImage,
                 modifier = Modifier.fillMaxWidth(),
             )
         } else {
