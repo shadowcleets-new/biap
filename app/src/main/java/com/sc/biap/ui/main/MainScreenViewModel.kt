@@ -134,14 +134,18 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
   /**
-   * Every design's name, by id, for naming the lines on an order.
+   * Every design, by id, for the photos and sizes an order card shows.
    *
    * Built from the WHOLE catalogue rather than [uiState]'s visible list, which is searched,
-   * filtered and sorted. An order's lines have to name themselves whatever the Inventory tab
-   * happens to be filtered to, and an archived design's orders are still real history.
+   * filtered and sorted. An order has to render itself whatever the Inventory tab happens to
+   * be filtered to, and an archived design's orders are still real history.
+   *
+   * The whole design rather than just its name: the carousel needs the photo, and the size
+   * label needs the design's own size ladder to decide whether the sizes ordered were an
+   * unbroken run of it.
    */
-  val designNames: StateFlow<Map<String, String>> = dataRepository.biData
-    .map { data -> data.designs.associate { it.id to it.name } }
+  val designsById: StateFlow<Map<String, com.sc.biap.data.Design>> = dataRepository.biData
+    .map { data -> data.designs.associateBy { it.id } }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
   /** Cancel an order, returning its pieces to stock. */

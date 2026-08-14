@@ -21,16 +21,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.carousel.HorizontalMultiBrowseCarousel
+import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,11 +45,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sc.biap.data.Design
 import com.sc.biap.data.Order
+import com.sc.biap.data.orderedSizeLabel
+import com.sc.biap.ui.main.DesignThumbnail
 import com.sc.biap.ui.main.rupees
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -77,6 +86,17 @@ import java.util.Locale
 private val CardRadius = 28.dp
 private val BadgeSize = 52.dp
 
+/**
+ * The carousel across the top of an order.
+ *
+ * [CarouselHeight] and [CarouselItemWidth] are close to a 3:4 frame, matching how these
+ * garments are photographed, so the multi-browse carousel's large items show a whole outfit
+ * rather than a crop of one. Anything squarer takes the head and the hem.
+ */
+private val CarouselHeight = 150.dp
+private val CarouselItemWidth = 112.dp
+private val CarouselItemRadius = 22.dp
+
 // #endregion
 
 // #region 2. The list
@@ -84,7 +104,7 @@ private val BadgeSize = 52.dp
 @Composable
 fun OrdersList(
     orders: List<Order>,
-    designNames: Map<String, String>,
+    designs: Map<String, Design>,
     onCancel: (Order) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -96,7 +116,7 @@ fun OrdersList(
         items(orders, key = { it.id }) { order ->
             OrderCard(
                 order = order,
-                designNames = designNames,
+                designs = designs,
                 onCancel = { onCancel(order) },
             )
         }
@@ -118,7 +138,7 @@ fun OrdersList(
 @Composable
 private fun OrderCard(
     order: Order,
-    designNames: Map<String, String>,
+    designs: Map<String, Design>,
     onCancel: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -135,9 +155,15 @@ private fun OrderCard(
             .clip(RoundedCornerShape(CardRadius))
             .background(scheme.surfaceContainerHigh)
             .clickable { expanded = !expanded }
-            .padding(20.dp),
+            .padding(vertical = 20.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        OrderCarousel(order = order, designs = designs)
+        Spacer(Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Box(
                 modifier = Modifier
                     .size(BadgeSize)
@@ -204,7 +230,7 @@ private fun OrderCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 6.dp),
+                        .padding(horizontal = 20.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -217,7 +243,7 @@ private fun OrderCard(
                         Text(
                             // A design deleted after the order was placed still has to name
                             // itself somehow, hence the fallback rather than a blank row.
-                            text = designNames[line.designId] ?: "Design no longer in catalogue",
+                            text = designs[line.designId]?.name ?: "Design no longer in catalogue",
                             style = MaterialTheme.typography.bodyMedium,
                             color = scheme.onSurface,
                             maxLines = 1,
@@ -242,6 +268,7 @@ private fun OrderCard(
                 onClick = { confirming = true },
                 shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.textButtonColors(contentColor = scheme.error),
+                modifier = Modifier.padding(horizontal = 12.dp),
             ) {
                 Icon(Icons.Default.Undo, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -259,6 +286,92 @@ private fun OrderCard(
                 onCancel()
             },
         )
+    }
+}
+
+/**
+ * The photos across the top of an order, one card per design, sizes written across the bottom.
+ *
+ * ONE CARD PER DESIGN, NOT PER LINE. Three sizes of one design is one garment that went out in
+ * three sizes, not three separate things - so the sizes collapse onto a single card. That is
+ * also what makes [orderedSizeLabel]'s range form worth having: "L – 5XL" only means anything
+ * on a card that stands for the whole design.
+ *
+ * A multi-browse carousel rather than a plain row: the shrinking item at the trailing edge is
+ * what says "there are more of these", without a scrollbar or a count. Its content padding
+ * matches the rest of the card, so the first photo starts on the same line as the text below
+ * it, and the strip runs out past the card edge as you scroll rather than stopping dead.
+ *
+ * The label sits on a scrim, not straight on the photograph. These are shot against every
+ * background from white marble to dark studio, and white text alone survives about half of
+ * them.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OrderCarousel(order: Order, designs: Map<String, Design>) {
+    val grouped = remember(order) { order.linesByDesign().entries.toList() }
+    if (grouped.isEmpty()) return
+
+    val state = rememberCarouselState { grouped.size }
+
+    HorizontalMultiBrowseCarousel(
+        state = state,
+        preferredItemWidth = CarouselItemWidth,
+        itemSpacing = 8.dp,
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(CarouselHeight),
+    ) { index ->
+        val (designId, lines) = grouped[index]
+        val design = designs[designId]
+        val label = remember(lines, design) {
+            orderedSizeLabel(
+                orderedSizes = lines.map { it.size },
+                designSizes = design?.sizeInventories?.map { it.size }.orEmpty(),
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .maskClip(RoundedCornerShape(CarouselItemRadius))
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (design != null) {
+                DesignThumbnail(design, CarouselItemWidth)
+            } else {
+                Icon(
+                    Icons.Default.Inventory,
+                    contentDescription = "Design no longer in catalogue",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(CarouselItemWidth / 3),
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0.45f to Color.Transparent,
+                            1f to Color.Black.copy(alpha = 0.65f),
+                        )
+                    )
+            )
+
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            )
+        }
     }
 }
 

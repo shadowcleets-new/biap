@@ -246,7 +246,7 @@ fun MainScreen(
         }
     }
     val orders by viewModel.orders.collectAsStateWithLifecycle()
-    val designNames by viewModel.designNames.collectAsStateWithLifecycle()
+    val designsById by viewModel.designsById.collectAsStateWithLifecycle()
 
     /**
      * "12 ORDERS · 47 PIECES OUT".
@@ -657,13 +657,13 @@ fun MainScreen(
                                 // Reads the whole catalogue, not the filtered view: whether
                                 // there is anything to order has nothing to do with what the
                                 // Inventory tab is currently narrowed to.
-                                hasDesigns = designNames.isNotEmpty(),
+                                hasDesigns = designsById.isNotEmpty(),
                                 onNewOrder = { onItemClick(NewOrder) },
                             )
                         } else {
                             OrdersList(
                                 orders = orders,
-                                designNames = designNames,
+                                designs = designsById,
                                 onCancel = { viewModel.cancelOrder(it.id) },
                             )
                         }
