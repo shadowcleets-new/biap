@@ -389,9 +389,15 @@ fun CatalogueList(
     }
 }
 
-/** The design's photo, or an honest reason there isn't one. */
+/**
+ * The design's photo, or an honest reason there isn't one.
+ *
+ * Public because the new-order picker shows the same photo for the same purpose - recognising
+ * a design at a glance. A second copy would be a second place for the "photo exists but this
+ * device cannot fetch it" case to be got wrong, and that distinction is the whole point of it.
+ */
 @Composable
-private fun DesignThumbnail(design: Design, size: Dp) {
+fun DesignThumbnail(design: Design, size: Dp) {
     when (val imageState = rememberDesignImage(design.imagePath, design.imageRef).state) {
         is DesignImageState.Ready -> Image(
             painter = rememberAsyncImagePainter(imageState.model),

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -53,7 +55,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.data.Design
 import com.sc.biap.data.SizeInventory
+import com.sc.biap.data.stats
 import com.sc.biap.ui.main.CatalogueSearchField
+import com.sc.biap.ui.main.DesignThumbnail
 import com.sc.biap.ui.main.rupees
 import com.sc.biap.util.SizeUtils
 
@@ -84,6 +88,19 @@ import com.sc.biap.util.SizeUtils
 
 private val CardRadius = 28.dp
 private val StepperButtonSize = 36.dp
+
+/**
+ * The preview, portrait like the one in the catalogue and for the same reason: these are
+ * full-length shots, and a square crop takes the head and the hem.
+ *
+ * Smaller than the catalogue's 104x138. This list is a picking list - you scroll it looking
+ * for a garment you already have in mind - so it has to stay dense enough to scan. At this
+ * size roughly five designs fit a screen instead of seven, which is the cost of the photo and
+ * worth paying; at the catalogue's size it would have been three.
+ */
+private val ThumbWidth = 84.dp
+private val ThumbHeight = 112.dp
+private val ThumbRadius = 20.dp
 
 // #endregion
 
@@ -196,6 +213,13 @@ fun NewOrderScreen(
  *
  * Opens itself once something has been picked from it, and stays open, so a design you are
  * part-way through never collapses out from under you as the list recomposes.
+ *
+ * THE PHOTO SITS IN THE HEADER, NOT BESIDE THE SIZES:
+ *   Beside the sizes it would leave a growing column of dead space under itself - a design
+ *   with five sizes is three times taller than the picture. In the header it is read once,
+ *   for recognition, and the steppers keep the full width they need. Same arrangement as a
+ *   catalogue row, which is the point: the two lists show the same designs and should not
+ *   look like two different apps.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -208,6 +232,7 @@ private fun DesignPicker(
     val picked = picks.entries.filter { it.key.designId == design.id }.sumOf { it.value }
     var expanded by rememberSaveable(design.id) { mutableStateOf(false) }
     val open = expanded || picked > 0
+    val stats = remember(design) { design.stats() }
 
     // Sold-out sizes are dropped rather than shown disabled: a row you can never use is
     // noise in a list you are scanning for the ones you can.
@@ -217,42 +242,79 @@ private fun DesignPicker(
             .sortedBy { SizeUtils.getSizeSortWeight(it.size) }
     }
 
+    val onCard = if (picked > 0) scheme.onSecondaryContainer else scheme.onSurface
+    val onCardMuted = if (picked > 0) {
+        scheme.onSecondaryContainer.copy(alpha = 0.75f)
+    } else {
+        scheme.onSurfaceVariant
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(CardRadius))
             .background(if (picked > 0) scheme.secondaryContainer else scheme.surfaceContainerHigh)
-            .padding(20.dp),
+            .clickable { expanded = !open }
+            .padding(16.dp),
     ) {
-        Row(
-            modifier = Modifier.clickable { expanded = !open },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(width = ThumbWidth, height = ThumbHeight)
+                    .clip(RoundedCornerShape(ThumbRadius))
+                    .background(scheme.surfaceContainerHighest),
+                contentAlignment = Alignment.Center,
+            ) { DesignThumbnail(design, ThumbWidth) }
+
             Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = design.name,
+                            style = MaterialTheme.typography.titleMediumEmphasized,
+                            color = onCard,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = design.category.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = onCardMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            letterSpacing = 1.2.sp,
+                        )
+                    }
+                    Icon(
+                        if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (open) "Hide sizes" else "Show sizes",
+                        tint = onCardMuted,
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
                 Text(
-                    text = design.name,
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                    color = if (picked > 0) scheme.onSecondaryContainer else scheme.onSurface,
-                    maxLines = 1,
+                    // Same rule as everywhere else: an unpriced size never sets the floor,
+                    // and a design with no priced size at all says so rather than reading ₹0.
+                    text = when {
+                        stats.minPrice == null -> "Not priced yet"
+                        stats.minPrice == stats.maxPrice -> rupees(stats.minPrice!!)
+                        else -> "${rupees(stats.minPrice!!)} – ${rupees(stats.maxPrice!!)}"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = onCard,
                 )
                 Text(
                     text = if (picked > 0) {
-                        "$picked picked · ${orderable.size} ${if (orderable.size == 1) "size" else "sizes"} in stock"
+                        "$picked picked · ${orderable.size} in stock"
                     } else {
-                        buildList {
-                            if (design.category.isNotBlank()) add(design.category)
-                            add("${orderable.size} ${if (orderable.size == 1) "size" else "sizes"} in stock")
-                        }.joinToString(" · ")
+                        "${orderable.size} ${if (orderable.size == 1) "size" else "sizes"} in stock"
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (picked > 0) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
+                    color = onCardMuted,
                 )
             }
-            Icon(
-                if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                contentDescription = if (open) "Hide sizes" else "Show sizes",
-                tint = if (picked > 0) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
-            )
         }
 
         if (open) {
@@ -269,6 +331,7 @@ private fun DesignPicker(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SizePickerRow(
     size: SizeInventory,
@@ -287,29 +350,33 @@ private fun SizePickerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Size, stock and price on ONE line, sitting together on the left.
+        //
+        // These were two stacked lines with the label in its own fixed column, which left a
+        // wide empty channel between the price and the stepper and made every row 64dp tall.
+        // Read together they are one fact - "L, three left, ₹995" - and one line of it fits
+        // four sizes in the space three used to take.
         Text(
             text = size.size,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMediumEmphasized,
             color = primaryText,
-            modifier = Modifier.width(52.dp),
+            modifier = Modifier.widthIn(min = 44.dp),
         )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                // "No price" rather than a confident ₹0. A size added before its price was
-                // known is a real and ordinary state, and rendering it as free is a lie.
-                text = if (size.price > 0L) rupees(size.price) else "No price",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (size.price > 0L) primaryText else secondaryText,
-            )
-            Text(
-                text = "${size.stock} left",
-                style = MaterialTheme.typography.bodySmall,
-                color = secondaryText,
-            )
-        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            // "No price" rather than a confident ₹0. A size added before its price was
+            // known is a real and ordinary state, and rendering it as free is a lie.
+            text = "${size.stock} left · " +
+                (if (size.price > 0L) rupees(size.price) else "No price"),
+            style = MaterialTheme.typography.bodyMedium,
+            color = secondaryText,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
         Stepper(
             quantity = quantity,
             max = size.stock,
