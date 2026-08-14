@@ -130,6 +130,7 @@ fun NewOrderScreen(
     val editing = viewModel.isEditing
 
     val snackbarHostState = remember { SnackbarHostState() }
+    var confirmingCancel by remember { mutableStateOf(false) }
 
     LaunchedEffect(error) {
         val message = error ?: return@LaunchedEffect
@@ -145,10 +146,31 @@ fun NewOrderScreen(
                 draft = draft,
                 saving = saving,
                 editing = editing,
-                onPlace = { viewModel.place(onPlaced = onBack) },
+                // Emptying an order and saving cancels it - but never straight off the tap.
+                // It is the same irreversible action the order card's Cancel performs, and
+                // arriving at it by removing the last piece must not be quieter than
+                // reaching it deliberately.
+                onPlace = {
+                    if (editing && draft.isEmpty) {
+                        confirmingCancel = true
+                    } else {
+                        viewModel.place(onPlaced = onBack)
+                    }
+                },
             )
         },
     ) { padding ->
+        if (confirmingCancel) {
+            CancelOrderDialog(
+                pieces = viewModel.heldPieces,
+                onDismiss = { confirmingCancel = false },
+                onConfirm = {
+                    confirmingCancel = false
+                    viewModel.cancelEditedOrder(onCancelled = onBack)
+                },
+            )
+        }
+
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -519,8 +541,7 @@ private fun OrderTotalBar(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = if (draft.isEmpty) {
-                    // Emptying an order is not how it is cancelled - see NewOrderViewModel.
-                    if (editing) "Nothing left - use Cancel order" else "Nothing picked"
+                    if (editing) "Nothing left on this order" else "Nothing picked"
                 } else {
                     "${draft.pieces} ${if (draft.pieces == 1) "piece" else "pieces"} · " +
                         "${draft.designCount} ${if (draft.designCount == 1) "design" else "designs"}"
@@ -541,16 +562,29 @@ private fun OrderTotalBar(
                 )
             }
         }
+        // Emptying an order being edited turns Save into Cancel, in the error colour, so the
+        // button says what it is about to do rather than looking like an ordinary save.
+        val cancelling = editing && draft.isEmpty
         Button(
             onClick = onPlace,
-            enabled = !draft.isEmpty && !saving,
+            enabled = (cancelling || !draft.isEmpty) && !saving,
             shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(percent = 50)),
+            colors = if (cancelling) {
+                ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            } else {
+                ButtonDefaults.buttonColors()
+            },
             modifier = Modifier.height(56.dp),
         ) {
             Text(
                 when {
+                    saving && cancelling -> "Cancelling…"
                     saving && editing -> "Saving…"
                     saving -> "Placing…"
+                    cancelling -> "Cancel order"
                     editing -> "Save changes"
                     else -> "Place order"
                 },

@@ -220,10 +220,9 @@ class NewOrderViewModel(
         val lines = _picks.value
             .filterValues { it > 0 }
             .map { (key, qty) -> OrderLine(key.designId, key.size, qty, unitPrice = 0L) }
-        // Emptying an order is not how it gets cancelled. Cancel says what is going back into
-        // stock and asks first; losing a record from the screen you opened to adjust it would
-        // be the wrong kind of surprise. The button is disabled here too - this is the guard
-        // behind it, not the message.
+        // An empty NEW order is nothing at all, so there is nothing to do. An empty EDIT is a
+        // cancellation and goes through [cancelEditedOrder], which the screen routes to after
+        // confirming - never from here, so this can never destroy a record by accident.
         if (lines.isEmpty()) return
 
         viewModelScope.launch {
@@ -237,6 +236,28 @@ class NewOrderViewModel(
             if (failure == null) onPlaced() else _error.value = failure
         }
     }
+
+    /**
+     * Emptying an order and saving cancels it: the pieces go back and the record is removed.
+     *
+     * The confirmation lives on the screen rather than here. It is the same action the Cancel
+     * button on the order card performs, and it is the only irreversible thing this screen can
+     * do - reaching it by taking the last piece off should not be quieter than reaching it
+     * deliberately.
+     */
+    fun cancelEditedOrder(onCancelled: () -> Unit) {
+        val id = orderId ?: return
+        if (_saving.value) return
+        viewModelScope.launch {
+            _saving.value = true
+            val failure = dataRepository.cancelOrder(id)
+            _saving.value = false
+            if (failure == null) onCancelled() else _error.value = failure
+        }
+    }
+
+    /** Pieces this order held when the screen opened, for the confirmation to name. */
+    val heldPieces: Int get() = _held.value.values.sum()
 }
 
 // #endregion

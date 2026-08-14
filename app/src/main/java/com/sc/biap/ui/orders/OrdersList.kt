@@ -307,7 +307,7 @@ private fun OrderCard(
 
     if (confirming) {
         CancelOrderDialog(
-            order = order,
+            pieces = order.pieces,
             onDismiss = { confirming = false },
             onConfirm = {
                 confirming = false
@@ -409,13 +409,13 @@ private fun OrderCarousel(order: Order, designs: Map<String, Design>) {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun CancelOrderDialog(order: Order, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+internal fun CancelOrderDialog(pieces: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Cancel this order?") },
         text = {
             Text(
-                "The ${order.pieces} ${if (order.pieces == 1) "piece" else "pieces"} on it go " +
+                "The $pieces ${if (pieces == 1) "piece" else "pieces"} on it go " +
                     "back into stock, and the order is removed from this list. Nothing else " +
                     "about the designs changes.",
                 style = MaterialTheme.typography.bodyMedium,

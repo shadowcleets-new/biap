@@ -120,8 +120,14 @@ interface DataRepository {
     /** One order by id, for the edit screen to fill itself in from. */
     suspend fun orderById(orderId: String): Order?
 
-    /** Cancel an order, returning its pieces to stock. */
-    fun cancelOrder(orderId: String)
+    /**
+     * Cancel an order, returning its pieces to stock. Returns null on success, else a reason.
+     *
+     * Suspends and reports rather than firing and forgetting, because the edit screen closes
+     * itself on the strength of the answer - popping back on a cancellation that never
+     * happened would leave the order sitting there having apparently been removed.
+     */
+    suspend fun cancelOrder(orderId: String): String?
     fun addGlobalCustomField(field: String)
     fun removeGlobalCustomField(field: String)
 
@@ -1158,11 +1164,16 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         }
     }
 
-    override fun cancelOrder(orderId: String) {
-        repositoryScope.launch {
-            val dao = awaitDao() ?: return@launch
+    override suspend fun cancelOrder(orderId: String): String? = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val dao = awaitDao()
+                ?: return@withContext "Still opening your catalogue - try again in a moment."
             dao.cancelOrder(orderId, System.currentTimeMillis())
             triggerLocalBackup()
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            "Could not cancel the order."
         }
     }
 

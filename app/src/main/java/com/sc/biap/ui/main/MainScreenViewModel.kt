@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class MainScreenViewModel(private val dataRepository: DataRepository) : ViewModel() {
   private val _searchQuery = MutableStateFlow("")
@@ -150,7 +151,7 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
 
   /** Cancel an order, returning its pieces to stock. */
   fun cancelOrder(orderId: String) {
-    dataRepository.cancelOrder(orderId)
+    viewModelScope.launch { dataRepository.cancelOrder(orderId) }
   }
 
   /** Retire a design, or bring it back. Replaces deletion as the ordinary action. */
