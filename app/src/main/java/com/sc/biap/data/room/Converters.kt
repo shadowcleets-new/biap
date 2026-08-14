@@ -1,6 +1,7 @@
 package com.sc.biap.data.room
 
 import androidx.room.TypeConverter
+import com.sc.biap.data.DesignPhoto
 import com.sc.biap.data.OrderLine
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -15,6 +16,28 @@ class Converters {
      * the order it belongs to. A second table with a foreign key would buy nothing here and
      * cost a relation query, a cascade rule and a migration to maintain.
      */
+    /**
+     * The extra photographs, in one column for the same reason order lines are.
+     *
+     * A photo is only ever read as part of the design it belongs to, never queried or sorted
+     * on its own. Note the failure mode differs from a corrupt order line: returning empty
+     * here loses the POINTERS, not the photographs - the bytes stay in Drive under keys the
+     * design would no longer name. Better than refusing to open the catalogue, and the cover
+     * photo lives in its own columns and is untouched either way.
+     */
+    @TypeConverter
+    fun fromDesignPhotos(value: List<DesignPhoto>): String = json.encodeToString(value)
+
+    @TypeConverter
+    fun toDesignPhotos(value: String): List<DesignPhoto> {
+        return try {
+            json.decodeFromString(value)
+        } catch (e: Exception) {
+            android.util.Log.e("Converters", "Corrupt design photos column, returning empty: $value", e)
+            emptyList()
+        }
+    }
+
     @TypeConverter
     fun fromOrderLines(value: List<OrderLine>): String = json.encodeToString(value)
 

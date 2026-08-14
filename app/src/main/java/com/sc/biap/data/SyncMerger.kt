@@ -45,6 +45,19 @@ object SyncMerger {
                         archiveUpdatedAt = newestArchive.archiveUpdatedAt
                     )
                 }
+                // The extra photographs resolve on their own clock too, for the third time
+                // and the same reason. Note what this does NOT do: merge the two lists. Two
+                // devices that each added a photo keep only the later set, because a union
+                // would silently reinstate photos somebody had deliberately removed - and
+                // the cap of five means a union could also produce a design holding more
+                // photographs than the app allows.
+                val newestExtras = designsList.maxByOrNull { it.extraImagesUpdatedAt }!!
+                if (newestExtras.extraImagesUpdatedAt > winner.extraImagesUpdatedAt) {
+                    resolved = resolved.copy(
+                        extraImages = newestExtras.extraImages,
+                        extraImagesUpdatedAt = newestExtras.extraImagesUpdatedAt
+                    )
+                }
                 resolved
             }
         val mergedDesigns = allDesigns.values.filter { design ->

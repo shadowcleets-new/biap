@@ -35,8 +35,16 @@ class ImageUploadWorker(
         const val KEY_LOCAL_PATH = "localPath"
         const val KEY_STORAGE_KEY = "storageKey"
 
-        /** Unique work name per design, so rapid re-edits replace rather than queue up. */
-        fun workName(designId: String) = "ImageUpload_$designId"
+        /**
+         * Unique work name per PHOTOGRAPH, so rapid re-edits of one replace rather than
+         * queue up - while five photos on one design still all get uploaded.
+         *
+         * This was keyed by design alone. That was right when a design had one photo and
+         * actively wrong once it could have five: enqueuing them together, each would have
+         * evicted the last and exactly one would have reached Drive.
+         */
+        fun workName(designId: String, localPath: String) =
+            "ImageUpload_${designId}_${localPath.hashCode()}"
 
         /** Give up after this many attempts so a permanently bad file cannot retry forever. */
         const val MAX_ATTEMPTS = 4
@@ -73,15 +81,26 @@ class ImageUploadWorker(
         // 2. the pointer moves only once the bytes are definitely there
         val uploadedBy = FirebaseAuth.getInstance().currentUser?.uid
         val repository = DefaultDataRepository.getInstance(applicationContext)
-        val applied = repository.applyUploadedImage(designId, storageKey, uploadedBy)
+        val applied = repository.applyUploadedImage(designId, localPath, storageKey, uploadedBy)
         if (!applied) {
             // Bytes are safely stored; the design just has not caught up. Retry the move.
             Log.w(TAG, "uploaded but could not move the pointer for design=$designId; will retry")
             return Result.retry()
         }
 
-        // 3. retention, best-effort - never fails the job
-        DriveImageStore.pruneToLatest(applicationContext, designId, protectKey = storageKey)
+        // 3. retention, best-effort - never fails the job.
+        //
+        // Protects EVERY key the design points at, read back after the pointer moved. A
+        // design may hold five photographs whose versions all share one prefix, so a sweep
+        // told to spare only the key just uploaded would delete the other four. An empty set
+        // means the read failed, and pruning on that would be deleting photos on the strength
+        // of a lookup that did not work - so the sweep is skipped entirely.
+        val live = repository.referencedImageKeys(designId)
+        if (live.isEmpty()) {
+            Log.w(TAG, "skipping retention for design=$designId: could not read its live keys")
+        } else {
+            DriveImageStore.pruneToLatest(applicationContext, designId, protectKeys = live)
+        }
 
         Log.i(TAG, "uploaded design=$designId key=$storageKey")
         return Result.success()

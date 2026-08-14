@@ -44,6 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.rememberAsyncImagePainter
 import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.data.Design
+import com.sc.biap.data.DesignPhoto
 import com.sc.biap.data.SizeInventory
 import com.sc.biap.ui.DesignImageState
 import com.sc.biap.ui.rememberDesignImage
@@ -107,7 +108,10 @@ fun DesignDetailScreen(
     // Edit states
     var editName by remember { mutableStateOf("") }
     var editCategory by remember { mutableStateOf("") }
-    var editImagePath by remember { mutableStateOf<String?>(null) }
+    // The whole set of photographs being edited, cover first. Was a single path; a design
+    // may now hold up to Design.MAX_PHOTOS.
+    var editPhotos by remember { mutableStateOf<List<DesignPhoto>>(emptyList()) }
+    var photoPage by remember { mutableIntStateOf(0) }
     var editSizes by remember { mutableStateOf<List<SizeInventory>>(emptyList()) }
     var editCustomFields by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var editKarigars by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -130,7 +134,9 @@ fun DesignDetailScreen(
         if (uri != null) {
             scope.launch {
                 val localPath = FileUtils.copyUriToInternalStorage(context, uri)
-                editImagePath = localPath
+                if (localPath != null && editPhotos.size < Design.MAX_PHOTOS) {
+                    editPhotos = editPhotos + DesignPhoto(localPath = localPath)
+                }
             }
         }
     }
@@ -142,7 +148,9 @@ fun DesignDetailScreen(
         if (success && tempPhotoUri != null) {
             scope.launch {
                 val localPath = FileUtils.copyUriToInternalStorage(context, tempPhotoUri!!)
-                editImagePath = localPath
+                if (localPath != null && editPhotos.size < Design.MAX_PHOTOS) {
+                    editPhotos = editPhotos + DesignPhoto(localPath = localPath)
+                }
             }
         }
     }
@@ -181,7 +189,7 @@ fun DesignDetailScreen(
                     editBaseUpdatedAt = design.updatedAt
                     editName = design.name
                     editCategory = design.category
-                    editImagePath = design.imagePath
+                    editPhotos = design.photos
                     editSizes = design.sizeInventories
                     editCustomFields = design.customFields
                     editKarigars = design.karigars
@@ -196,12 +204,10 @@ fun DesignDetailScreen(
                         val updated = design.copy(
                             name = editName.trim(),
                             category = editCategory.trim(),
-                            imagePath = editImagePath,
-                            imageRef = if (editImagePath != design.imagePath) null else design.imageRef,
                             sizeInventories = editSizes,
                             customFields = editCustomFields.filterKeys { it.isNotBlank() },
                             karigars = editKarigars
-                        )
+                        ).withPhotos(editPhotos)
                         viewModel.updateDesign(updated)
                         isEditing = false
                     }
@@ -237,17 +243,15 @@ fun DesignDetailScreen(
                                                 val updated = design.copy(
                                                     name = editName.trim(),
                                                     category = editCategory.trim(),
-                                                    imagePath = editImagePath,
-                                                    // A different local photo means the
-                                                    // uploaded one is superseded. Clearing the
-                                                    // pointer is what marks it for re-upload;
-                                                    // the previous object is left intact until
-                                                    // the new bytes land.
-                                                    imageRef = if (editImagePath != design.imagePath) null else design.imageRef,
                                                     sizeInventories = editSizes,
                                                     customFields = editCustomFields.filterKeys { it.isNotBlank() },
                                                     karigars = editKarigars
-                                                )
+                                                    // withPhotos carries each photo's own ref,
+                                                    // so a newly picked one arrives with a null
+                                                    // ref and is marked for upload while the
+                                                    // previous object stays intact until the
+                                                    // new bytes land.
+                                                ).withPhotos(editPhotos)
                                                 viewModel.updateDesign(updated)
                                                 isEditing = false
                                             }
@@ -315,8 +319,14 @@ fun DesignDetailScreen(
                     DesignImageCard(
                         design = design,
                         isEditing = isEditing,
-                        editImagePath = editImagePath,
+                        editPhotos = editPhotos,
+                        page = photoPage,
+                        onPageChange = { photoPage = it },
                         onPickImage = { showSourceSelector = true },
+                        onRemovePhoto = { index ->
+                            editPhotos = editPhotos.filterIndexed { i, _ -> i != index }
+                            photoPage = photoPage.coerceAtMost(maxOf(0, editPhotos.size - 2))
+                        },
                     )
 
                     TitleCategoryCard(
@@ -1332,86 +1342,60 @@ if (isEditing) {
 }
 
 /**
- * Hero photo. Tapping it in edit mode asks for a new one.
+ * The photographs, swipeable, with a strip underneath while editing.
  *
- * While editing, a freshly picked LOCAL photo deliberately outranks the uploaded one -
- * otherwise replacing a photo would still show the old image until sync caught up.
+ * WHAT WAS WRONG BEFORE: a single frame at a fixed 280dp with ContentScale.Crop. These are
+ * full-length shots of a garment on a model, so cropping to a squat landscape box took the
+ * head and the hem - the two ends of the thing the screen exists to show. It now fits the
+ * whole photo into a tall frame and letterboxes onto the panel instead.
+ *
+ * While editing, a freshly picked LOCAL photo outranks the uploaded one automatically: it
+ * arrives as a DesignPhoto carrying a local path and no ref, so there is no longer a
+ * special case for it.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DesignImageCard(
     design: Design,
     isEditing: Boolean,
-    editImagePath: String?,
+    editPhotos: List<DesignPhoto>,
+    page: Int,
+    onPageChange: (Int) -> Unit,
     onPickImage: () -> Unit,
+    onRemovePhoto: (Int) -> Unit,
 ) {
-// Design Image Card
-Box(
-    modifier = Modifier
-        .fillMaxWidth()
-        .height(HeroImageHeight)
-        .clip(AtelierShapes.CornerLarge)
-        .background(
-            Brush.linearGradient(
-                listOf(
-                    MaterialTheme.colorScheme.surfaceVariant,
-                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                )
-            )
-        )
-        .clickable(enabled = isEditing) { onPickImage() },
-    contentAlignment = Alignment.Center
-) {
-    val imagePathToUse = if (isEditing) editImagePath else design.imagePath
-    // While editing, a freshly picked local photo must win over the
-    // uploaded one - otherwise the user sees the old image after replacing it.
-    val detailImage = rememberDesignImage(
-        imagePath = imagePathToUse,
-        imageRef = if (isEditing && editImagePath != null) null else design.imageRef
-    )
+    val photos = if (isEditing) editPhotos else design.photos
 
-    when (val imageState = detailImage.state) {
-        is DesignImageState.Ready -> {
-            Image(
-                painter = rememberAsyncImagePainter(imageState.model),
-                contentDescription = if (isEditing) "Edit Photo" else design.name,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+    Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)) {
+        if (photos.isEmpty()) {
+            DesignPhotoEmptyPanel(
+                onClick = { if (isEditing) onPickImage() },
+                modifier = Modifier.fillMaxWidth(),
             )
-            if (isEditing) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(AtelierSpacing.Cozy)
-                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                        .padding(AtelierSpacing.Compact)
-                ) {
-                    Icon(
-                        Icons.Default.PhotoCamera,
-                        contentDescription = "Change Photo",
-                        tint = Color.White,
-                        modifier = Modifier.size(OverlayIconSize)
-                    )
-                }
-            }
+        } else {
+            DesignPhotoPager(
+                photos = photos,
+                contentDescription = design.name,
+                page = page,
+                onPageChange = onPageChange,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
 
-        DesignImageState.Loading -> LoadingIndicator()
-
-        DesignImageState.Unavailable -> PhotoUnavailable(onRetry = detailImage.retry)
-
-        DesignImageState.Absent -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                Icons.Default.PhotoCamera,
-                contentDescription = "Upload Photo",
-                modifier = Modifier.size(EmptyStateIconSize),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+        // The strip appears only while editing. Outside edit mode the pager and its dots
+        // already say how many photographs there are, and a row of tiles carrying remove
+        // badges you cannot use would be furniture.
+        if (isEditing) {
+            DesignPhotoStrip(
+                photos = photos,
+                editable = true,
+                onAdd = onPickImage,
+                onRemove = onRemovePhoto,
+                selected = page,
+                onSelect = onPageChange,
             )
-            Spacer(Modifier.height(AtelierSpacing.Compact))
-            Text("Upload Design Photo", style = MaterialTheme.typography.labelLarge)
         }
     }
-}
 }
 
 /**

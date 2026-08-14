@@ -7,6 +7,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 import com.sc.biap.data.Design
+import com.sc.biap.data.DesignPhoto
 import com.sc.biap.data.Order
 import com.sc.biap.data.OrderLine
 import com.sc.biap.data.SizeInventory
@@ -27,7 +28,11 @@ data class DesignEntity(
     val imageUpdatedBy: String? = null,
     // Added in schema v6 - see AppDatabase.MIGRATION_5_6
     val archivedAt: Long = 0L,
-    val archiveUpdatedAt: Long = 0L
+    val archiveUpdatedAt: Long = 0L,
+    // Added in schema v8 - see AppDatabase.MIGRATION_7_8. Photos beyond the cover, which
+    // stays in imagePath/imageRef above.
+    val extraImages: List<DesignPhoto> = emptyList(),
+    val extraImagesUpdatedAt: Long = 0L
 )
 
 @Entity(
@@ -132,6 +137,8 @@ fun DesignWithInventories.toDomain(): Design {
         karigars = design.karigars,
         archivedAt = design.archivedAt,
         archiveUpdatedAt = design.archiveUpdatedAt,
+        extraImages = design.extraImages,
+        extraImagesUpdatedAt = design.extraImagesUpdatedAt,
         updatedAt = design.updatedAt
     )
 }
@@ -157,6 +164,8 @@ fun Design.toEntity(): DesignEntity {
         karigars = karigars,
         archivedAt = archivedAt,
         archiveUpdatedAt = archiveUpdatedAt,
+        extraImages = extraImages,
+        extraImagesUpdatedAt = extraImagesUpdatedAt,
         updatedAt = updatedAt
     )
 }

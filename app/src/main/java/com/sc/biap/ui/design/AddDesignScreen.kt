@@ -67,6 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.rememberAsyncImagePainter
 import com.sc.biap.data.DefaultDataRepository
+import com.sc.biap.data.DesignPhoto
 import com.sc.biap.data.SizeInventory
 import com.sc.biap.security.AppLock
 import com.sc.biap.theme.AtelierShapes
@@ -183,7 +184,7 @@ fun AddDesignScreen(
     val isFormDirty = remember(state) {
         state.name.isNotEmpty() ||
             state.category != AddDesignViewModel.DEFAULT_CATEGORY ||
-            state.imagePath != null ||
+            state.photoPaths.isNotEmpty() ||
             state.sizes.isNotEmpty() ||
             state.karigars.isNotEmpty() ||
             state.customFields.values.any { it.isNotEmpty() }
@@ -221,10 +222,16 @@ fun AddDesignScreen(
                 .padding(AtelierSpacing.Base),
             verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Large)
         ) {
-            DesignPhotoPicker(
-                imagePath = state.imagePath,
-                onClick = { showSourceSelector = true }
-            )
+            if (state.photoPaths.isEmpty()) {
+                DesignPhotoEmptyPanel(onClick = { showSourceSelector = true })
+            } else {
+                DesignPhotoStrip(
+                    photos = state.photoPaths.map { DesignPhoto(localPath = it) },
+                    editable = true,
+                    onAdd = { showSourceSelector = true },
+                    onRemove = { viewModel.onImageRemoved(it) },
+                )
+            }
 
             BasicDetailsCard(
                 name = state.name,
@@ -335,65 +342,10 @@ private fun AddDesignTopBar(
 
 // #region 5. Photo
 
-/** Tapping anywhere on the panel opens the source chooser, empty or not. */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun DesignPhotoPicker(
-    imagePath: String?,
-    onClick: () -> Unit
-) {
-    val context = LocalContext.current
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(ImagePickerHeight)
-            .clip(AtelierShapes.CornerLarge)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.surfaceVariant,
-                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                    )
-                )
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        if (imagePath != null) {
-            Image(
-                painter = rememberAsyncImagePainter(FileUtils.resolveImageFile(context, imagePath)),
-                contentDescription = "Design Image",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(AtelierSpacing.Cozy)
-                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                    .padding(AtelierSpacing.Compact)
-            ) {
-                Icon(
-                    Icons.Default.PhotoCamera,
-                    contentDescription = "Change Photo",
-                    tint = Color.White,
-                    modifier = Modifier.size(OverlayIconSize)
-                )
-            }
-        } else {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    Icons.Default.PhotoCamera,
-                    contentDescription = "Upload Photo",
-                    modifier = Modifier.size(EmptyStateIconSize),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(AtelierSpacing.Compact))
-                Text("Upload Design Photo", style = MaterialTheme.typography.labelLarge)
-            }
-        }
-    }
-}
+/*
+ * The old single-photo panel lived here. Replaced by DesignPhotoStrip and
+ * DesignPhotoEmptyPanel in DesignPhotos.kt, which the detail screen shares.
+ */
 // #endregion
 
 // #region 6. Basic Details

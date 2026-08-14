@@ -42,7 +42,15 @@ class OrphanImageCleanupWorker(
                         // without this the worker simply cannot open them.
                         .openHelperFactory(SupportOpenHelperFactory(DatabaseKey.getOrCreate(context)))
                         .build()
-                    val paths = db.designDao().getAllImagePaths()
+                    // Cover photos AND the extras. This worker deletes files off disk, so a
+                    // list that stopped at the cover would have swept away every additional
+                    // photograph on every design the first time it ran.
+                    val dao = db.designDao()
+                    val converters = com.sc.biap.data.room.Converters()
+                    val paths = dao.getAllImagePaths() +
+                        dao.getAllExtraImagesRaw()
+                            .flatMap { converters.toDesignPhotos(it) }
+                            .mapNotNull { it.localPath }
                     for (path in paths) {
                         activeImagePaths.add(path)
                         val file = File(path)

@@ -76,8 +76,21 @@ sealed interface SyncStatus {
 interface DataRepository {
     /** Queue a design photo for background upload. Returns the storage key it will land on. */
     fun enqueueImageUpload(designId: String, localPath: String): String
-    /** Move a design's image pointer after its bytes are confirmed uploaded. */
-    suspend fun applyUploadedImage(designId: String, key: String, uploadedBy: String?): Boolean
+    /**
+     * Move ONE photograph's pointer after its bytes are confirmed uploaded.
+     *
+     * [localPath] identifies which of the design's photographs; the key alone cannot, since
+     * a design may hold several and the cover is stored apart from the rest.
+     */
+    suspend fun applyUploadedImage(
+        designId: String,
+        localPath: String,
+        key: String,
+        uploadedBy: String?,
+    ): Boolean
+
+    /** Every storage key this design points at, so retention can spare all of them. */
+    suspend fun referencedImageKeys(designId: String): Set<String>
     val biData: StateFlow<BusinessIntelligenceData>
     fun addOrUpdateDesign(design: Design)
 
@@ -493,12 +506,16 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
      */
     private suspend fun backfillPendingImageUploads(dao: DesignDao) {
         try {
+            // Sweeps every photograph on every design, not just the cover. A design's second
+            // photo can fail to upload exactly as easily as its first, and would have been
+            // just as permanently and silently local.
             val pending = dao.getAllDesignsOnce()
                 .map { it.toDomain() }
-                .filter { it.imageRef.isNullOrBlank() && !it.imagePath.isNullOrBlank() }
-                .mapNotNull { design ->
-                    val file = FileUtils.resolveImageFile(context, design.imagePath)
-                    if (file != null && file.exists()) design.id to file.absolutePath else null
+                .flatMap { design -> design.photos.map { design.id to it } }
+                .filter { (_, photo) -> photo.ref.isNullOrBlank() && !photo.localPath.isNullOrBlank() }
+                .mapNotNull { (designId, photo) ->
+                    val file = FileUtils.resolveImageFile(context, photo.localPath)
+                    if (file != null && file.exists()) designId to file.absolutePath else null
                 }
 
             if (pending.isEmpty()) return
@@ -912,25 +929,66 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                 TimeUnit.MILLISECONDS
             )
             .build()
-        // REPLACE: a rapid re-shoot supersedes the pending upload instead of racing it.
+        // REPLACE, and keyed by the LOCAL PATH as well as the design: a rapid re-shoot of one
+        // photo still supersedes its own pending upload, but five photos on one design no
+        // longer evict each other. Keyed by design alone, adding five at once would have left
+        // exactly one uploaded.
         WorkManager.getInstance(context).enqueueUniqueWork(
-            ImageUploadWorker.workName(designId),
+            ImageUploadWorker.workName(designId, localPath),
             ExistingWorkPolicy.REPLACE,
             request
         )
         return key
     }
 
+    /**
+     * Point one photograph at its uploaded bytes.
+     *
+     * [localPath] says WHICH photograph. The design may hold five, and the cover lives in
+     * different columns from the rest, so the key alone cannot say where the pointer belongs.
+     *
+     * Returns true when the photo is no longer on the design at all - removed or replaced
+     * while the upload was in flight. The bytes are safely stored and simply unreferenced;
+     * the orphan sweep collects them. Reporting that as a failure would make the worker retry
+     * to its limit over a job that has nothing left to do.
+     */
     override suspend fun applyUploadedImage(
         designId: String,
+        localPath: String,
         key: String,
         uploadedBy: String?,
     ): Boolean = withContext(Dispatchers.IO) {
         return@withContext try {
             val dao = awaitDao() ?: return@withContext false
-            // Targeted column update: whatever the user edited while the upload was in
-            // flight stays exactly as they left it.
-            dao.updateImagePointer(designId, key, System.currentTimeMillis(), uploadedBy)
+            val design = dao.getDesignById(designId)?.toDomain() ?: return@withContext true
+            val now = System.currentTimeMillis()
+
+            when {
+                design.imagePath == localPath -> {
+                    // Targeted column update: whatever the user edited while the upload was
+                    // in flight stays exactly as they left it.
+                    dao.updateImagePointer(designId, key, now, uploadedBy)
+                }
+
+                design.extraImages.any { it.localPath == localPath } -> {
+                    val moved = design.extraImages.map { photo ->
+                        if (photo.localPath == localPath) {
+                            photo.copy(ref = key, uploadedBy = uploadedBy)
+                        } else {
+                            photo
+                        }
+                    }
+                    dao.updateExtraImages(designId, moved, now)
+                }
+
+                else -> {
+                    android.util.Log.i(
+                        "DataRepository",
+                        "uploaded $key but $localPath is no longer on design $designId - leaving it unreferenced"
+                    )
+                    return@withContext true
+                }
+            }
             triggerLocalBackup()
             true
         } catch (e: Exception) {
@@ -938,6 +996,24 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             false
         }
     }
+
+    /**
+     * Every storage key this design currently points at, for the retention sweep to spare.
+     *
+     * Empty on any failure, which makes the sweep protect nothing - so callers must treat an
+     * empty result as "do not prune" rather than "prune everything".
+     */
+    override suspend fun referencedImageKeys(designId: String): Set<String> =
+        withContext(Dispatchers.IO) {
+            return@withContext try {
+                val dao = awaitDao() ?: return@withContext emptySet()
+                val design = dao.getDesignById(designId)?.toDomain() ?: return@withContext emptySet()
+                design.photos.mapNotNull { it.ref?.takeIf { key -> key.isNotBlank() } }.toSet()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                emptySet()
+            }
+        }
 
     override fun addOrUpdateDesign(design: Design) {
         repositoryScope.launch {
@@ -951,16 +1027,21 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             triggerLocalBackup()
 
             // A local photo with no remote pointer is one that has not been uploaded yet -
-            // either brand new, or a replacement (picking a new photo clears imageRef).
+            // either brand new, or a replacement (picking a new photo clears its ref).
             // Hooked here rather than in each ViewModel so a save path added later cannot
             // silently skip uploading. Sync does not come through here; it uses importData.
-            val localPath = designWithTime.imagePath
-            if (!localPath.isNullOrBlank() && designWithTime.imageRef.isNullOrBlank()) {
-                val file = FileUtils.resolveImageFile(context, localPath)
-                if (file != null && file.exists()) {
-                    enqueueImageUpload(design.id, file.absolutePath)
+            //
+            // Every photograph, not just the cover: a design saved with five new photos has
+            // five uploads to do, and the one that ran the cover alone would have left four
+            // of them existing only on this phone.
+            designWithTime.photos
+                .filter { !it.localPath.isNullOrBlank() && it.ref.isNullOrBlank() }
+                .forEach { photo ->
+                    val file = FileUtils.resolveImageFile(context, photo.localPath)
+                    if (file != null && file.exists()) {
+                        enqueueImageUpload(design.id, file.absolutePath)
+                    }
                 }
-            }
         }
     }
 

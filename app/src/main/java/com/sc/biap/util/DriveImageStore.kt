@@ -162,11 +162,19 @@ object DriveImageStore {
     }
 
     /**
-     * Prune a design's photo history to the newest [keep] versions.
+     * Prune a design's photo history to the newest [keep] superseded versions.
      *
-     * [protectKey] - the version the design currently points at - is NEVER deleted, even if
-     * it somehow falls outside the newest [keep]. Losing the live photo to a retention sweep
-     * would be far worse than keeping one extra file.
+     * [protectKeys] - every key the design currently points at - are NEVER deleted, however
+     * old they are. Losing a live photo to a retention sweep would be far worse than keeping
+     * extra files.
+     *
+     * THIS USED TO PROTECT ONE KEY, AND THAT BECAME A BUG THE MOMENT A DESIGN COULD HOLD
+     * FIVE PHOTOGRAPHS. All versions of a design share the `img_<designId>_` prefix, so a
+     * sweep sees every photo's history in one list, keeps the newest few by timestamp, and
+     * deletes the rest. With one photo per design that is exactly right. With five, the
+     * four the sweep was not told to protect are just old names in that list - and the first
+     * upload after adding them would have deleted live photographs out of Drive, with only
+     * the local copies left and nothing on screen to say what had happened.
      *
      * Best-effort and deliberately non-fatal: it runs after a successful upload and pointer
      * move, so a failure here leaves extra files behind but never breaks a design. Returns
@@ -176,7 +184,7 @@ object DriveImageStore {
         context: Context,
         designId: String,
         keep: Int = VERSIONS_RETAINED,
-        protectKey: String? = null,
+        protectKeys: Set<String> = emptySet(),
     ): Int = withContext(Dispatchers.IO) {
         return@withContext try {
             val token = accessToken(context) ?: return@withContext 0
@@ -185,7 +193,7 @@ object DriveImageStore {
             val doomed = versionsToPrune(
                 names = versions.map { it.name },
                 keep = keep,
-                protectName = protectKey,
+                protectNames = protectKeys,
             ).toSet()
 
             var deleted = 0
@@ -204,17 +212,23 @@ object DriveImageStore {
     }
 
     /**
-     * Which version names should go, newest [keep] retained and [protectName] always spared.
+     * Which version names should go: the newest [keep] are retained and every name in
+     * [protectNames] is spared, wherever it falls in the ordering.
      *
      * Pure and separately unit-tested: retention deletes real photographs, so the decision of
      * what dies is kept free of any I/O and verified independently of Drive. Names embed a
      * millisecond stamp, so lexical order is chronological order.
+     *
+     * Protected names are removed from the list BEFORE the newest [keep] are counted. Left in,
+     * a design's five live photos would fill the retention window on their own and every
+     * genuinely superseded version would survive forever - retention that quietly stops
+     * retaining. [keep] means "this many old versions besides the ones still in use".
      */
-    fun versionsToPrune(names: List<String>, keep: Int, protectName: String?): List<String> {
+    fun versionsToPrune(names: List<String>, keep: Int, protectNames: Set<String>): List<String> {
         if (keep <= 0) return emptyList()
         return names.sorted()
+            .filterNot { it in protectNames }
             .dropLast(keep)
-            .filter { it != protectName }
     }
 
     /** Where a fetched photo is kept once decrypted. */

@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         OrderEntity::class,
         DeletedOrderEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -133,8 +133,27 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v7 -> v8: photographs beyond the cover.
+         *
+         * Two columns, both defaulted, nothing existing read or rewritten. Every design keeps
+         * its cover exactly where it was in `imagePath`/`imageRef` and simply gains an empty
+         * list of extras - which is also why a build predating this still shows the main
+         * photo of every design rather than nothing at all.
+         *
+         * `extraImagesUpdatedAt` is the second column for the same reason the image and
+         * archive pointers each have one: adding a photo and editing a price are separate
+         * facts, and whole-record last-write-wins would let one silently undo the other.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE designs ADD COLUMN extraImages TEXT NOT NULL DEFAULT '[]'")
+                db.execSQL("ALTER TABLE designs ADD COLUMN extraImagesUpdatedAt INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         /** Every migration the app knows about. Pass to `addMigrations(*ALL_MIGRATIONS)`. */
         val ALL_MIGRATIONS: Array<Migration> =
-            arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
     }
 }

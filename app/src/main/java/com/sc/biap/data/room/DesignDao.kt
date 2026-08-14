@@ -7,6 +7,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import com.sc.biap.data.BusinessIntelligenceData
 import com.sc.biap.data.Design
+import com.sc.biap.data.DesignPhoto
 import com.sc.biap.data.SizeInventory
 import kotlinx.coroutines.flow.Flow
 
@@ -48,6 +49,25 @@ interface DesignDao {
 
     @Query("SELECT imageRef FROM designs WHERE id = :id")
     suspend fun getImageRef(id: String): String?
+
+    /**
+     * Move the extra photos, and nothing else. The counterpart to [updateImagePointer].
+     *
+     * Same reasoning: an upload finishing in the background must not carry a stale copy of
+     * the name, price or karigars back over whatever has been edited since.
+     */
+    @Query("UPDATE designs SET extraImages = :photos, extraImagesUpdatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateExtraImages(id: String, photos: List<DesignPhoto>, updatedAt: Long)
+
+    /**
+     * The raw extra-photo columns, one JSON string per design.
+     *
+     * Returns strings rather than `List<List<DesignPhoto>>` because Room cannot apply a type
+     * converter to the element type of a multi-row result. Decode with
+     * [Converters.toDesignPhotos], which already handles a corrupt column.
+     */
+    @Query("SELECT extraImages FROM designs")
+    suspend fun getAllExtraImagesRaw(): List<String>
 
     /**
      * Archive or restore. Pass 0 as [archivedAt] to restore.

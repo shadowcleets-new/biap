@@ -9,6 +9,23 @@ data class SizeInventory(
     val price: Long
 )
 
+/**
+ * One photograph of a design.
+ *
+ * Carries the same pair the cover has always carried: a local file that works offline and
+ * immediately, and a storage key for the uploaded copy that lets somebody else's device see
+ * it. Either may be absent - a photo just taken has no key yet, and a photo taken on another
+ * device has no local file here.
+ */
+@Serializable
+data class DesignPhoto(
+    val localPath: String? = null,
+    val ref: String? = null,
+    val uploadedBy: String? = null,
+) {
+    val isEmpty: Boolean get() = localPath.isNullOrBlank() && ref.isNullOrBlank()
+}
+
 @Serializable
 data class Design(
     val id: String,
@@ -44,9 +61,61 @@ data class Design(
      * the archive flag are two different questions.
      */
     val archiveUpdatedAt: Long = 0L,
+    /**
+     * Photographs BEYOND the cover. The cover stays in `imagePath`/`imageRef` above.
+     *
+     * WHY THE COVER IS NOT JUST photos[0]:
+     *   Those three cover fields are load-bearing everywhere - the catalogue row, the order
+     *   carousel, the upload worker, the orphan sweep, and an independent merge clause that
+     *   stops a price edit dragging a stale photo along. Collapsing them into a list would
+     *   have meant rewriting all of that at once, and a build that predates this field would
+     *   read the new payload and find no photograph at all. Leaving the cover exactly where
+     *   it is means an older device still sees the main photo of every design.
+     *
+     *   [photos] hides the split, so callers work with one list and never have to care.
+     */
+    val extraImages: List<DesignPhoto> = emptyList(),
+    /** When [extraImages] last changed. Merged on its own clock, as the cover pointer is. */
+    val extraImagesUpdatedAt: Long = 0L,
     val updatedAt: Long = System.currentTimeMillis()
 ) {
     val isArchived: Boolean get() = archivedAt > 0L
+
+    /** Every photograph, cover first. Empty when the design has never been photographed. */
+    val photos: List<DesignPhoto>
+        get() = buildList {
+            val cover = DesignPhoto(imagePath, imageRef, imageUpdatedBy)
+            if (!cover.isEmpty) add(cover)
+            addAll(extraImages.filterNot { it.isEmpty })
+        }
+
+    /**
+     * Replace the whole set of photographs, cover first, capped at [MAX_PHOTOS].
+     *
+     * The two timestamps move only when their own half actually changed. Bumping the cover's
+     * clock because a second photo was added would let that write win the cover merge against
+     * a genuinely newer cover uploaded elsewhere - the exact trap `imageUpdatedAt` exists to
+     * avoid.
+     */
+    fun withPhotos(photos: List<DesignPhoto>, now: Long = System.currentTimeMillis()): Design {
+        val kept = photos.filterNot { it.isEmpty }.take(MAX_PHOTOS)
+        val cover = kept.firstOrNull()
+        val extras = kept.drop(1)
+        val coverMoved = cover?.localPath != imagePath || cover?.ref != imageRef
+        return copy(
+            imagePath = cover?.localPath,
+            imageRef = cover?.ref,
+            imageUpdatedBy = cover?.uploadedBy,
+            imageUpdatedAt = if (coverMoved) now else imageUpdatedAt,
+            extraImages = extras,
+            extraImagesUpdatedAt = if (extras != extraImages) now else extraImagesUpdatedAt,
+        )
+    }
+
+    companion object {
+        /** Photographs one design may carry, cover included. */
+        const val MAX_PHOTOS = 5
+    }
 }
 
 @Serializable

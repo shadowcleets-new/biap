@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sc.biap.data.DataRepository
 import com.sc.biap.data.Design
+import com.sc.biap.data.DesignPhoto
 import com.sc.biap.data.SizeInventory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +18,15 @@ import com.sc.biap.util.SizeUtils
 data class AddDesignUiState(
     val name: String = "",
     val category: String = AddDesignViewModel.DEFAULT_CATEGORY,
-    val imagePath: String? = null,
+    /**
+     * Local paths of the photographs chosen so far, cover first, capped at
+     * [Design.MAX_PHOTOS].
+     *
+     * Paths rather than [com.sc.biap.data.DesignPhoto]: nothing on this screen has been
+     * uploaded yet, so every entry is local by definition and a ref field would only ever
+     * hold null until the design is saved.
+     */
+    val photoPaths: List<String> = emptyList(),
     val sizes: List<SizeInventory> = emptyList(),
     val availableSizes: List<String> = SizeUtils.sortSizes(listOf("S", "M", "L", "XL", "XXL")),
     val customFields: Map<String, String> = emptyMap(),
@@ -62,8 +71,32 @@ class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
         _uiState.update { it.copy(category = category) }
     }
 
+    /** Append a photograph. Silently ignored once [Design.MAX_PHOTOS] are held. */
     fun onImageSelected(path: String?) {
-        _uiState.update { it.copy(imagePath = path) }
+        if (path.isNullOrBlank()) return
+        _uiState.update { current ->
+            if (current.photoPaths.size >= Design.MAX_PHOTOS || path in current.photoPaths) {
+                current
+            } else {
+                current.copy(photoPaths = current.photoPaths + path)
+            }
+        }
+    }
+
+    /**
+     * Drop one photograph. Removing the first promotes the next to cover, which is simply
+     * what being first means - no separate cover field to keep in step.
+     */
+    fun onImageRemoved(index: Int) {
+        _uiState.update { current ->
+            if (index !in current.photoPaths.indices) {
+                current
+            } else {
+                current.copy(
+                    photoPaths = current.photoPaths.filterIndexed { i, _ -> i != index }
+                )
+            }
+        }
     }
 
     fun updateSizeInventory(size: String, stock: Int, price: Long, enabled: Boolean, restoreFromCache: Boolean = false) {
@@ -137,11 +170,10 @@ class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
             id = UUID.randomUUID().toString(),
             name = state.name.trim(),
             category = state.category.trim(),
-            imagePath = state.imagePath,
             sizeInventories = state.sizes,
             customFields = state.customFields.filterKeys { it.isNotBlank() },
             karigars = state.karigars
-        )
+        ).withPhotos(state.photoPaths.map { DesignPhoto(localPath = it) })
 
         repository.addOrUpdateDesign(newDesign)
         _uiState.update { it.copy(isSaved = true) }
