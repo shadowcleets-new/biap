@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Undo
@@ -105,6 +106,7 @@ private val CarouselItemRadius = 22.dp
 fun OrdersList(
     orders: List<Order>,
     designs: Map<String, Design>,
+    onEdit: (Order) -> Unit,
     onCancel: (Order) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -117,6 +119,7 @@ fun OrdersList(
             OrderCard(
                 order = order,
                 designs = designs,
+                onEdit = { onEdit(order) },
                 onCancel = { onCancel(order) },
             )
         }
@@ -139,6 +142,7 @@ fun OrdersList(
 private fun OrderCard(
     order: Order,
     designs: Map<String, Design>,
+    onEdit: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -193,6 +197,10 @@ private fun OrderCard(
                             else "${order.designCount} designs"
                         )
                         add(stamp)
+                        // Says so rather than hiding it. An order whose contents changed after
+                        // the fact is still a record, but not the one originally written, and
+                        // the date beside it is the date it was placed rather than touched.
+                        if (order.updatedAt > order.createdAt) add("edited")
                     }.joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
@@ -264,15 +272,35 @@ private fun OrderCard(
 
             Spacer(Modifier.height(8.dp))
 
-            TextButton(
-                onClick = { confirming = true },
-                shapes = ButtonDefaults.shapes(),
-                colors = ButtonDefaults.textButtonColors(contentColor = scheme.error),
+            // Edit and Cancel together: they are the two things that can happen to an order,
+            // and both move stock. Edit leads, in the ordinary content colour, because it is
+            // the recoverable one - Cancel keeps the error colour it has always had.
+            Row(
                 modifier = Modifier.padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.Undo, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Cancel order")
+                TextButton(onClick = onEdit, shapes = ButtonDefaults.shapes()) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Edit order")
+                }
+                TextButton(
+                    onClick = { confirming = true },
+                    shapes = ButtonDefaults.shapes(),
+                    colors = ButtonDefaults.textButtonColors(contentColor = scheme.error),
+                ) {
+                    Icon(
+                        Icons.Default.Undo,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Cancel order")
+                }
             }
         }
     }

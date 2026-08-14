@@ -558,7 +558,7 @@ fun MainScreen(
             // each tab has one obvious thing to add and can afford to say which.
             ExtendedFloatingActionButton(
                 onClick = {
-                    onItemClick(if (tab == MainTab.INVENTORY) AddDesign else NewOrder)
+                    onItemClick(if (tab == MainTab.INVENTORY) AddDesign else NewOrder())
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -658,12 +658,13 @@ fun MainScreen(
                                 // there is anything to order has nothing to do with what the
                                 // Inventory tab is currently narrowed to.
                                 hasDesigns = designsById.isNotEmpty(),
-                                onNewOrder = { onItemClick(NewOrder) },
+                                onNewOrder = { onItemClick(NewOrder()) },
                             )
                         } else {
                             OrdersList(
                                 orders = orders,
                                 designs = designsById,
+                                onEdit = { onItemClick(NewOrder(orderId = it.id)) },
                                 onCancel = { viewModel.cancelOrder(it.id) },
                             )
                         }

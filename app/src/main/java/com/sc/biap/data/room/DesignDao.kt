@@ -8,6 +8,8 @@ import androidx.room.Transaction
 import com.sc.biap.data.BusinessIntelligenceData
 import com.sc.biap.data.Design
 import com.sc.biap.data.DesignPhoto
+import com.sc.biap.data.OrderLine
+import com.sc.biap.data.stockDeltas
 import com.sc.biap.data.SizeInventory
 import kotlinx.coroutines.flow.Flow
 
@@ -181,6 +183,41 @@ interface DesignDao {
         }
         insertOrder(order)
         deleteDeletedOrderTombstone(order.id)
+    }
+
+    /**
+     * Change what is on an order, moving only the DIFFERENCE in and out of stock.
+     *
+     * NOT cancel-then-replace. That would return every piece and take them all out again,
+     * and a failure between the two halves would leave the stock quietly restored with the
+     * order still listed - pieces that read as available on the shelf but are already packed.
+     * Here the two directions happen inside one transaction, so either the whole edit lands
+     * or nothing moves at all.
+     *
+     * Quantities are summed per design-and-size before comparing, so an order that somehow
+     * carries the same size on two lines is still counted once.
+     *
+     * Throws if any size is asked for more than is left, which rolls the whole edit back.
+     * `createdAt` is deliberately carried over: editing an order does not make it a new one.
+     */
+    @Transaction
+    suspend fun editOrder(orderId: String, newLines: List<OrderLine>, now: Long) {
+        val existing = getOrderById(orderId)
+            ?: throw IllegalArgumentException("That order no longer exists.")
+
+        for ((key, delta) in stockDeltas(existing.lines, newLines)) {
+            val (designId, size) = key
+            if (delta > 0) {
+                val changed = decrementStock(designId, size, delta)
+                require(changed == 1) { "Not enough stock left for size $size" }
+            } else {
+                incrementStock(designId, size, -delta)
+            }
+            touchDesign(designId, now)
+        }
+
+        insertOrder(existing.copy(lines = newLines, updatedAt = now))
+        deleteDeletedOrderTombstone(orderId)
     }
 
     /** Cancel an order: the pieces go back into stock and a tombstone stops it returning. */

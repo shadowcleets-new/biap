@@ -109,6 +109,17 @@ interface DataRepository {
      */
     suspend fun placeOrder(lines: List<OrderLine>): String?
 
+    /**
+     * Change what is on an existing order, moving only the difference in and out of stock.
+     *
+     * Returns null on success, or a reason to show. Lines already on the order keep the price
+     * they went out at; only a size that was never on it takes today's.
+     */
+    suspend fun editOrder(orderId: String, lines: List<OrderLine>): String?
+
+    /** One order by id, for the edit screen to fill itself in from. */
+    suspend fun orderById(orderId: String): Order?
+
     /** Cancel an order, returning its pieces to stock. */
     fun cancelOrder(orderId: String)
     fun addGlobalCustomField(field: String)
@@ -1090,6 +1101,60 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         } catch (e: Exception) {
             e.printStackTrace()
             "Could not save the order."
+        }
+    }
+
+    /**
+     * Change what is on an existing order.
+     *
+     * PRICES STAY AS THE ORDER RECORDED THEM. A line that was already on the order keeps the
+     * price it went out at, however many pieces it now carries - raising a size from two to
+     * three pieces on a June order bills the third at June's rate, because the order is a
+     * record of one sale at one set of prices, not a live quotation. A design's price rising
+     * between batches must not silently revalue what was already sold.
+     *
+     * A genuinely NEW line is the exception, and it has no alternative: the catalogue keeps
+     * only the current price, so a size that was never on this order has no historic price
+     * to inherit and takes today's.
+     */
+    override suspend fun editOrder(orderId: String, lines: List<OrderLine>): String? {
+        if (lines.isEmpty()) return "An order needs at least one piece. Cancel it instead."
+        val dao = awaitDao() ?: return "Still opening your catalogue - try again in a moment."
+        return try {
+            val existing = dao.getOrderById(orderId)?.toDomain()
+                ?: return "That order no longer exists."
+
+            // Lines the order already had come back carrying their own recorded price; a size
+            // it never had comes back untouched at zero, and only those read the catalogue.
+            val priced = keepRecordedPrices(lines, existing.lines).map { line ->
+                if (line.unitPrice > 0L) return@map line
+                val design = dao.getDesignById(line.designId)
+                    ?: return "A design in this order no longer exists."
+                val inventory = design.inventories.firstOrNull { it.size == line.size }
+                    ?: return "Size ${line.size} is no longer on ${design.design.name}."
+                line.copy(unitPrice = inventory.price)
+            }
+
+            dao.editOrder(orderId, priced, System.currentTimeMillis())
+            triggerLocalBackup()
+            null
+        } catch (e: IllegalArgumentException) {
+            // Thrown by DesignDao.editOrder when a size outruns what is left, which rolls the
+            // whole edit back. Reported rather than swallowed: the numbers on screen were
+            // stale, and that has to be said before anything is packed.
+            e.message ?: "Not enough stock left for this order."
+        } catch (e: Exception) {
+            e.printStackTrace()
+            "Could not save the changes."
+        }
+    }
+
+    override suspend fun orderById(orderId: String): Order? = withContext(Dispatchers.IO) {
+        return@withContext try {
+            awaitDao()?.getOrderById(orderId)?.toDomain()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
     }
 

@@ -16,8 +16,14 @@ import kotlinx.serialization.Serializable
     val designId: String,
     val focusSize: String? = null,
 ) : NavKey
-/** Picking pieces off the catalogue to make an order. Reached from the Orders tab's button. */
-@Serializable data object NewOrder : NavKey
+/**
+ * Picking pieces off the catalogue to make an order.
+ *
+ * [orderId] null means a new one. Set, it opens that order already filled in and saves back
+ * over it - editing an order IS picking pieces, so it is the same screen rather than a second,
+ * worse copy of the same controls.
+ */
+@Serializable data class NewOrder(val orderId: String? = null) : NavKey
 @Serializable data object Profile : NavKey
 @Serializable data object AccessManagement : NavKey
 @Serializable data object Settings : NavKey

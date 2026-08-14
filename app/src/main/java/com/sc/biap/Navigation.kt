@@ -114,8 +114,9 @@ fun MainNavigation() {
             modifier = Modifier.safeDrawingPadding()
           )
         }
-        entry<NewOrder> {
+        entry<NewOrder> { key ->
           NewOrderScreen(
+            orderId = key.orderId,
             onBack = { backStack.removeLastOrNull() },
             modifier = Modifier.safeDrawingPadding()
           )

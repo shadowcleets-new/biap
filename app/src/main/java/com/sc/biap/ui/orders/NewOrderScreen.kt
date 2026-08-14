@@ -107,17 +107,18 @@ private val ThumbRadius = 20.dp
 // #region 2. The screen
 
 @Composable
-fun defaultNewOrderViewModel(): NewOrderViewModel {
+fun defaultNewOrderViewModel(orderId: String?): NewOrderViewModel {
     val context = LocalContext.current.applicationContext
-    return viewModel { NewOrderViewModel(DefaultDataRepository.getInstance(context)) }
+    return viewModel { NewOrderViewModel(DefaultDataRepository.getInstance(context), orderId) }
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun NewOrderScreen(
+    orderId: String? = null,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: NewOrderViewModel = defaultNewOrderViewModel(),
+    viewModel: NewOrderViewModel = defaultNewOrderViewModel(orderId),
 ) {
     val designs by viewModel.designs.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -125,6 +126,8 @@ fun NewOrderScreen(
     val draft by viewModel.draft.collectAsStateWithLifecycle()
     val saving by viewModel.saving.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
+    val held by viewModel.held.collectAsStateWithLifecycle()
+    val editing = viewModel.isEditing
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -141,6 +144,7 @@ fun NewOrderScreen(
             OrderTotalBar(
                 draft = draft,
                 saving = saving,
+                editing = editing,
                 onPlace = { viewModel.place(onPlaced = onBack) },
             )
         },
@@ -161,13 +165,13 @@ fun NewOrderScreen(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "New order",
+                        if (editing) "Edit order" else "New order",
                         style = MaterialTheme.typography.headlineMediumEmphasized,
                         color = MaterialTheme.colorScheme.onSurface,
                         letterSpacing = (-0.8).sp,
                     )
                     Text(
-                        "PICK THE PIECES GOING OUT",
+                        if (editing) "CHANGE WHAT WENT OUT" else "PICK THE PIECES GOING OUT",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         letterSpacing = 1.2.sp,
@@ -193,8 +197,14 @@ fun NewOrderScreen(
                         DesignPicker(
                             design = design,
                             picks = picks,
+                            held = held,
                             onSetQuantity = { size, qty ->
-                                viewModel.setQuantity(design.id, size.size, qty, size.stock)
+                                viewModel.setQuantity(
+                                    design.id,
+                                    size.size,
+                                    qty,
+                                    viewModel.ceilingFor(design.id, size.size, size.stock),
+                                )
                             },
                         )
                     }
@@ -226,6 +236,7 @@ fun NewOrderScreen(
 private fun DesignPicker(
     design: Design,
     picks: Map<PieceKey, Int>,
+    held: Map<PieceKey, Int>,
     onSetQuantity: (SizeInventory, Int) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -236,9 +247,13 @@ private fun DesignPicker(
 
     // Sold-out sizes are dropped rather than shown disabled: a row you can never use is
     // noise in a list you are scanning for the ones you can.
-    val orderable = remember(design.sizeInventories) {
+    //
+    // A size THIS ORDER already holds stays, however empty the catalogue reads - its pieces
+    // are not gone, only spoken for by this order, and dropping the row would make its own
+    // quantity impossible to change or even to leave alone.
+    val orderable = remember(design.sizeInventories, held) {
         design.sizeInventories
-            .filter { it.stock > 0 }
+            .filter { it.stock > 0 || held[PieceKey(design.id, it.size)] ?: 0 > 0 }
             .sortedBy { SizeUtils.getSizeSortWeight(it.size) }
     }
 
@@ -323,6 +338,7 @@ private fun DesignPicker(
                 SizePickerRow(
                     size = size,
                     quantity = picks[PieceKey(design.id, size.size)] ?: 0,
+                    ceiling = size.stock + (held[PieceKey(design.id, size.size)] ?: 0),
                     onQuantity = { onSetQuantity(size, it) },
                     onContainer = picked > 0,
                 )
@@ -336,6 +352,8 @@ private fun DesignPicker(
 private fun SizePickerRow(
     size: SizeInventory,
     quantity: Int,
+    /** Shelf stock plus whatever this order already holds of this size. */
+    ceiling: Int,
     onQuantity: (Int) -> Unit,
     onContainer: Boolean,
 ) {
@@ -379,7 +397,7 @@ private fun SizePickerRow(
         )
         Stepper(
             quantity = quantity,
-            max = size.stock,
+            max = ceiling,
             onQuantity = onQuantity,
             numberColor = primaryText,
         )
@@ -484,7 +502,12 @@ private fun StepperButton(
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun OrderTotalBar(draft: OrderDraft, saving: Boolean, onPlace: () -> Unit) {
+private fun OrderTotalBar(
+    draft: OrderDraft,
+    saving: Boolean,
+    editing: Boolean,
+    onPlace: () -> Unit,
+) {
     val scheme = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
@@ -496,7 +519,8 @@ private fun OrderTotalBar(draft: OrderDraft, saving: Boolean, onPlace: () -> Uni
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = if (draft.isEmpty) {
-                    "Nothing picked"
+                    // Emptying an order is not how it is cancelled - see NewOrderViewModel.
+                    if (editing) "Nothing left - use Cancel order" else "Nothing picked"
                 } else {
                     "${draft.pieces} ${if (draft.pieces == 1) "piece" else "pieces"} · " +
                         "${draft.designCount} ${if (draft.designCount == 1) "design" else "designs"}"
@@ -524,7 +548,12 @@ private fun OrderTotalBar(draft: OrderDraft, saving: Boolean, onPlace: () -> Uni
             modifier = Modifier.height(56.dp),
         ) {
             Text(
-                if (saving) "Placing…" else "Place order",
+                when {
+                    saving && editing -> "Saving…"
+                    saving -> "Placing…"
+                    editing -> "Save changes"
+                    else -> "Place order"
+                },
                 style = MaterialTheme.typography.titleMedium,
             )
         }

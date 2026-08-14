@@ -56,7 +56,13 @@ data class OrderDraft(
 
 // #region 2. The view model
 
-class NewOrderViewModel(private val dataRepository: DataRepository) : ViewModel() {
+class NewOrderViewModel(
+    private val dataRepository: DataRepository,
+    /** Null for a new order; an id opens that order for editing. */
+    private val orderId: String? = null,
+) : ViewModel() {
+
+    val isEditing: Boolean = orderId != null
 
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
@@ -64,11 +70,54 @@ class NewOrderViewModel(private val dataRepository: DataRepository) : ViewModel(
     private val _picks = MutableStateFlow<Map<PieceKey, Int>>(emptyMap())
     val picks: StateFlow<Map<PieceKey, Int>> = _picks.asStateFlow()
 
+    /**
+     * What the order held when this screen opened, per size.
+     *
+     * Not just the starting values - it is also the ceiling. A size can be raised to
+     * `stock + whatever this order already holds`, because those pieces are not gone, only
+     * spoken for by this order. Capping at plain stock would refuse to save an order the
+     * moment it had emptied a size, including saving it back exactly as it was.
+     */
+    private val _held = MutableStateFlow<Map<PieceKey, Int>>(emptyMap())
+    val held: StateFlow<Map<PieceKey, Int>> = _held.asStateFlow()
+
+    /** True until an order being edited has actually been read back. */
+    private val _loading = MutableStateFlow(orderId != null)
+    val loading: StateFlow<Boolean> = _loading.asStateFlow()
+
+    /**
+     * The price each size was ALREADY sold at on this order.
+     *
+     * The running total has to show what the order is worth, and a line that went out in June
+     * is worth its June price whatever the catalogue says today. Only a size that was never
+     * on this order falls through to the current price - there is no historic one to use.
+     */
+    private val _recordedPrices = MutableStateFlow<Map<PieceKey, Long>>(emptyMap())
+
     private val _saving = MutableStateFlow(false)
     val saving: StateFlow<Boolean> = _saving.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+
+    // Declared after every StateFlow it touches: an init block runs in declaration order, and
+    // reaching a property above its own initialiser is a null dereference waiting to happen.
+    init {
+        if (orderId != null) {
+            viewModelScope.launch {
+                val order = dataRepository.orderById(orderId)
+                if (order != null) {
+                    val byKey = order.lines.groupBy { PieceKey(it.designId, it.size) }
+                    _held.value = byKey.mapValues { (_, lines) -> lines.sumOf { it.quantity } }
+                    _picks.value = _held.value
+                    _recordedPrices.value = byKey.mapValues { (_, lines) -> lines.first().unitPrice }
+                } else {
+                    _error.value = "That order no longer exists."
+                }
+                _loading.value = false
+            }
+        }
+    }
 
     /**
      * What can actually be ordered: active designs holding at least one piece.
@@ -80,10 +129,17 @@ class NewOrderViewModel(private val dataRepository: DataRepository) : ViewModel(
     val designs: StateFlow<List<Design>> = combine(
         dataRepository.biData,
         _query,
-    ) { data, query ->
+        _held,
+    ) { data, query, held ->
+        val onThisOrder = held.keys.map { it.designId }.toSet()
         data.designs
             .filterNot { it.isArchived }
-            .filter { design -> design.sizeInventories.any { it.stock > 0 } }
+            // Sold out normally means "nothing to take", but a design already on this order
+            // has to stay listed however empty the catalogue now reads - its pieces are held
+            // by this order, and hiding it would make its own quantities uneditable.
+            .filter { design ->
+                design.id in onThisOrder || design.sizeInventories.any { it.stock > 0 }
+            }
             .filter { design ->
                 query.isBlank() ||
                     design.name.contains(query, ignoreCase = true) ||
@@ -92,15 +148,21 @@ class NewOrderViewModel(private val dataRepository: DataRepository) : ViewModel(
             .sortedBy { it.name.lowercase() }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** How many of a size may be picked: what is on the shelf plus what this order holds. */
+    fun ceilingFor(designId: String, size: String, stock: Int): Int =
+        stock + (_held.value[PieceKey(designId, size)] ?: 0)
+
     val draft: StateFlow<OrderDraft> = combine(
         dataRepository.biData,
         _picks,
-    ) { data, picks ->
+        _recordedPrices,
+    ) { data, picks, recorded ->
         val chosen = picks.filterValues { it > 0 }
         if (chosen.isEmpty()) return@combine OrderDraft()
 
+        // The order's own price first, today's catalogue price only for a size it never had.
         val priceOf = { key: PieceKey ->
-            data.designs.firstOrNull { it.id == key.designId }
+            recorded[key] ?: data.designs.firstOrNull { it.id == key.designId }
                 ?.sizeInventories?.firstOrNull { it.size == key.size }
                 ?.price ?: 0L
         }
@@ -158,11 +220,19 @@ class NewOrderViewModel(private val dataRepository: DataRepository) : ViewModel(
         val lines = _picks.value
             .filterValues { it > 0 }
             .map { (key, qty) -> OrderLine(key.designId, key.size, qty, unitPrice = 0L) }
+        // Emptying an order is not how it gets cancelled. Cancel says what is going back into
+        // stock and asks first; losing a record from the screen you opened to adjust it would
+        // be the wrong kind of surprise. The button is disabled here too - this is the guard
+        // behind it, not the message.
         if (lines.isEmpty()) return
 
         viewModelScope.launch {
             _saving.value = true
-            val failure = dataRepository.placeOrder(lines)
+            val failure = if (orderId != null) {
+                dataRepository.editOrder(orderId, lines)
+            } else {
+                dataRepository.placeOrder(lines)
+            }
             _saving.value = false
             if (failure == null) onPlaced() else _error.value = failure
         }
