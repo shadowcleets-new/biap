@@ -1,6 +1,7 @@
 package com.sc.biap.ui.design
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -172,6 +173,15 @@ fun DesignDetailScreen(
             }
         )
     }
+
+    // Back exits EDIT MODE first, exactly as the discard button beside it does - leaving
+    // the screen mid-edit would drop the changes with nothing said.
+    //
+    // enabled = isEditing on purpose: outside edit mode this handler is transparent, so the
+    // predictive back gesture keeps working and the catalogue peeks through under the
+    // finger. Intercepting unconditionally is what turns predictive back back into a plain
+    // button, which is the whole thing the platform is trying to stop apps doing.
+    BackHandler(enabled = isEditing) { isEditing = false }
 
     when (val uiState = state) {
         DesignDetailUiState.Loading -> {

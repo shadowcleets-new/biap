@@ -33,7 +33,21 @@
         </intent>
     </queries>
 
+    <!--
+        enableOnBackInvokedCallback opts the whole app into predictive back.
+
+        Without it the platform runs the legacy KeyEvent path, and NONE of the predictive
+        behaviour exists - not the cross-activity peek at the home screen, not the system
+        animations on dialogs and sheets, and not Navigation 3's own predictive pop, which
+        is already implemented in the library and was simply never being asked for.
+
+        Turning it on is also a promise: every back handler in the app must be an AndroidX
+        one. onBackPressed() overrides stop being called on Android 13+ once this is true.
+        This app only ever used androidx.activity.compose.BackHandler, so there was nothing
+        to migrate.
+    -->
     <application
+        android:enableOnBackInvokedCallback="true"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"

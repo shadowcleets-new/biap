@@ -6,8 +6,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.ContentTransform
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
@@ -18,6 +20,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import androidx.navigationevent.NavigationEvent
 import com.sc.biap.ui.PerformanceProfile
 import com.sc.biap.ui.main.MainScreen
 import com.sc.biap.ui.main.SplashScreen
@@ -89,6 +92,37 @@ fun MainNavigation() {
       } else {
         fadeIn(animationSpec = tween(durationMillis = 150)) togetherWith
                 fadeOut(animationSpec = tween(durationMillis = 150))
+      }
+    },
+    /**
+     * The back GESTURE, scrubbed by the finger rather than played on release.
+     *
+     * Navigation 3 ships a sensible default for this, but it ignores which edge the swipe
+     * came from and it does not know about this app's performance profile - so on a
+     * low-power device it would run springs while every other transition here had already
+     * dropped to a plain fade.
+     *
+     * The outgoing screen shrinks and slides TOWARDS the edge being dragged from, which is
+     * what the platform does between activities: the screen you are leaving follows your
+     * thumb, so the gesture reads as pulling it away rather than as an animation that
+     * happens to you.
+     */
+    predictivePopTransitionSpec = { edge ->
+      if (profile == PerformanceProfile.HIGH_FIDELITY) {
+        val towardsThumb = if (edge == NavigationEvent.EDGE_LEFT) 1 else -1
+        // Effects spring, damping 1.0 - the incoming screen must not overshoot while a
+        // finger is still deciding whether to commit.
+        val settle = spring<Float>(dampingRatio = 1f, stiffness = 1600f)
+        ContentTransform(
+          targetContentEnter = fadeIn(animationSpec = settle),
+          initialContentExit = scaleOut(targetScale = 0.9f, animationSpec = settle) +
+            slideOutHorizontally(animationSpec = spring(dampingRatio = 1f, stiffness = 1600f)) {
+              (it * 0.12f).toInt() * towardsThumb
+            } + fadeOut(animationSpec = settle),
+        )
+      } else {
+        fadeIn(animationSpec = tween(durationMillis = 150)) togetherWith
+          fadeOut(animationSpec = tween(durationMillis = 150))
       }
     },
     entryProvider =
