@@ -18,6 +18,7 @@ plugins {
   alias(libs.plugins.google.services)
   kotlin("android")
   alias(libs.plugins.ksp)
+  alias(libs.plugins.baselineprofile)
 }
 
 android {
@@ -156,6 +157,11 @@ dependencies {
   implementation(libs.androidx.material.icons.extended)
   implementation(libs.okhttp)
   implementation(libs.play.services.auth)
+
+  // Installs the shipped baseline profile at first run. Without it the profile is inert on
+  // anything below API 31 and unreliable above it - the file would ship and do nothing.
+  implementation(libs.androidx.profileinstaller)
+  baselineProfile(project(":baselineprofile"))
 
   // Room Database
   implementation(libs.androidx.room.runtime)

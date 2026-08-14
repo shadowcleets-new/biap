@@ -31,3 +31,4 @@ plugins {
 
 rootProject.name = "biap"
 include(":app")
+include(":baselineprofile")
