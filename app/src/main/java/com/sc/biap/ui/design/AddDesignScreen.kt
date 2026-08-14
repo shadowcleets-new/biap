@@ -63,6 +63,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.rememberAsyncImagePainter
@@ -208,6 +209,13 @@ fun AddDesignScreen(
         topBar = {
             AddDesignTopBar(
                 canSave = state.name.isNotBlank(),
+                sectionsFilled = listOf(
+                    state.photoPaths.isNotEmpty(),
+                    state.name.isNotBlank(),
+                    state.sizes.isNotEmpty(),
+                    state.karigars.isNotEmpty(),
+                    state.customFields.values.any { it.isNotBlank() },
+                ).count { it },
                 onBack = requestBack,
                 onSave = viewModel::saveDesign
             )
@@ -220,46 +228,91 @@ fun AddDesignScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(AtelierSpacing.Base),
-            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Large)
+            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
         ) {
-            if (state.photoPaths.isEmpty()) {
-                DesignPhotoEmptyPanel(onClick = { showSourceSelector = true })
-            } else {
-                DesignPhotoStrip(
-                    photos = state.photoPaths.map { DesignPhoto(localPath = it) },
-                    editable = true,
-                    onAdd = { showSourceSelector = true },
-                    onRemove = { viewModel.onImageRemoved(it) },
+            // Five numbered sections rather than five headings. A wizard would be wrong -
+            // staff photograph first and price days later - so the form stays one scroll
+            // and gains rhythm from numbering, status and elevation instead of sequence.
+            val namedYet = state.name.isNotBlank()
+            val attributesFilled = state.customFields.values.count { it.isNotBlank() }
+
+            FormSection(
+                number = 1,
+                title = "Photos",
+                status = "${state.photoPaths.size} of ${com.sc.biap.data.Design.MAX_PHOTOS}",
+                done = state.photoPaths.isNotEmpty(),
+                active = state.photoPaths.isEmpty() && !namedYet,
+            ) {
+                if (state.photoPaths.isEmpty()) {
+                    EmptyPhotoSlot(onClick = { showSourceSelector = true })
+                } else {
+                    DesignPhotoStrip(
+                        photos = state.photoPaths.map { DesignPhoto(localPath = it) },
+                        editable = true,
+                        onAdd = { showSourceSelector = true },
+                        onRemove = { viewModel.onImageRemoved(it) },
+                    )
+                }
+            }
+
+            FormSection(
+                number = 2,
+                title = "Basic details",
+                // The only hard requirement in the whole form, and it says so until met.
+                status = if (namedYet) state.category.ifBlank { "Named" } else "Required",
+                required = !namedYet,
+                done = namedYet,
+                active = !namedYet,
+            ) {
+                BasicDetailsCard(
+                    name = state.name,
+                    category = state.category,
+                    onNameChange = viewModel::onNameChange,
+                    onCategoryChange = viewModel::onCategoryChange
                 )
             }
 
-            BasicDetailsCard(
-                name = state.name,
-                category = state.category,
-                onNameChange = viewModel::onNameChange,
-                onCategoryChange = viewModel::onCategoryChange
-            )
+            FormSection(
+                number = 3,
+                title = "Sizes, stock & prices",
+                status = if (state.sizes.isEmpty()) "None yet" else "${state.sizes.size} on",
+                done = state.sizes.isNotEmpty(),
+            ) {
+                SizeScaleAndPricingCard(
+                    availableSizes = state.availableSizes,
+                    sizes = state.sizes,
+                    onUpdateSize = viewModel::updateSizeInventory,
+                    onAddAvailableSize = viewModel::addAvailableSize
+                )
+            }
 
-            SizeScaleAndPricingCard(
-                availableSizes = state.availableSizes,
-                sizes = state.sizes,
-                onUpdateSize = viewModel::updateSizeInventory,
-                onAddAvailableSize = viewModel::addAvailableSize
-            )
+            FormSection(
+                number = 4,
+                title = "Karigars",
+                status = if (state.karigars.isEmpty()) "None" else "${state.karigars.size} assigned",
+                done = state.karigars.isNotEmpty(),
+            ) {
+                KarigarAssignmentCard(
+                    karigars = state.karigars,
+                    onAddKarigar = viewModel::addKarigar,
+                    onRemoveKarigar = viewModel::removeKarigar
+                )
+            }
 
-            KarigarAssignmentCard(
-                karigars = state.karigars,
-                onAddKarigar = viewModel::addKarigar,
-                onRemoveKarigar = viewModel::removeKarigar
-            )
-
-            AttributesAndCustomFieldsCard(
-                customFields = state.customFields,
-                globalCustomFields = state.globalCustomFields,
-                onValueChange = viewModel::updateCustomFieldValue,
-                onRemoveField = viewModel::removeCustomField,
-                onAddField = viewModel::addCustomField
-            )
+            FormSection(
+                number = 5,
+                title = "Attributes",
+                status = if (attributesFilled == 0) "Optional" else "$attributesFilled filled",
+                done = attributesFilled > 0,
+            ) {
+                AttributesAndCustomFieldsCard(
+                    customFields = state.customFields,
+                    globalCustomFields = state.globalCustomFields,
+                    onValueChange = viewModel::updateCustomFieldValue,
+                    onRemoveField = viewModel::removeCustomField,
+                    onAddField = viewModel::addCustomField
+                )
+            }
         }
     }
 
@@ -307,36 +360,55 @@ fun AddDesignScreen(
 @Composable
 private fun AddDesignTopBar(
     canSave: Boolean,
+    sectionsFilled: Int,
     onBack: () -> Unit,
     onSave: () -> Unit
 ) {
-    TopAppBar(
-        title = { Text("Add New Design", style = MaterialTheme.typography.titleLargeStrong) },
-        navigationIcon = {
+    Column(modifier = Modifier.padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back")
             }
-        },
-        actions = {
+            Text(
+                "New design",
+                style = MaterialTheme.typography.titleMediumEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            // Inert until a name exists: unoutlined and dimmed rather than greyed with a
+            // border, because a stroke here would mean "empty slot" everywhere else.
             Button(
                 onClick = onSave,
                 enabled = canSave,
-                shapes = ButtonDefaults.shapes(shape = AtelierShapes.CornerMedium),
+                shapes = ButtonDefaults.shapes(shape = CircleShape),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    disabledContentColor =
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                ),
+                modifier = Modifier.height(44.dp),
             ) {
-                Icon(
-                    Icons.Default.Done,
-                    contentDescription = "Save",
-                    modifier = Modifier.size(ButtonDefaults.IconSize)
-                )
-                Spacer(Modifier.width(AtelierSpacing.Micro))
-                Text("Save")
+                Text("Save", style = MaterialTheme.typography.titleSmallEmphasized)
             }
         }
-    )
+        // The rail and the Save button say the same thing two ways: how much is filled in,
+        // and whether it can be kept at all.
+        Row(
+            modifier = Modifier.padding(start = 12.dp, top = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            StepRail(filled = sectionsFilled)
+            Text(
+                text = if (canSave) "$sectionsFilled OF 5 FILLED" else "NAME REQUIRED",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 1.1.sp,
+            )
+        }
+    }
 }
 // #endregion
 
@@ -359,28 +431,20 @@ private fun BasicDetailsCard(
     onCategoryChange: (String) -> Unit
 ) {
     SectionCard {
-        Column(
-            modifier = Modifier.padding(AtelierSpacing.Base),
-            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Base)
-        ) {
-            Text("Basic Details", style = MaterialTheme.typography.titleMediumStrong)
+        Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)) {
 
-            OutlinedTextField(
+            WellTextField(
+                label = "Design name / code",
                 value = name,
                 onValueChange = { if (it.length <= MAX_NAME_LENGTH) onNameChange(it) },
-                label = { Text("Design Name / Code") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                shape = AtelierShapes.CornerMedium
+                placeholder = "e.g. Green Panel - Style 2",
             )
 
-            OutlinedTextField(
+            WellTextField(
+                label = "Category",
                 value = category,
                 onValueChange = { if (it.length <= MAX_CATEGORY_LENGTH) onCategoryChange(it) },
-                label = { Text("Category (e.g. Salwar Kameez)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                shape = AtelierShapes.CornerMedium
+                placeholder = "e.g. Salwar Kameez",
             )
         }
     }
@@ -405,18 +469,7 @@ private fun SizeScaleAndPricingCard(
     var sizeToRemove by remember { mutableStateOf<String?>(null) }
 
     SectionCard {
-        Column(
-            modifier = Modifier.padding(AtelierSpacing.Base),
-            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
-        ) {
-            Text("Sizes, Stock & Prices", style = MaterialTheme.typography.titleMediumStrong)
-            Text(
-                "Configure stock and unique pricing per size.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Text("Configure Size Scale", style = MaterialTheme.typography.bodyMediumStrong)
+        Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)) {
 
             SizeScaleChipRow(
                 availableSizes = availableSizes,
@@ -499,21 +552,38 @@ private fun SizeScaleChipRow(
         horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Tonal pills, not FilterChips. Material's chip draws a border when unselected, and
+        // an outline in this form now means "empty slot" - the dashed photo frame and the
+        // out-of-stock cell both rely on it.
         availableSizes.forEach { size ->
             val isEnabled = sizes.any { it.size == size }
-            FilterChip(
+            TonalPill(
+                text = size,
                 selected = isEnabled,
                 onClick = { onToggleSize(size, !isEnabled) },
-                label = { Text(size, style = MaterialTheme.typography.labelLargeStrong) },
-                modifier = Modifier.minimumInteractiveComponentSize()
+                leading = if (isEnabled) {
+                    {
+                        Icon(
+                            Icons.Default.Done,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                } else null,
             )
         }
 
-        InputChip(
+        TonalPill(
+            text = "Custom",
             selected = false,
             onClick = onAddCustom,
-            label = { Text("+ Custom") },
-            modifier = Modifier.minimumInteractiveComponentSize()
+            leading = {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+            },
         )
     }
 }
@@ -631,34 +701,23 @@ private fun KarigarAssignmentCard(
     }
 
     SectionCard {
-        Column(
-            modifier = Modifier.padding(AtelierSpacing.Base),
-            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
-        ) {
-            Text("Assigned Karigars / Tailors", style = MaterialTheme.typography.titleMediumStrong)
-            Text(
-                "Mention the karigars who worked on this design.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)) {
 
-            OutlinedTextField(
+            WellTextField(
+                label = "Karigar name",
                 value = newKarigarName,
                 onValueChange = { if (it.length <= MAX_KARIGAR_NAME_LENGTH) newKarigarName = it },
-                label = { Text("Karigar Name (e.g. Master Salim)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                shape = AtelierShapes.CornerMedium,
+                placeholder = "e.g. Master Salim",
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { commit() }),
-                trailingIcon = {
+                trailing = {
                     IconButton(
                         onClick = commit,
                         modifier = Modifier.minimumInteractiveComponentSize()
                     ) {
                         Icon(Icons.Default.Add, contentDescription = "Add Karigar")
                     }
-                }
+                },
             )
 
             if (karigars.isEmpty()) {
@@ -730,14 +789,7 @@ private fun AttributesAndCustomFieldsCard(
     var selectedTab by remember { mutableStateOf(0) }
 
     SectionCard {
-        Column(
-            modifier = Modifier.padding(AtelierSpacing.Base),
-            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Base)
-        ) {
-            Text(
-                "3-Piece Attributes & Custom Fields",
-                style = MaterialTheme.typography.titleMediumStrong
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)) {
 
             AttributeScopeTabs(
                 selectedTab = selectedTab,
@@ -1101,11 +1153,8 @@ private fun CustomSizeDialog(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SectionCard(content: @Composable () -> Unit) {
-    Card(
-        shape = AtelierShapes.CornerLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        content()
-    }
+    // Was a Card. FormSection is the container now, so a second one here would be a card
+    // inside a card - the exact doubling the redesign set out to remove.
+    content()
 }
 // #endregion
