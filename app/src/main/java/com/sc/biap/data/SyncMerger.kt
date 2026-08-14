@@ -88,6 +88,28 @@ object SyncMerger {
         val mergedProfile = listOfNotNull(localData.profile, remoteData.profile)
             .maxByOrNull { it.updatedAt }
 
+        // 5. Merge orders (LWW with tombstones), exactly as designs are merged.
+        //
+        // Orders are written once and cancelled, never edited, so in practice this is a union
+        // by id. The full LWW treatment is kept anyway because the cancellation case is real:
+        // without the tombstone check, a device that still holds an order cancelled elsewhere
+        // hands it back on its next sync, and the pieces it accounts for get counted twice.
+        val mergedDeletedOrders = (localData.deletedOrders.keys + remoteData.deletedOrders.keys)
+            .associateWith { id ->
+                maxOf(localData.deletedOrders[id] ?: 0L, remoteData.deletedOrders[id] ?: 0L)
+            }
+        val allOrders = (localData.orders + remoteData.orders)
+            .groupBy { it.id }
+            .mapValues { (_, orders) -> orders.maxByOrNull { it.updatedAt }!! }
+        val mergedOrders = allOrders.values.filter { order ->
+            val deletedAt = mergedDeletedOrders[order.id] ?: -1L
+            order.updatedAt > deletedAt
+        }
+        val finalDeletedOrders = mergedDeletedOrders.filter { (id, deletedAt) ->
+            val order = allOrders[id]
+            order == null || deletedAt >= order.updatedAt
+        }
+
         return BusinessIntelligenceData(
             designs = mergedDesigns,
             globalCustomFields = mergedFields.keys,
@@ -95,6 +117,8 @@ object SyncMerger {
             deletedDesignIds = finalDeleted.keys,
             deletedDesigns = finalDeleted,
             deletedCustomFields = finalDeletedFields,
+            orders = mergedOrders,
+            deletedOrders = finalDeletedOrders,
             profile = mergedProfile
         )
     }

@@ -99,6 +99,7 @@ val HeaderActionSize = 48.dp
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun CatalogueHeader(
+    title: String,
     statusLine: String,
     modifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit,
@@ -111,7 +112,7 @@ fun CatalogueHeader(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Portfolio",
+                text = title,
                 style = MaterialTheme.typography.headlineLargeEmphasized,
                 color = MaterialTheme.colorScheme.onSurface,
                 letterSpacing = (-1).sp,

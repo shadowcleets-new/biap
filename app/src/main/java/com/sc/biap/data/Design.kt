@@ -58,6 +58,16 @@ data class BusinessIntelligenceData(
     val deletedDesigns: Map<String, Long> = emptyMap(),
     val deletedCustomFields: Map<String, Long> = emptyMap(),
     /**
+     * Orders, backed up alongside the designs.
+     *
+     * Defaulted for the same reason [profile] is: a payload written by a build that predates
+     * orders carries neither of these keys, and must still parse rather than failing the
+     * whole sync.
+     */
+    val orders: List<Order> = emptyList(),
+    /** Cancelled orders, id to when. Without these a cancelled order returns on next sync. */
+    val deletedOrders: Map<String, Long> = emptyMap(),
+    /**
      * The owner's own details. Null on payloads written before profiles existed, which is
      * why it is defaulted rather than required - an older device's upload must still parse.
      */

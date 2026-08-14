@@ -7,6 +7,8 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 import com.sc.biap.data.Design
+import com.sc.biap.data.Order
+import com.sc.biap.data.OrderLine
 import com.sc.biap.data.SizeInventory
 import com.sc.biap.data.UserProfile
 
@@ -91,6 +93,21 @@ data class DeletedDesignEntity(
     val deletedAt: Long
 )
 
+/** Added in schema v7 - see AppDatabase.MIGRATION_6_7. Lines are a JSON column; see Converters. */
+@Entity(tableName = "orders")
+data class OrderEntity(
+    @PrimaryKey val id: String,
+    val createdAt: Long,
+    val lines: List<OrderLine>,
+    val updatedAt: Long
+)
+
+@Entity(tableName = "deleted_orders")
+data class DeletedOrderEntity(
+    @PrimaryKey val orderId: String,
+    val deletedAt: Long
+)
+
 data class DesignWithInventories(
     @Embedded val design: DesignEntity,
     @Relation(
@@ -159,6 +176,20 @@ fun UserProfile.toEntity(): UserProfileEntity = UserProfileEntity(
     age = age,
     designation = designation,
     photoRef = photoRef,
+    updatedAt = updatedAt,
+)
+
+fun OrderEntity.toDomain(): Order = Order(
+    id = id,
+    createdAt = createdAt,
+    lines = lines,
+    updatedAt = updatedAt,
+)
+
+fun Order.toEntity(): OrderEntity = OrderEntity(
+    id = id,
+    createdAt = createdAt,
+    lines = lines,
     updatedAt = updatedAt,
 )
 

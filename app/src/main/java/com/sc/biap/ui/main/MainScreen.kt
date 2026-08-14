@@ -9,6 +9,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
@@ -18,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.launch
@@ -37,6 +42,7 @@ import androidx.navigation3.runtime.NavKey
 import com.sc.biap.AddDesign
 import com.sc.biap.DesignDetail
 import com.sc.biap.AccessManagement
+import com.sc.biap.NewOrder
 import com.sc.biap.Profile
 import com.sc.biap.Settings
 import com.sc.biap.data.DefaultDataRepository
@@ -48,8 +54,48 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import com.sc.biap.ui.ProfileAvatar
+import com.sc.biap.ui.orders.OrdersEmptyState
+import com.sc.biap.ui.orders.OrdersList
 import com.sc.biap.ui.rememberPerformanceProfile
 import com.sc.biap.ui.PerformanceProfile
+
+/**
+ * The bottom navigation bar. Two destinations, filled icon when selected.
+ *
+ * Filled-when-selected, outlined otherwise, is Material's own convention for this component
+ * and does the work a colour change alone would not: the selection is legible at a glance and
+ * without relying on colour, which matters on the AMOLED theme where the indicator has very
+ * little background left to contrast against.
+ */
+@Composable
+private fun MainNavigationBar(selected: MainTab, onSelect: (MainTab) -> Unit) {
+    NavigationBar {
+        NavigationBarItem(
+            selected = selected == MainTab.INVENTORY,
+            onClick = { onSelect(MainTab.INVENTORY) },
+            icon = {
+                Icon(
+                    if (selected == MainTab.INVENTORY) Icons.Filled.Inventory2
+                    else Icons.Outlined.Inventory2,
+                    contentDescription = null,
+                )
+            },
+            label = { Text("Inventory") },
+        )
+        NavigationBarItem(
+            selected = selected == MainTab.ORDERS,
+            onClick = { onSelect(MainTab.ORDERS) },
+            icon = {
+                Icon(
+                    if (selected == MainTab.ORDERS) Icons.Filled.ReceiptLong
+                    else Icons.Outlined.ReceiptLong,
+                    contentDescription = null,
+                )
+            },
+            label = { Text("Orders") },
+        )
+    }
+}
 
 @Composable
 fun defaultMainScreenViewModel(): MainScreenViewModel {
@@ -62,6 +108,20 @@ fun defaultMainScreenViewModel(): MainScreenViewModel {
 private val SyncSpinnerSmall = 20.dp
 private val SyncSpinnerLarge = 28.dp
 private val SyncSpinnerStroke = 2.dp
+
+/**
+ * The two halves of the same ledger: what came in, and what went out.
+ *
+ * A navigation bar rather than tabs at the top, per the Material guidance: these are two
+ * top-level destinations, not two views of one thing, and the bar keeps both reachable with
+ * a thumb on a phone held one-handed. Two destinations is at the low end of the three-to-five
+ * the guidance suggests - a third would need to be a real destination rather than one
+ * invented to fill the bar.
+ */
+private enum class MainTab(val title: String) {
+    INVENTORY("Portfolio"),
+    ORDERS("Orders"),
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -185,6 +245,25 @@ fun MainScreen(
             }
         }
     }
+    val orders by viewModel.orders.collectAsStateWithLifecycle()
+    val designNames by viewModel.designNames.collectAsStateWithLifecycle()
+
+    /**
+     * "12 ORDERS · 47 PIECES OUT".
+     *
+     * Counts pieces rather than rupees, because the question this tab answers is what left
+     * the workshop. Money is on each order where it belongs to one order.
+     */
+    val ordersStatusLine: (List<com.sc.biap.data.Order>) -> String = { list ->
+        val pieces = list.sumOf { it.pieces }
+        when {
+            list.isEmpty() -> "NO ORDERS YET"
+            else -> "${list.size} ${if (list.size == 1) "ORDER" else "ORDERS"} · " +
+                "$pieces ${if (pieces == 1) "PIECE" else "PIECES"} OUT"
+        }
+    }
+
+    var tab by rememberSaveable { mutableStateOf(MainTab.INVENTORY) }
     var showMenu by remember { mutableStateOf(false) }
     var showMergePrompt by remember { mutableStateOf(false) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
@@ -317,7 +396,11 @@ fun MainScreen(
     Scaffold(
         topBar = {
             CatalogueHeader(
-                statusLine = catalogueStatusLine(state, isSyncing, lastSyncAt),
+                title = tab.title,
+                statusLine = when (tab) {
+                    MainTab.INVENTORY -> catalogueStatusLine(state, isSyncing, lastSyncAt)
+                    MainTab.ORDERS -> ordersStatusLine(orders)
+                },
                 actions = {
                     if (currentUser != null) {
                         Row(
@@ -472,9 +555,11 @@ fun MainScreen(
         },
         floatingActionButton = {
             // Extended and labelled, in the saturated primary role. A bare "+" is a guess;
-            // this screen has one obvious thing to add and can afford to say so.
+            // each tab has one obvious thing to add and can afford to say which.
             ExtendedFloatingActionButton(
-                onClick = { onItemClick(AddDesign) },
+                onClick = {
+                    onItemClick(if (tab == MainTab.INVENTORY) AddDesign else NewOrder)
+                },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(26.dp),
@@ -482,9 +567,13 @@ fun MainScreen(
             ) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(Modifier.width(AtelierSpacing.Compact))
-                Text("Add design", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (tab == MainTab.INVENTORY) "Add design" else "New order",
+                    style = MaterialTheme.typography.titleMedium,
+                )
             }
         },
+        bottomBar = { MainNavigationBar(selected = tab, onSelect = { tab = it }) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         modifier = modifier
     ) { paddingValues ->
@@ -518,47 +607,65 @@ fun MainScreen(
                         )
                     }
                 ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        CatalogueSearchField(
-                            query = searchQuery,
-                            onQueryChange = { viewModel.updateSearchQuery(it) },
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                        )
-
-                        if (data.designs.isEmpty()) {
-                            CatalogueEmptyState(
+                    when (tab) {
+                        MainTab.INVENTORY -> Column(modifier = Modifier.fillMaxSize()) {
+                            CatalogueSearchField(
                                 query = searchQuery,
-                                filters = success.filters,
-                                onAddDesign = { onItemClick(AddDesign) },
-                                onClearFilters = { viewModel.clearFilters() },
-                                modifier = Modifier.weight(1f),
+                                onQueryChange = { viewModel.updateSearchQuery(it) },
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                             )
-                        } else {
-                            CatalogueList(
-                                designs = data.designs,
-                                onOpenDesign = { onItemClick(DesignDetail(it.id)) },
-                                onOpenSize = { design, size ->
-                                    onItemClick(DesignDetail(design.id, focusSize = size.size))
-                                },
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    AttentionBand(
-                                        summary = success.summary,
-                                        isActive = success.filters.attentionOnly,
-                                        onClick = { viewModel.toggleAttentionFilter() },
-                                    )
-                                    CatalogueFilterRow(
-                                        filters = success.filters,
-                                        categories = success.categories,
-                                        archivedCount = success.archivedCount,
-                                        onToggleAttention = { viewModel.toggleAttentionFilter() },
-                                        onToggleArchived = { viewModel.toggleArchivedFilter() },
-                                        onSelectCategory = { viewModel.selectCategory(it) },
-                                        modifier = Modifier.padding(horizontal = 0.dp),
-                                    )
+
+                            if (data.designs.isEmpty()) {
+                                CatalogueEmptyState(
+                                    query = searchQuery,
+                                    filters = success.filters,
+                                    onAddDesign = { onItemClick(AddDesign) },
+                                    onClearFilters = { viewModel.clearFilters() },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            } else {
+                                CatalogueList(
+                                    designs = data.designs,
+                                    onOpenDesign = { onItemClick(DesignDetail(it.id)) },
+                                    onOpenSize = { design, size ->
+                                        onItemClick(DesignDetail(design.id, focusSize = size.size))
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        AttentionBand(
+                                            summary = success.summary,
+                                            isActive = success.filters.attentionOnly,
+                                            onClick = { viewModel.toggleAttentionFilter() },
+                                        )
+                                        CatalogueFilterRow(
+                                            filters = success.filters,
+                                            categories = success.categories,
+                                            archivedCount = success.archivedCount,
+                                            onToggleAttention = { viewModel.toggleAttentionFilter() },
+                                            onToggleArchived = { viewModel.toggleArchivedFilter() },
+                                            onSelectCategory = { viewModel.selectCategory(it) },
+                                            modifier = Modifier.padding(horizontal = 0.dp),
+                                        )
+                                    }
                                 }
                             }
+                        }
+
+                        MainTab.ORDERS -> if (orders.isEmpty()) {
+                            OrdersEmptyState(
+                                // Reads the whole catalogue, not the filtered view: whether
+                                // there is anything to order has nothing to do with what the
+                                // Inventory tab is currently narrowed to.
+                                hasDesigns = designNames.isNotEmpty(),
+                                onNewOrder = { onItemClick(NewOrder) },
+                            )
+                        } else {
+                            OrdersList(
+                                orders = orders,
+                                designNames = designNames,
+                                onCancel = { viewModel.cancelOrder(it.id) },
+                            )
                         }
                     }
                 }

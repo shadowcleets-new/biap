@@ -16,6 +16,8 @@ import kotlinx.serialization.Serializable
     val designId: String,
     val focusSize: String? = null,
 ) : NavKey
+/** Picking pieces off the catalogue to make an order. Reached from the Orders tab's button. */
+@Serializable data object NewOrder : NavKey
 @Serializable data object Profile : NavKey
 @Serializable data object AccessManagement : NavKey
 @Serializable data object Settings : NavKey

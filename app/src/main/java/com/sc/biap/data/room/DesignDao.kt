@@ -69,6 +69,112 @@ interface DesignDao {
         deleteDesign(id)
     }
 
+    // --- Orders ---
+    //
+    // Placing and cancelling both move stock, so both are @Transaction: the order record and
+    // the stock it accounts for either land together or not at all. A crash between the two
+    // would otherwise leave pieces missing from the catalogue with nothing to say where they
+    // went, or an order for pieces that were never taken out.
+
+    @Query("SELECT * FROM orders ORDER BY createdAt DESC")
+    fun getAllOrdersFlow(): Flow<List<OrderEntity>>
+
+    @Query("SELECT * FROM orders")
+    suspend fun getAllOrdersOnce(): List<OrderEntity>
+
+    @Query("SELECT * FROM orders WHERE id = :id")
+    suspend fun getOrderById(id: String): OrderEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrder(order: OrderEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrders(orders: List<OrderEntity>)
+
+    @Query("DELETE FROM orders WHERE id = :id")
+    suspend fun deleteOrder(id: String)
+
+    @Query("DELETE FROM orders")
+    suspend fun deleteAllOrders()
+
+    @Query("SELECT * FROM deleted_orders")
+    fun getAllDeletedOrdersFlow(): Flow<List<DeletedOrderEntity>>
+
+    @Query("SELECT * FROM deleted_orders")
+    suspend fun getAllDeletedOrdersOnce(): List<DeletedOrderEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDeletedOrder(deleted: DeletedOrderEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDeletedOrders(deletedList: List<DeletedOrderEntity>)
+
+    @Query("DELETE FROM deleted_orders")
+    suspend fun deleteAllDeletedOrders()
+
+    @Query("DELETE FROM deleted_orders WHERE orderId = :orderId")
+    suspend fun deleteDeletedOrderTombstone(orderId: String)
+
+    /**
+     * Take stock out. Returns the number of rows changed, so 0 means "not enough left".
+     *
+     * `stock >= :qty` in the WHERE clause rather than a read, a check in Kotlin and a write:
+     * the check and the deduction are then a single statement the database evaluates, and two
+     * orders for the last piece cannot both pass the check before either writes.
+     */
+    @Query(
+        "UPDATE size_inventories SET stock = stock - :qty " +
+            "WHERE designId = :designId AND size = :size AND stock >= :qty"
+    )
+    suspend fun decrementStock(designId: String, size: String, qty: Int): Int
+
+    /** Put stock back when an order is cancelled. No ceiling: the pieces are returning. */
+    @Query(
+        "UPDATE size_inventories SET stock = stock + :qty WHERE designId = :designId AND size = :size"
+    )
+    suspend fun incrementStock(designId: String, size: String, qty: Int): Int
+
+    /**
+     * Bump a design's updatedAt after its stock moved.
+     *
+     * Not cosmetic. Sync resolves designs by last-write-wins on updatedAt, so a deduction
+     * that left the timestamp alone would lose to any older copy in the backup and quietly
+     * restore the stock it just took out.
+     */
+    @Query("UPDATE designs SET updatedAt = :now WHERE id = :id")
+    suspend fun touchDesign(id: String, now: Long)
+
+    /**
+     * Record an order and take its pieces out of stock.
+     *
+     * Throws if any line asks for more than is left, which rolls the whole transaction back -
+     * a partly-filled order is not a thing this app should be able to produce.
+     */
+    @Transaction
+    suspend fun placeOrder(order: OrderEntity) {
+        for (line in order.lines) {
+            val changed = decrementStock(line.designId, line.size, line.quantity)
+            require(changed == 1) {
+                "Not enough stock left for size ${line.size}"
+            }
+            touchDesign(line.designId, order.createdAt)
+        }
+        insertOrder(order)
+        deleteDeletedOrderTombstone(order.id)
+    }
+
+    /** Cancel an order: the pieces go back into stock and a tombstone stops it returning. */
+    @Transaction
+    suspend fun cancelOrder(id: String, deletedAt: Long) {
+        val order = getOrderById(id) ?: return
+        for (line in order.lines) {
+            incrementStock(line.designId, line.size, line.quantity)
+            touchDesign(line.designId, deletedAt)
+        }
+        deleteOrder(id)
+        insertDeletedOrder(DeletedOrderEntity(id, deletedAt))
+    }
+
     // Global custom fields
     // --- Profile (exactly one row; see UserProfileEntity) ---
 
@@ -138,6 +244,14 @@ interface DesignDao {
         deleteAllGlobalCustomFields()
         deleteAllDeletedDesigns()
         deleteAllDeletedCustomFields()
+        deleteAllOrders()
+        deleteAllDeletedOrders()
+
+        // Orders arrive already merged, and the stock they account for arrived with the
+        // designs. Deliberately NOT routed through placeOrder: that would deduct the same
+        // pieces a second time, on every device, on every sync.
+        insertOrders(data.orders.map { it.toEntity() })
+        insertDeletedOrders(data.deletedOrders.map { DeletedOrderEntity(it.key, it.value) })
 
         // Insert designs and their inventories
         for (design in data.designs) {

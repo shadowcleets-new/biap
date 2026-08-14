@@ -86,6 +86,18 @@ interface DataRepository {
 
     /** Destroy a design permanently. Offered only for designs already archived. */
     fun deleteDesign(designId: String)
+
+    /**
+     * Record pieces going out, and take them out of stock in the same transaction.
+     *
+     * Returns null on success, or a reason to show. Suspends rather than firing and
+     * forgetting because the caller has to know whether it worked: the stock may have moved
+     * under it since the screen was drawn, and the answer decides whether the screen closes.
+     */
+    suspend fun placeOrder(lines: List<OrderLine>): String?
+
+    /** Cancel an order, returning its pieces to stock. */
+    fun cancelOrder(orderId: String)
     fun addGlobalCustomField(field: String)
     fun removeGlobalCustomField(field: String)
 
@@ -258,19 +270,30 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
                     // Start collecting from Room Flow and updating UI state Flow
                     dbCollectionJob = repositoryScope.launch {
+                        // The two order flows are paired first because combine tops out at
+                        // five sources; six would fall back to the untyped vararg overload.
+                        val ordersFlow = combine(
+                            dao.getAllOrdersFlow(),
+                            dao.getAllDeletedOrdersFlow()
+                        ) { orders, deletedOrders -> orders to deletedOrders }
+
                         combine(
                             dao.getAllDesignsFlow(),
                             dao.getAllGlobalCustomFieldsFlow(),
                             dao.getAllDeletedDesignsFlow(),
-                            dao.getAllDeletedCustomFieldsFlow()
-                        ) { designsList, globalsList, deletedList, deletedFieldsList ->
+                            dao.getAllDeletedCustomFieldsFlow(),
+                            ordersFlow
+                        ) { designsList, globalsList, deletedList, deletedFieldsList, orders ->
+                            val (ordersList, deletedOrdersList) = orders
                             BusinessIntelligenceData(
                                 designs = designsList.map { it.toDomain() },
                                 globalCustomFields = globalsList.map { it.field }.toSet(),
                                 globalCustomFieldsMetadata = globalsList.associate { it.field to it.updatedAt },
                                 deletedDesignIds = deletedList.map { it.designId }.toSet(),
                                 deletedDesigns = deletedList.associate { it.designId to it.deletedAt },
-                                deletedCustomFields = deletedFieldsList.associate { it.field to it.deletedAt }
+                                deletedCustomFields = deletedFieldsList.associate { it.field to it.deletedAt },
+                                orders = ordersList.map { it.toDomain() },
+                                deletedOrders = deletedOrdersList.associate { it.orderId to it.deletedAt }
                             )
                         }.collect { merged ->
                             _biData.value = merged
@@ -437,6 +460,8 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         val deletedDesigns = dao.getAllDeletedDesignsOnce()
         val deletedFields = dao.getAllDeletedCustomFieldsOnce()
         val profile = dao.getProfileOnce()?.toDomain()
+        val orders = dao.getAllOrdersOnce()
+        val deletedOrders = dao.getAllDeletedOrdersOnce()
         return BusinessIntelligenceData(
             designs = designs.map { it.toDomain() },
             globalCustomFields = globals.map { it.field }.toSet(),
@@ -444,6 +469,8 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             deletedDesignIds = deletedDesigns.map { it.designId }.toSet(),
             deletedDesigns = deletedDesigns.associate { it.designId to it.deletedAt },
             deletedCustomFields = deletedFields.associate { it.field to it.deletedAt },
+            orders = orders.map { it.toDomain() },
+            deletedOrders = deletedOrders.associate { it.orderId to it.deletedAt },
             profile = profile
         )
     }
@@ -945,6 +972,54 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
      * the ordinary action hides it rather than erasing it. [deleteDesign] still exists for
      * genuine mistakes, reachable only once a design is already archived.
      */
+    /**
+     * Take pieces out of stock and write the order that accounts for them.
+     *
+     * The prices are read HERE, from the database, rather than taken from whatever the screen
+     * was showing: the screen may have been open a while, and the price an order records has
+     * to be the price at the moment it was placed.
+     */
+    override suspend fun placeOrder(lines: List<OrderLine>): String? {
+        if (lines.isEmpty()) return "Nothing selected."
+        val dao = awaitDao() ?: return "Still opening your catalogue - try again in a moment."
+        return try {
+            val now = System.currentTimeMillis()
+            val priced = lines.map { line ->
+                val design = dao.getDesignById(line.designId)
+                    ?: return "A design in this order no longer exists."
+                val inventory = design.inventories.firstOrNull { it.size == line.size }
+                    ?: return "Size ${line.size} is no longer on ${design.design.name}."
+                line.copy(unitPrice = inventory.price)
+            }
+            dao.placeOrder(
+                Order(
+                    id = java.util.UUID.randomUUID().toString(),
+                    createdAt = now,
+                    lines = priced,
+                    updatedAt = now,
+                ).toEntity()
+            )
+            triggerLocalBackup()
+            null
+        } catch (e: IllegalArgumentException) {
+            // Thrown by DesignDao.placeOrder when a line outruns the stock left, which rolls
+            // the whole order back. Reported rather than swallowed: the number on screen was
+            // stale, and the person needs to know that before they pack anything.
+            e.message ?: "Not enough stock left for this order."
+        } catch (e: Exception) {
+            e.printStackTrace()
+            "Could not save the order."
+        }
+    }
+
+    override fun cancelOrder(orderId: String) {
+        repositoryScope.launch {
+            val dao = awaitDao() ?: return@launch
+            dao.cancelOrder(orderId, System.currentTimeMillis())
+            triggerLocalBackup()
+        }
+    }
+
     override fun setDesignArchived(designId: String, archived: Boolean) {
         repositoryScope.launch {
             val dao = awaitDao() ?: return@launch

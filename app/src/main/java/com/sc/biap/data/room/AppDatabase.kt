@@ -13,9 +13,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         GlobalCustomFieldEntity::class,
         DeletedDesignEntity::class,
         DeletedCustomFieldEntity::class,
-        UserProfileEntity::class
+        UserProfileEntity::class,
+        OrderEntity::class,
+        DeletedOrderEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -93,8 +95,46 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v6 -> v7: orders, and the tombstones for cancelled ones.
+         *
+         * Two new tables only. Nothing existing is read, rewritten or dropped, so a failure
+         * here cannot cost a design - the same shape as the profile migration.
+         *
+         * `lines` is a JSON text column rather than a child table: a line is only ever read
+         * as part of its order, never queried on its own, so a foreign key and a cascade
+         * rule would be structure with no query behind it.
+         *
+         * `deleted_orders` exists for the same reason `deleted_designs` does. Cancelling an
+         * order without recording that it was cancelled means the next sync finds it still
+         * present in the backup and puts it straight back - and, because cancelling returns
+         * its pieces to stock, that would double-count the stock too.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS orders (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        createdAt INTEGER NOT NULL,
+                        lines TEXT NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS deleted_orders (
+                        orderId TEXT NOT NULL PRIMARY KEY,
+                        deletedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         /** Every migration the app knows about. Pass to `addMigrations(*ALL_MIGRATIONS)`. */
         val ALL_MIGRATIONS: Array<Migration> =
-            arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
     }
 }

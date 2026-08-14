@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
@@ -119,6 +120,33 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
 
   fun clearFilters() {
     _filters.value = CatalogueFilters()
+  }
+
+  /**
+   * The Orders tab's list: newest first.
+   *
+   * Read off the same [DataRepository.biData] the catalogue uses rather than a second query,
+   * so an order placed on this device shows up the instant its transaction commits - the same
+   * commit that took its pieces out of the stock shown one tab over.
+   */
+  val orders: StateFlow<List<com.sc.biap.data.Order>> = dataRepository.biData
+    .map { data -> data.orders.sortedByDescending { it.createdAt } }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+  /**
+   * Every design's name, by id, for naming the lines on an order.
+   *
+   * Built from the WHOLE catalogue rather than [uiState]'s visible list, which is searched,
+   * filtered and sorted. An order's lines have to name themselves whatever the Inventory tab
+   * happens to be filtered to, and an archived design's orders are still real history.
+   */
+  val designNames: StateFlow<Map<String, String>> = dataRepository.biData
+    .map { data -> data.designs.associate { it.id to it.name } }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+  /** Cancel an order, returning its pieces to stock. */
+  fun cancelOrder(orderId: String) {
+    dataRepository.cancelOrder(orderId)
   }
 
   /** Retire a design, or bring it back. Replaces deletion as the ordinary action. */
