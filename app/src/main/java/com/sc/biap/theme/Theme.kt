@@ -1,5 +1,9 @@
 package com.sc.biap.theme
 
+import android.app.Activity
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -156,6 +160,39 @@ fun BiapTheme(
     )
   } else {
     base
+  }
+
+  /**
+   * The system bars take their icon colour from OUR theme, not the system's.
+   *
+   * Edge-to-edge means the app paints behind the status and navigation bars, so the bars
+   * carry no background of their own and their icons have to contrast with whatever this
+   * app has drawn up there. `enableEdgeToEdge()` on its own decides that from the SYSTEM
+   * dark-mode setting, which is the wrong question here: this app owns its theme, and a
+   * phone in dark mode showing an app set to Light got light icons on a light background -
+   * the clock and the battery effectively disappeared.
+   *
+   * Driven from `isDark` - the theme actually applied, after the AUTO and battery-saver
+   * rules have run - so the bars follow AMOLED, a forced Light, and a system change alike.
+   *
+   * SideEffect rather than LaunchedEffect: this is pushing state into a non-Compose object
+   * that must match the frame being drawn, and it has to run on every successful
+   * composition, not once per key change.
+   */
+  val view = LocalView.current
+  if (!view.isInEditMode) {
+    SideEffect {
+      val window = (view.context as? Activity)?.window ?: return@SideEffect
+      WindowCompat.getInsetsController(window, view).apply {
+        isAppearanceLightStatusBars = !isDark
+        isAppearanceLightNavigationBars = !isDark
+      }
+      // Android's own translucent scrim behind the gesture bar would sit on top of the
+      // app's background and read as a band the layout did not ask for.
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        window.isNavigationBarContrastEnforced = false
+      }
+    }
   }
 
   MaterialExpressiveTheme(
