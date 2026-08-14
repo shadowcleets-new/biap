@@ -1,5 +1,6 @@
 package com.sc.biap.data
 
+import androidx.compose.runtime.Immutable
 import com.sc.biap.util.SizeUtils
 import kotlinx.serialization.Serializable
 
@@ -18,6 +19,7 @@ import kotlinx.serialization.Serializable
  *   to say which size went out, even if that size no longer exists in the catalogue.
  */
 @Serializable
+@Immutable
 data class OrderLine(
     val designId: String,
     val size: String,
@@ -27,6 +29,7 @@ data class OrderLine(
 )
 
 @Serializable
+@Immutable
 data class Order(
     val id: String,
     val createdAt: Long,

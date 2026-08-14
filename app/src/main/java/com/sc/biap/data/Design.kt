@@ -1,8 +1,10 @@
 package com.sc.biap.data
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
 @Serializable
+@Immutable
 data class SizeInventory(
     val size: String,
     val stock: Int,
@@ -18,6 +20,7 @@ data class SizeInventory(
  * device has no local file here.
  */
 @Serializable
+@Immutable
 data class DesignPhoto(
     val localPath: String? = null,
     val ref: String? = null,
@@ -27,6 +30,7 @@ data class DesignPhoto(
 }
 
 @Serializable
+@Immutable
 data class Design(
     val id: String,
     val name: String,
@@ -119,6 +123,7 @@ data class Design(
 }
 
 @Serializable
+@Immutable
 data class BusinessIntelligenceData(
     val designs: List<Design> = emptyList(),
     val globalCustomFields: Set<String> = emptySet(),

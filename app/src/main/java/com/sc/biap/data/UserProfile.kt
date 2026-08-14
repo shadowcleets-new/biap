@@ -1,5 +1,6 @@
 package com.sc.biap.data
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
 /**
@@ -21,6 +22,7 @@ import kotlinx.serialization.Serializable
  *   kept outside Drive, so the second source stays as small as possible.
  */
 @Serializable
+@Immutable
 data class UserProfile(
     val firstName: String = "",
     val lastName: String = "",

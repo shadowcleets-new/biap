@@ -12,8 +12,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -64,10 +66,23 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
     val active = data.designs.filterNot { it.isArchived }
     val summary = active.summarise()
 
+    // Stats computed ONCE per design, then looked up.
+    //
+    // These were called from inside the comparator, which meant stats() ran on both sides of
+    // every comparison - roughly 220 calls to sort 24 designs, each one walking the size list
+    // six times and allocating a DesignStats. Sorting is O(n log n) comparisons; computing a
+    // value inside the comparator makes the work O(n log n) too, for something that only
+    // varies per design.
+    val statsById = data.designs.associate { it.id to it.stats() }
+    // Same reasoning for the alphabetical tiebreak: lowercase() allocated a fresh string on
+    // every comparison it was consulted for.
+    val sortKeyById = data.designs.associate { it.id to it.name.lowercase() }
+
     val visible = (searched as? Success)?.data?.designs.orEmpty()
       .filter { design ->
         val archiveOk = if (filters.showArchived) design.isArchived else !design.isArchived
-        val attentionOk = !filters.attentionOnly || design.stats().needsAttention
+        val attentionOk = !filters.attentionOnly ||
+          statsById[design.id]?.needsAttention == true
         val categoryOk = filters.category == null || design.category == filters.category
         archiveOk && attentionOk && categoryOk
       }
@@ -76,10 +91,10 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
       // the top of where you are looking rather than alphabetically buried halfway down.
       // Alphabetical was the original tiebreak and it made new designs effectively invisible.
       .sortedWith(
-        compareByDescending<com.sc.biap.data.Design> { it.stats().outSizes }
-          .thenByDescending { it.stats().lowSizes }
+        compareByDescending<com.sc.biap.data.Design> { statsById[it.id]?.outSizes ?: 0 }
+          .thenByDescending { statsById[it.id]?.lowSizes ?: 0 }
           .thenByDescending { it.updatedAt }
-          .thenBy { it.name.lowercase() }
+          .thenBy { sortKeyById[it.id].orEmpty() }
       )
 
     val out: MainScreenUiState = Success(
@@ -96,6 +111,18 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
     out
   }
     .catch { emit(MainScreenUiState.Error(it)) }
+    // OFF THE UI THREAD.
+    //
+    // viewModelScope runs on Dispatchers.Main.immediate, so all of the above - searching,
+    // filtering, computing stats for every design and sorting them - was happening on the
+    // very thread that draws frames. Measured on device it was the dominant cause of jank
+    // while scrolling: 35 of 36 dropped frames were "slow UI thread".
+    //
+    // flowOn affects everything UPSTREAM of it, which is exactly this pipeline; stateIn
+    // still publishes on the main thread, so collectors are unaffected. The cost is that a
+    // change now lands a frame later than it used to, which is the correct trade: a frame of
+    // latency on a data update against a dropped frame in the middle of a scroll.
+    .flowOn(Dispatchers.Default)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MainScreenUiState.Loading)
 
   fun updateSearchQuery(query: String) {
@@ -132,6 +159,7 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
    */
   val orders: StateFlow<List<com.sc.biap.data.Order>> = dataRepository.biData
     .map { data -> data.orders.sortedByDescending { it.createdAt } }
+    .flowOn(Dispatchers.Default)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
   /**
@@ -147,6 +175,7 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
    */
   val designsById: StateFlow<Map<String, com.sc.biap.data.Design>> = dataRepository.biData
     .map { data -> data.designs.associateBy { it.id } }
+    .flowOn(Dispatchers.Default)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
   /** Cancel an order, returning its pieces to stock. */

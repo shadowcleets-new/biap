@@ -1,5 +1,7 @@
 package com.sc.biap.data
 
+import androidx.compose.runtime.Immutable
+
 /**
  * @file DesignStats.kt
  * @description What a design's size matrix adds up to.
@@ -22,6 +24,7 @@ fun SizeInventory.state(): StockState = when {
     else -> StockState.HEALTHY
 }
 
+@Immutable
 data class DesignStats(
     val units: Int,
     /**
@@ -77,6 +80,7 @@ fun Design.stats(): DesignStats {
  *   it at all - not when one size is empty. Per-size gaps are the row's business, and the
  *   row already shows them.
  */
+@Immutable
 data class CatalogueSummary(
     val designsNeedingAttention: Int,
     /** Designs with no stock whatsoever. Genuinely sold out. */
