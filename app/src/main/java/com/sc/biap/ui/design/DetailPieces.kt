@@ -16,6 +16,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -151,6 +155,149 @@ fun DetailSizeCell(inventory: SizeInventory, modifier: Modifier = Modifier) {
 }
 
 // #endregion
+
+/**
+ * The record's own bar: back, and the two things you can do to a design.
+ *
+ * Circular tonal buttons rather than bare icons, matching the catalogue header - the sync
+ * and avatar controls there are the same 44dp circles, and this screen is one tap away.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun ReadingTopBar(
+    archived: Boolean,
+    onBack: () -> Unit,
+    onEdit: () -> Unit,
+    onArchive: () -> Unit,
+    onRestore: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CircleButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
+        Text(
+            text = if (archived) "Archived design" else "Design",
+            style = MaterialTheme.typography.titleSmallEmphasized,
+            color = if (archived) scheme.onSurfaceVariant else scheme.onSurface,
+            modifier = Modifier.weight(1f).padding(start = 4.dp),
+        )
+        if (archived) {
+            // Restore reads as a label rather than an icon: it is the way back out of a state
+            // somebody may not have meant to enter, and an unlabelled glyph would not say so.
+            Row(
+                modifier = Modifier
+                    .height(44.dp)
+                    .clip(CircleShape)
+                    .background(scheme.secondaryContainer)
+                    .clickable(onClick = onRestore)
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Restore",
+                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    color = scheme.onSecondaryContainer,
+                )
+            }
+            CircleButton(Icons.Default.Delete, "Delete permanently", onDelete, tint = scheme.error)
+        } else {
+            CircleButton(Icons.Default.Edit, "Edit design", onEdit)
+            CircleButton(Icons.Default.Archive, "Archive", onArchive)
+        }
+    }
+}
+
+/**
+ * The editing bar. Filled, loud, and carrying the only saturated element on the screen.
+ *
+ * Editing happens in place on the same screen, which risks ambiguity about which mode you
+ * are in - so the signal is deliberately unmissable rather than tasteful. Back becomes
+ * discard for the same reason: leaving is not saving.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun EditingTopBar(canSave: Boolean, onDiscard: () -> Unit, onSave: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(scheme.primaryContainer)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(scheme.onPrimaryContainer.copy(alpha = 0.10f))
+                .clickable(onClick = onDiscard),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.Close, "Discard changes", tint = scheme.onPrimaryContainer)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Editing",
+                style = MaterialTheme.typography.titleSmallEmphasized,
+                color = scheme.onPrimaryContainer,
+            )
+            Text(
+                "UNSAVED CHANGES",
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onPrimaryContainer.copy(alpha = 0.75f),
+                letterSpacing = 1.1.sp,
+            )
+        }
+        Row(
+            modifier = Modifier
+                .height(44.dp)
+                .clip(CircleShape)
+                .background(if (canSave) scheme.primary else scheme.onPrimaryContainer.copy(alpha = 0.12f))
+                .clickable(enabled = canSave, onClick = onSave)
+                .padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                Icons.Default.Check,
+                contentDescription = null,
+                tint = if (canSave) scheme.onPrimary else scheme.onPrimaryContainer.copy(alpha = 0.5f),
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                "Save",
+                style = MaterialTheme.typography.titleSmallEmphasized,
+                color = if (canSave) scheme.onPrimary else scheme.onPrimaryContainer.copy(alpha = 0.5f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CircleButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    onClick: () -> Unit,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = description, tint = tint)
+    }
+}
 
 /** A section label: small, spaced caps, no rule under it. */
 @Composable

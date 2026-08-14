@@ -84,6 +84,8 @@ private val SizeTokenWidth = 56.dp
 private val EmptyStateIconSize = 40.dp
 private val OverlayIconSize = 20.dp
 private val RemoveIconSize = 18.dp
+/** The rupee column keeps one edge while typing, so the prices still read down. */
+private val PriceWellWidth = 110.dp
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -218,95 +220,56 @@ fun DesignDetailScreen(
 
             Scaffold(
                 topBar = {
-                    TopAppBar(
-                        title = { Text(if (isEditing) "Edit Design" else "Design Details", style = MaterialTheme.typography.titleLargeStrong) },
-                        navigationIcon = {
-                            IconButton(onClick = {
-                                if (isEditing) {
-                                    isEditing = false
-                                } else {
-                                    onBack()
-                                }
-                            }) {
-                                Icon(
-                                    if (isEditing) Icons.Default.Clear else Icons.Default.ArrowBack,
-                                    contentDescription = if (isEditing) "Cancel" else "Back"
-                                )
-                            }
-                        },
-                        actions = {
-                            if (isEditing) {
-                                IconButton(
-                                    onClick = {
-                                        if (editName.isNotBlank()) {
-                                            if (design.updatedAt != editBaseUpdatedAt) {
-                                                showConflictDialog = true
-                                            } else {
-                                                val updated = design.copy(
-                                                    name = editName.trim(),
-                                                    category = editCategory.trim(),
-                                                    sizeInventories = editSizes,
-                                                    customFields = editCustomFields.filterKeys { it.isNotBlank() },
-                                                    karigars = editKarigars
-                                                    // withPhotos carries each photo's own ref,
-                                                    // so a newly picked one arrives with a null
-                                                    // ref and is marked for upload while the
-                                                    // previous object stays intact until the
-                                                    // new bytes land.
-                                                ).withPhotos(editPhotos)
-                                                viewModel.updateDesign(updated)
-                                                isEditing = false
-                                            }
-                                        }
-                                    },
-                                    enabled = editName.isNotBlank()
-                                ) {
-                                    Icon(
-                                        Icons.Default.Done,
-                                        contentDescription = "Save",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            } else {
-                                IconButton(onClick = { isEditing = true }) {
-                                    Icon(
-                                        Icons.Default.Edit,
-                                        contentDescription = "Edit Design",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                // Archive, not delete. A discontinued design is the record of
-                                // what the workshop actually made - its costs, prices and
-                                // karigars are history worth keeping. Permanent deletion is
-                                // still reachable, but only from the archived state, so it
-                                // takes a deliberate second decision.
-                                if (design.isArchived) {
-                                    IconButton(onClick = { viewModel.setArchived(false) }) {
-                                        Icon(
-                                            Icons.Default.Unarchive,
-                                            contentDescription = "Restore to catalogue",
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                    IconButton(onClick = { showDeleteDialog = true }) {
-                                        Icon(
-                                            Icons.Default.Delete,
-                                            contentDescription = "Delete permanently",
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                } else {
-                                    IconButton(onClick = { viewModel.setArchived(true) }) {
-                                        Icon(
-                                            Icons.Default.Archive,
-                                            contentDescription = "Archive",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                    if (isEditing) {
+                        // The mode change is LOUD on purpose. Editing happens in place on the
+                        // same screen, so without a signal you can be one careless tap from
+                        // changing a record while believing you are reading it. The bar fills
+                        // with primaryContainer, back becomes discard, and Save is the only
+                        // saturated thing on the screen.
+                        EditingTopBar(
+                            canSave = editName.isNotBlank(),
+                            onDiscard = { isEditing = false },
+                            onSave = {
+                                if (editName.isNotBlank()) {
+                                    if (design.updatedAt != editBaseUpdatedAt) {
+                                        showConflictDialog = true
+                                    } else {
+                                        val updated = design.copy(
+                                            name = editName.trim(),
+                                            category = editCategory.trim(),
+                                            sizeInventories = editSizes,
+                                            customFields = editCustomFields.filterKeys { it.isNotBlank() },
+                                            karigars = editKarigars
+                                            // withPhotos carries each photo's own ref, so a
+                                            // newly picked one arrives with a null ref and is
+                                            // marked for upload while the previous object
+                                            // stays intact until the new bytes land.
+                                        ).withPhotos(editPhotos)
+                                        viewModel.updateDesign(updated)
+                                        isEditing = false
                                     }
                                 }
-                            }
-                        }
-                    )
+                            },
+                        )
+                    } else {
+                        ReadingTopBar(
+                            archived = design.isArchived,
+                            onBack = onBack,
+                            onEdit = { isEditing = true },
+                            onArchive = { viewModel.setArchived(true) },
+                            onRestore = { viewModel.setArchived(false) },
+                            onDelete = { showDeleteDialog = true },
+                        )
+                    }
+                },
+                // The page drops a surface step while editing, so even the background says
+                // which mode you are in.
+                containerColor = if (isEditing) {
+                    MaterialTheme.colorScheme.surfaceContainerLowest
+                } else if (design.isArchived) {
+                    MaterialTheme.colorScheme.surfaceContainerLow
+                } else {
+                    MaterialTheme.colorScheme.surface
                 },
                 modifier = modifier
             ) { paddingValues ->
@@ -738,18 +701,10 @@ private fun SizeStockPriceEditorCard(
     editSizes: List<SizeInventory>,
     onEditSizesChange: (List<SizeInventory>) -> Unit,
 ) {
-    Card(
-        shape = AtelierShapes.CornerLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(AtelierSpacing.Base),
-            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
-        ) {
-            Text("Sizes, Stock & Prices", style = MaterialTheme.typography.titleMediumStrong)
-            
+    Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)) {
+        Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)) {
+            SectionHeading("Sizes, stock & prices")
+
             var showCustomSizeDialog by remember { mutableStateOf(false) }
             var newSizeInput by remember { mutableStateOf("") }
             var sizeToRemove by remember { mutableStateOf<String?>(null) }
@@ -782,7 +737,8 @@ private fun SizeStockPriceEditorCard(
             ) {
                 availableSizes.forEach { size ->
                     val isEnabled = editSizes.any { it.size == size }
-                    FilterChip(
+                    TonalPill(
+                        text = size,
                         selected = isEnabled,
                         onClick = {
                             if (isEnabled) {
@@ -804,15 +760,28 @@ private fun SizeStockPriceEditorCard(
                                 onEditSizesChange(updated)
                             }
                         },
-                        label = { Text(size, style = MaterialTheme.typography.labelLargeStrong) },
-                        modifier = Modifier.minimumInteractiveComponentSize()
+                        leading = if (isEnabled) {
+                            {
+                                Icon(
+                                    Icons.Default.Done,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        } else null,
                     )
                 }
-                InputChip(
+                TonalPill(
+                    text = "Custom",
                     selected = false,
                     onClick = { showCustomSizeDialog = true },
-                    label = { Text("+ Custom") },
-                    modifier = Modifier.minimumInteractiveComponentSize()
+                    leading = {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    },
                 )
             }
 
@@ -845,18 +814,15 @@ private fun SizeStockPriceEditorCard(
                             .padding(vertical = AtelierSpacing.Micro),
                         horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .width(SizeTokenWidth)
-                                .background(MaterialTheme.colorScheme.primaryContainer, AtelierShapes.CornerSmall)
-                                .padding(horizontal = AtelierSpacing.Compact, vertical = AtelierSpacing.Compact),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(inv.size, style = MaterialTheme.typography.labelLargeStrong, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
+                        // The size keeps the catalogue's own cell, coded exactly as it is
+                        // everywhere else. Editing the numbers must not change what the size
+                        // looks like, or the shape stops being a reliable signal.
+                        DetailSizeCell(inv)
 
-                        OutlinedTextField(
+                        WellTextField(
+                            label = "Stock",
                             value = stockText,
+                            placeholder = "0",
                             onValueChange = { newValue ->
                                 val digits = newValue.filter { it.isDigit() }
                                 if (digits.length <= 6) {
@@ -869,14 +835,20 @@ private fun SizeStockPriceEditorCard(
                                     }
                                 }
                             },
-                            label = { Text("Stock") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f),
-                            shape = AtelierShapes.CornerSmall
                         )
 
-                        OutlinedTextField(
+                        WellTextField(
+                            label = "Price",
                             value = priceText,
+                            // Never "0". An unpriced size is a size nobody has decided on,
+                            // and a zero in the field would read as a decision.
+                            placeholder = "Set",
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            // Fixed rather than weighted, so the rupee column stays put while
+                            // the stock beside it grows a digit.
+                            modifier = Modifier.width(PriceWellWidth),
                             onValueChange = { newValue ->
                                 val dotCount = newValue.count { it == '.' }
                                 val sanitized = newValue.filter { it.isDigit() || it == '.' }
@@ -894,11 +866,6 @@ private fun SizeStockPriceEditorCard(
                                     }
                                 }
                             },
-                            label = { Text("Price") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.weight(1f),
-                            shape = AtelierShapes.CornerSmall,
-                            prefix = { Text("₹") }
                         )
                     }
                 }
@@ -1347,36 +1314,22 @@ private fun TitleCategoryCard(
 ) {
 // Product Title & Category Card
 if (isEditing) {
-    Card(
-        shape = AtelierShapes.CornerLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(AtelierSpacing.Base),
-            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy)
-        ) {
-            Text("Basic Details", style = MaterialTheme.typography.titleMediumStrong)
-            
-            OutlinedTextField(
-                value = editName,
-                onValueChange = { if (it.length <= 80) onNameChange(it) },
-                label = { Text("Design Name / Code") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                shape = AtelierShapes.CornerMedium
-            )
-
-            OutlinedTextField(
-                value = editCategory,
-                onValueChange = { if (it.length <= 80) onCategoryChange(it) },
-                label = { Text("Category (e.g. Salwar Kameez)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                shape = AtelierShapes.CornerMedium
-            )
-        }
+    // Wells, not outlined fields - the same ones the capture form uses, because this is
+    // the same job. A stroke here would also collide with the dashed edge that now means
+    // "empty" everywhere in the app.
+    Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)) {
+        WellTextField(
+            label = "Design name / code",
+            value = editName,
+            onValueChange = { if (it.length <= 80) onNameChange(it) },
+            placeholder = "e.g. Green Panel - Style 2",
+        )
+        WellTextField(
+            label = "Category",
+            value = editCategory,
+            onValueChange = { if (it.length <= 80) onCategoryChange(it) },
+            placeholder = "e.g. Salwar Kameez",
+        )
     }
 } else {
     // No card around the name. It is the title of the page, not an item on it - boxing it
