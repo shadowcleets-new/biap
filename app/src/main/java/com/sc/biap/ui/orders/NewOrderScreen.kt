@@ -381,12 +381,7 @@ private fun SizePickerRow(
             quantity = quantity,
             max = size.stock,
             onQuantity = onQuantity,
-            contentColor = primaryText,
-            containerColor = if (onContainer) {
-                scheme.onSecondaryContainer.copy(alpha = 0.12f)
-            } else {
-                scheme.surfaceContainerHighest
-            },
+            numberColor = primaryText,
         )
     }
 }
@@ -395,14 +390,18 @@ private fun SizePickerRow(
 
 // #region 4. The stepper
 
-/** Minus, a count, plus. Both ends disable at their limit rather than silently doing nothing. */
+/**
+ * Minus, a count, plus. Both ends disable at their limit rather than silently doing nothing.
+ *
+ * Only the numeral takes a colour from the caller. The buttons own theirs, because they have
+ * to stay legible whatever the card underneath them is doing - see [StepperButton].
+ */
 @Composable
 private fun Stepper(
     quantity: Int,
     max: Int,
     onQuantity: (Int) -> Unit,
-    contentColor: Color,
-    containerColor: Color,
+    numberColor: Color,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -412,14 +411,12 @@ private fun Stepper(
             icon = Icons.Default.Remove,
             description = "One fewer",
             enabled = quantity > 0,
-            container = containerColor,
-            content = contentColor,
             onClick = { onQuantity(quantity - 1) },
         )
         Text(
             text = quantity.toString(),
             style = MaterialTheme.typography.titleMedium,
-            color = contentColor,
+            color = numberColor,
             textAlign = TextAlign.Center,
             modifier = Modifier.width(32.dp),
         )
@@ -427,34 +424,49 @@ private fun Stepper(
             icon = Icons.Default.Add,
             description = "One more",
             enabled = quantity < max,
-            container = containerColor,
-            content = contentColor,
             onClick = { onQuantity(quantity + 1) },
         )
     }
 }
 
+/**
+ * One end of the stepper. Its colours are FIXED, not inherited from the card.
+ *
+ * They used to be passed in, and on a card with something picked they came through as
+ * `onSecondaryContainer` for both the fill and the icon - a light shape drawn on a light
+ * shape, so the + and - vanished the moment a size was chosen. A control that disappears
+ * exactly when you start using it.
+ *
+ * `surfaceContainerHighest` against `onSurface` is a pairing the colour scheme guarantees
+ * contrast for, in light, dark and AMOLED alike, so the buttons read the same whether the
+ * card behind them is plain or highlighted.
+ *
+ * DISABLED IS CARRIED BY THE ICON ALONE. The fill stays put. Fading the fill as well meant
+ * calling `copy(alpha = ...)` on a colour that already carried an alpha - and copy REPLACES
+ * alpha rather than scaling it, which is what turned a 12%-tint into a solid block. Dimming
+ * only the icon is both Material's own disabled treatment and one less place to get that
+ * wrong.
+ */
 @Composable
 private fun StepperButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     enabled: Boolean,
-    container: Color,
-    content: Color,
     onClick: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .size(StepperButtonSize)
             .clip(RoundedCornerShape(percent = 50))
-            .background(container.copy(alpha = if (enabled) 1f else 0.4f))
+            .background(scheme.surfaceContainerHighest)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             icon,
             contentDescription = description,
-            tint = content.copy(alpha = if (enabled) 1f else 0.38f),
+            tint = if (enabled) scheme.onSurface else scheme.onSurface.copy(alpha = 0.38f),
             modifier = Modifier.size(20.dp),
         )
     }
