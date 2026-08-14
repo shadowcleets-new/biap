@@ -17,7 +17,7 @@ plugins {
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.google.services)
   kotlin("android")
-  kotlin("kapt")
+  alias(libs.plugins.ksp)
 }
 
 android {
@@ -160,7 +160,7 @@ dependencies {
   // Room Database
   implementation(libs.androidx.room.runtime)
   implementation(libs.androidx.room.ktx)
-  "kapt"(libs.androidx.room.compiler)
+  ksp(libs.androidx.room.compiler)
 
   // WorkManager & Security
   implementation(libs.androidx.work.runtime.ktx)

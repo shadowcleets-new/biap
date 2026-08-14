@@ -19,6 +19,8 @@ nav3Core = "1.0.1"
 lifecycleViewmodelNav3 = "2.10.0"
 androidxNavigation = "2.8.6"
 room = "2.8.4"
+# Paired with the Kotlin version: KSP ships one build per Kotlin release.
+ksp = "2.1.0-1.0.29"
 androidxWork = "2.9.0"
 androidxSecurity = "1.1.0-alpha06"
 firebase = "33.6.0"
@@ -84,5 +86,5 @@ firebase-appcheck-debug = { module = "com.google.firebase:firebase-appcheck-debu
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
-kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 google-services = { id = "com.google.gms.google-services", version = "4.4.2" }
