@@ -13,6 +13,41 @@ Each entry is written twice over:
 The entries dated 13-15 August 2026 were reconstructed on 30 September 2026 from
 the commit record; they were not written at the time.
 
+## [2026-09-30 16:18:09] - Session `28194b79` (Opus 5) - batches, reset stock, Business Hub
+
+> **In plain English:** Three things. You can now empty a size back to zero - or a whole
+> design - and everything else about it survives: the price, the karigars, the photographs,
+> the details. Every refill is recorded as a numbered batch with its own date, quantity and
+> price, so you can see that size L was made in June at one price and again in August at
+> another. And there is a new **Business Hub** under your account menu holding your eleven
+> karigars and five activities, where you assign someone to a job by dragging their name
+> onto it - and from then on, a design whose work says "Block Printing" picks up whoever
+> does Printing on its own.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Stock could only be edited, never cleared. Refills left no record of what was made or when. And karigars were free-typed per design, so the same person existed under several spellings and could not be recognised across designs - which is what assigning work by activity needs.
+- **Specialist Personas Invoked:** Enterprise Relational Database Architect, Android Architect, UI/UX Designer.
+- **The Strategy:** Confirmed three decisions with the owner before writing any schema, because a migration is the one thing this project cannot easily undo. They chose full batch history, reset at both scopes, and the Hub as the master karigar list.
+
+### 2. Surgical Technical Modifications
+- **New Files:** `data/Batch.kt`, `data/Karigar.kt`, `ui/hub/BusinessHubScreen.kt`, `ui/hub/BusinessHubViewModel.kt`, `ui/design/SizeBatchSheet.kt`, and two test files.
+- **Modified Files:** `data/room/Entities.kt`, `AppDatabase.kt` (**MIGRATION_8_9**), `DesignDao.kt`, `DataRepository.kt`, `Design.kt`, `SyncMerger.kt`, `NavigationKeys.kt`, `Navigation.kt`, `ui/main/MainScreen.kt`, `ui/design/DesignDetailScreen.kt`, `DesignDetailViewModel.kt`, `DetailPieces.kt`.
+- **Payload/Schema Changes:** **Database schema v8 -> v9.** Five new tables (`batches`, `karigars`, `deleted_karigars`, `activities`, `deleted_activities`). Not one existing column touched.
+- **Irreversible Actions:** Schema bump to v9 - a build predating batches cannot open a v9 database. See Scenario A1d in the rollback kit.
+- **The decision worth keeping - why stock is still a column:** The obvious design is to delete `size_inventories.stock` and read `SUM(remaining)`. It was not done. Stock is read constantly and written inside a transaction that must refuse to oversell; replacing it with an aggregate turns one guarded UPDATE into a read, a sum and a write, and the guard that makes overselling impossible (`AND stock >= :qty`) has nowhere to live. So the column stays authoritative with batches as a ledger beside it, under one invariant every movement maintains in a single transaction: `stock == SUM(batches.remaining)`.
+- **No backfill, deliberately:** designs that already hold stock get no batch rows. An empty ledger means "unbatched" and is left alone, rather than inventing a batch 1 dated today that nobody made - which is why all 25 existing designs keep selling exactly as before.
+- **A reset empties batches rather than deleting them:** `remaining` goes to 0, the rows and their quantities stay. Throwing away what was made in order to say "none left" destroys the record to express a quantity. It also means a reset needs no tombstone, so nothing returns on the next sync.
+- **Automatic assignment is additive only:** work naming an activity adds that karigar; editing the work later never removes anybody, because being assigned by hand is a deliberate act.
+- **Seeding is guarded on the tombstones too:** without that, deleting every activity looks identical to a fresh database and they all come back on the next launch.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** `:app:testDebugUnitTest` -> **114/114 pass** (90 existing, 24 new over the ledger arithmetic and the work matching). `:app:assembleDebug` clean.
+- **Resulting App State:** Installed on the Pixel 9. **The v8 -> v9 migration ran against the real catalogue** with no crash and no SQLite error; all 25 designs, their prices, stock and photographs are intact, and the write-ahead log confirms the new tables were created and seeded. A fresh pre-migration backup (`db-backup-v8-PRE-v9/`) was taken first.
+- **NOT verified on screen:** the Business Hub itself. A picture-in-picture video was sitting over the account button, so every tap aimed at it hit the video; driving the owner's phone out from under what they were watching was not worth a screenshot.
+- **Next Sprint Phase:** Open Business Hub, check the eleven names and five activities are there, and try a drag. Then decide on the two deferred performance items.
+
+---
+
 ## [2026-09-30 13:05:00] - Session `28194b79` (Opus 5) - scroll performance, part 1
 
 > **In plain English:** Scrolling stuttered mainly because every design photo was being
