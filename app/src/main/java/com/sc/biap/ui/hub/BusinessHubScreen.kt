@@ -27,7 +27,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -261,11 +260,14 @@ fun BusinessHubScreen(
                             )
                         },
                 ) {
-                    Text(
-                        karigar.name,
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(start = 12.dp, end = 15.dp, top = 10.dp, bottom = 10.dp),
+                    ) {
+                        KarigarIcon(modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(7.dp))
+                        Text(karigar.name, style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
         }
@@ -444,6 +446,12 @@ private fun ActivityDropZone(
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                ActivityIcon(
+                    activity = activity,
+                    modifier = Modifier.size(22.dp),
+                    tint = if (isHovered) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(10.dp))
                 Text(
                     activity,
                     style = MaterialTheme.typography.titleSmall,
@@ -524,12 +532,11 @@ private fun DraggableKarigarChip(
                 .clickable { menuOpen = true }
                 .padding(start = 10.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         ) {
-            Icon(
-                Icons.Default.DragIndicator,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-            )
-            Spacer(Modifier.width(6.dp))
+            // A person, where the drag handle used to be. The hint above the activities
+            // already says these can be dragged, and a name reads better with a face on it
+            // than with a grab dot.
+            KarigarIcon(modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(7.dp))
             Text(karigar.name, style = MaterialTheme.typography.labelLarge)
         }
     }
@@ -564,8 +571,10 @@ private fun AssignedChip(name: String, onRemove: () -> Unit) {
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         ) {
+            KarigarIcon(modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
             Text(name, style = MaterialTheme.typography.labelLarge)
             IconButton(onClick = onRemove, modifier = Modifier.size(28.dp)) {
                 Icon(

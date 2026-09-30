@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Business Hub icon. Stroked, never filled, on the 24dp Material grid with a
+  2dp round-capped stroke, so it sits beside the app's own icons unchanged.
+
+  Black is a placeholder: every call site draws these through Icon(tint = ...),
+  which replaces the colour outright. Hardcoding a theme colour here would be a
+  colour that is wrong in three of the four themes.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M3.6,13.2a8,8 0 1,0 16,0a8,8 0 1,0 -16,0"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeAlpha="1.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M10.1,5.4V3.4h3v2"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeAlpha="1.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M11.6,10.4v5.6M8.8,13.2h5.6"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeAlpha="1.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M9.6,11.2l4,4M13.6,11.2l-4,4"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeAlpha="0.55"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
