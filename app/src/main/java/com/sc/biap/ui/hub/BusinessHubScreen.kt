@@ -21,11 +21,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,6 +52,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,6 +99,10 @@ import kotlin.math.roundToInt
  */
 
 private val ChipRadius = 20.dp
+/** How deep the scroll-on-drag zone reaches in from the top and bottom of the board. */
+private val EdgeScrollZone = 96.dp
+/** The most the board moves in one frame at the very edge - about 540dp a second at 60Hz. */
+private val EdgeScrollMaxStep = 9.dp
 private val DropZoneMinHeight = 72.dp
 
 // #region 1. Screen
@@ -134,7 +143,10 @@ fun BusinessHubScreen(
     // Where the content Box sits in the window, and how big the floating chip turns out to
     // be. Both are needed to put the chip under the finger; see the offset below.
     var containerOrigin by remember { mutableStateOf(Offset.Zero) }
+    var containerSize by remember { mutableStateOf(IntSize.Zero) }
     var previewSize by remember { mutableStateOf(IntSize.Zero) }
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
 
     var addKarigarOpen by remember { mutableStateOf(false) }
     var addActivityOpen by remember { mutableStateOf(false) }
@@ -144,6 +156,43 @@ fun BusinessHubScreen(
 
     fun zoneAt(point: Offset): String? =
         dropZones.entries.firstOrNull { it.value.contains(point) }?.key
+
+    // THE BOARD SCROLLS ITSELF WHILE YOU DRAG NEAR AN EDGE.
+    //
+    // Without this, an activity below the fold is simply unreachable: the finger is holding
+    // the chip, so it cannot also flick the list, and letting go to scroll drops the chip
+    // wherever it happens to be. Every drag-and-drop board has to solve this and the answer
+    // is always the same - the edges of the viewport become scroll zones.
+    //
+    // Speed ramps with how far into the zone the finger is, so easing towards the edge
+    // creeps and pushing right to it moves briskly. A fixed speed either crawls when you
+    // want to cross the whole list or overshoots when you want the next card down.
+    //
+    // The drop zones need no special handling: they re-record their bounds through
+    // onGloballyPositioned as the list moves, so the hit test stays correct mid-scroll.
+    LaunchedEffect(dragging != null) {
+        if (dragging == null) return@LaunchedEffect
+        val edge = with(density) { EdgeScrollZone.toPx() }
+        val maxStep = with(density) { EdgeScrollMaxStep.toPx() }
+        while (true) {
+            withFrameNanos { }
+            val height = containerSize.height
+            if (height <= 0) continue
+            val y = dragPosition.y - containerOrigin.y
+            val push = when {
+                y < edge -> -(edge - y) / edge
+                y > height - edge -> (y - (height - edge)) / edge
+                else -> 0f
+            }
+            if (push != 0f) {
+                listState.scrollBy(push.coerceIn(-1f, 1f) * maxStep)
+                // The board moved under a finger that did not, so whatever is beneath it
+                // has changed. Without this the highlight stays on the card the finger
+                // left behind, and it points at the wrong drop right up until you let go.
+                hovered = zoneAt(dragPosition)
+            }
+        }
+    }
 
     Scaffold(
         modifier = modifier,
@@ -163,9 +212,13 @@ fun BusinessHubScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .onGloballyPositioned { containerOrigin = it.positionInRoot() },
+                .onGloballyPositioned {
+                    containerOrigin = it.positionInRoot()
+                    containerSize = it.size
+                },
         ) {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp,
@@ -402,6 +455,7 @@ private fun KarigarPool(
                     DraggableKarigarChip(
                         karigar = karigar,
                         isBeingDragged = dragging?.id == karigar.id,
+                        isAssigned = karigar.activities.isNotEmpty(),
                         onDragStart = onDragStart,
                         onDrag = onDrag,
                         onDragEnd = onDragEnd,
@@ -497,6 +551,7 @@ private fun ActivityDropZone(
 private fun DraggableKarigarChip(
     karigar: Karigar,
     isBeingDragged: Boolean,
+    isAssigned: Boolean,
     onDragStart: (Karigar, Offset) -> Unit,
     onDrag: (Offset) -> Unit,
     onDragEnd: () -> Unit,
@@ -538,6 +593,27 @@ private fun DraggableKarigarChip(
             KarigarIcon(modifier = Modifier.size(17.dp))
             Spacer(Modifier.width(7.dp))
             Text(karigar.name, style = MaterialTheme.typography.labelLarge)
+            // A tick once this person has work, so the pool answers "who have I not placed
+            // yet" without reading every activity card below. Deliberately an addition
+            // rather than a dimming: they are still draggable onto a second activity, and
+            // greying them out would say the opposite.
+            if (isAssigned && !isBeingDragged) {
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(scheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = "Already assigned",
+                        tint = scheme.onPrimary,
+                        modifier = Modifier.size(11.dp),
+                    )
+                }
+            }
         }
     }
 
