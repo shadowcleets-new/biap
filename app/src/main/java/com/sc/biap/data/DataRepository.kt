@@ -193,6 +193,11 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     // migrated away from on the first sync that finds it.
     private val KEY_FILE_WRAPPED = "sync_key.enc"
     private val KEY_FILE_LEGACY = "sync_key.txt"
+
+    // Where the last successful sync time is kept so it survives a restart. Suffixed per
+    // identity exactly like the database file, so the two always describe the same catalogue.
+    private val SYNC_PREFS = "biap_sync"
+    private val KEY_LAST_SYNC_AT = "last_sync_at"
     private val dbLock = Mutex()
     private val backupLock = Mutex()
 
@@ -208,12 +213,19 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     override val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
     /**
-     * When a sync last actually completed. 0 means "not since this launch".
+     * When a sync last actually completed. 0 means never, for this identity.
      *
      * Kept because the catalogue header claims to show it. It previously showed the newest
      * design's edit time instead, which looks identical most of the time and is wrong exactly
      * when it matters - after a sync that changed nothing, or a sync that silently failed.
      * A header that reports success it cannot observe is worse than one that says nothing.
+     *
+     * IT IS PERSISTED, and that is the point. This used to be memory-only, so 0 meant "not
+     * since this launch" and the header announced NOT SYNCED YET on every cold start no
+     * matter how recently the owner had synced. That is the same lie in the other direction:
+     * a header denying a success that did happen. Stored under the same suffix as the
+     * database, so signing into another account reports that account's sync rather than
+     * inheriting the previous one's.
      */
     private val _lastSyncAt = MutableStateFlow(0L)
     override val lastSyncAt: StateFlow<Long> = _lastSyncAt.asStateFlow()
@@ -263,6 +275,9 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                     driveFileId = null
 
                     val suffix = getDatabaseSuffix(userKey)
+                    // Before the database opens, so the header never flashes NOT SYNCED YET
+                    // on the way in.
+                    _lastSyncAt.value = readLastSyncAt(suffix)
                     adoptLegacyGuestDatabaseIfPresent(suffix)
                     val db = openDatabaseForUser(suffix)
                     currentDb = db
@@ -363,6 +378,30 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     /** Current app identity, or null when signed out. Drive state is deliberately not consulted. */
     private fun currentUserKey(): String? = FirebaseAuth.getInstance().currentUser?.uid
+
+    // #region Last sync time, persisted
+
+    private fun syncPrefs() =
+        context.applicationContext.getSharedPreferences(SYNC_PREFS, Context.MODE_PRIVATE)
+
+    private fun readLastSyncAt(suffix: String): Long =
+        syncPrefs().getLong(KEY_LAST_SYNC_AT + suffix, 0L)
+
+    /**
+     * One place that both publishes and stores the time, so the two can never disagree.
+     *
+     * Written synchronously with commit() rather than apply(): a sync often finishes as the
+     * app is being put away, and apply() can lose the write if the process dies before the
+     * background flush. Losing it puts the header straight back to its old lie.
+     */
+    private fun recordSyncCompleted() {
+        val at = System.currentTimeMillis()
+        _lastSyncAt.value = at
+        syncPrefs().edit()
+            .putLong(KEY_LAST_SYNC_AT + getDatabaseSuffix(currentUserKey()), at)
+            .commit()
+    }
+    // #endregion
 
     /** Emits the app identity on sign-in/sign-out so the active database follows it. */
     private fun signedInUserKeyFlow(): Flow<String?> = callbackFlow {
@@ -677,7 +716,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         }
 
         PassphraseStore.save(context, new)
-        _lastSyncAt.value = System.currentTimeMillis()
+        recordSyncCompleted()
         return@withContext null
     }
 
@@ -709,7 +748,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         val syncRequest = OneTimeWorkRequestBuilder<DriveSyncWorker>()
             .setConstraints(constraints)
             .setBackoffCriteria(
-                androidx.work.BackoffPolicy.EXPONENTIAL,
+                BackoffPolicy.EXPONENTIAL,
                 WorkRequest.MIN_BACKOFF_MILLIS,
                 TimeUnit.MILLISECONDS
             )
@@ -743,7 +782,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                         }
                         androidx.work.WorkInfo.State.SUCCEEDED -> {
                             _isSyncing.value = false
-                            _lastSyncAt.value = System.currentTimeMillis()
+                            recordSyncCompleted()
                             _syncStatus.value = SyncStatus.Success("Sync completed successfully.")
                             return@collect   // terminal: stop observing
                         }

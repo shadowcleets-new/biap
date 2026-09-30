@@ -218,18 +218,25 @@ fun MainScreen(
     val pullState = rememberPullToRefreshState()
     val lastSyncAt by viewModel.lastSyncAt.collectAsStateWithLifecycle()
 
+    // The device's own 12/24-hour setting. Read here rather than inside the formatter so
+    // the formatter stays a pure function with a test.
+    val use24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
+
     /**
-     * "48 designs · synced 09:12".
+     * "48 DESIGNS · SYNCED AT 7:45 PM".
      *
-     * Two things this deliberately gets right, having got both wrong first time round:
+     * Three things this deliberately gets right, having got all three wrong first time:
      *
      *  - The count is the WHOLE catalogue, not the filtered view. A number that drops when
      *    you tap a filter is indistinguishable from designs disappearing.
      *  - The time is a real sync completion, not the newest design's edit time. The old
      *    version read "UPDATED 19:08" off the last edit, so it sat frozen while syncs
      *    succeeded behind it - a header reporting success it never actually observed.
+     *  - NOT SYNCED YET now means never, not "not since this launch". The time is persisted
+     *    (see DataRepository), so a cold start no longer denies a sync that did happen.
      *
-     * Says "not synced yet" rather than inventing a time when none is known.
+     * [syncStamp] carries the rest: a clock time only while it still identifies a moment on
+     * its own, and an age or a date once it does not.
      */
     val catalogueStatusLine: (MainScreenUiState, Boolean, Long) -> String = { s, syncing, syncedAt ->
         val total = (s as? MainScreenUiState.Success)?.totalCount ?: 0
@@ -237,12 +244,7 @@ fun MainScreen(
         when {
             syncing -> "SYNCING…"
             total == 0 -> "NO DESIGNS YET"
-            syncedAt == 0L -> "$designs · NOT SYNCED YET"
-            else -> {
-                val stamp = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-                    .format(java.util.Date(syncedAt))
-                "$designs · SYNCED $stamp"
-            }
+            else -> "$designs · ${syncStamp(syncedAt, System.currentTimeMillis(), use24Hour)}"
         }
     }
     val orders by viewModel.orders.collectAsStateWithLifecycle()

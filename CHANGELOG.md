@@ -13,6 +13,43 @@ Each entry is written twice over:
 The entries dated 13-15 August 2026 were reconstructed on 30 September 2026 from
 the commit record; they were not written at the time.
 
+## [2026-09-30 12:25:55] - Session `28194b79` (Opus 5) - the "NOT SYNCED YET" bug
+
+> **In plain English:** The header always said "NOT SYNCED YET", even right after a
+> successful sync. It was not lying about the sync - it genuinely forgot the time every
+> time the app was closed. It now remembers, and says something useful: "SYNCED AT
+> 12:23 PM" today, "SYNCED YESTERDAY AT 11:05 PM", "SYNCED 3 DAYS AGO", or
+> "SYNCED ON 19/03/2026" once it is more than a week old.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Two faults behind one symptom. (1) `_lastSyncAt` was a plain in-memory `MutableStateFlow(0L)` - its own comment read *"0 means not since this launch"* - so every cold start reported NOT SYNCED YET regardless of when the last sync actually was. (2) Even once set, the header printed a bare `HH:mm`, which only identifies a moment on the day it happened and silently misreads as recent forever after.
+- **Specialist Personas Invoked:** Android Architect, UX Architect, Defensive Software Engineer.
+- **The Strategy:** Persist the timestamp under the same per-identity suffix as the database, and move the wording into a pure function that can be tested against a fixed clock.
+
+### 2. Surgical Technical Modifications
+- **New Files:**
+  - `app/src/main/java/com/sc/biap/ui/main/SyncStamp.kt` - `syncStamp(syncedAt, now, use24Hour, locale)`, pure.
+  - `app/src/test/java/com/sc/biap/ui/SyncStampTest.kt` - 8 tests.
+- **Modified Files:**
+  - `app/src/main/java/com/sc/biap/data/DataRepository.kt` - `SYNC_PREFS`/`KEY_LAST_SYNC_AT`; `readLastSyncAt(suffix)` called as the identity changes, before the database opens; both completion sites (`WorkInfo.SUCCEEDED` and the passphrase-change path) now go through one `recordSyncCompleted()`.
+  - `app/src/main/java/com/sc/biap/ui/main/MainScreen.kt` - header delegates to `syncStamp`; `use24Hour` read once from `DateFormat.is24HourFormat`.
+- **Payload/Schema Changes:** None. A new `biap_sync` SharedPreferences file; no database change.
+- **Irreversible Actions:** None.
+- **Decisions worth keeping:**
+  - **Keyed per identity**, with the same suffix as the database file, so signing into another account reports that account's sync rather than inheriting the previous one's.
+  - **`commit()` rather than `apply()`**: a sync often finishes as the app is being put away, and `apply()` can lose the write if the process dies first - which would restore the exact bug being fixed.
+  - **Calendar days, not elapsed hours.** "Within 24 hours" and "today" disagree for half of every day: a sync at 11pm read back at 1am is two hours old but belongs to yesterday, and a bare "AT 11:00 PM" invites reading it as tonight. Yesterday therefore keeps its time, since the day name has already removed the ambiguity.
+  - Day arithmetic **rounds** to the nearest day rather than truncating, so a daylight-saving boundary (23- or 25-hour days) cannot turn yesterday into today. India has none; a phone that travels does.
+  - A future timestamp - clock correction, or flying west - is read as "just now" rather than a date.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** `:app:testDebugUnitTest` -> **90/90 pass** (82 existing + 8 new). Installed on the Pixel 9 and verified end-to-end against a real sync rather than a seeded value: `DriveSyncWorker` returned SUCCESS at 12:23, the value was written to `shared_prefs/biap_sync.xml`, the app was force-stopped, and the cold start read back **"25 DESIGNS - SYNCED AT 12:23 PM"**.
+- **Resulting App State:** The header reports the truth on a cold start. This also incidentally confirmed the dependency refresh end to end - that sync ran through OkHttp 5 and play-services-auth 21.6.0 against real Google Drive.
+- **Known issue, NOT fixed here:** for the two or three seconds a cold start takes to open and decrypt the database, the catalogue renders its empty state - "No designs yet / The catalogue is empty" - because the status line and the body both treat `Loading` as zero designs. It is momentary and no data is at risk, but it reads as though the catalogue has been wiped. Pre-existing; called out rather than folded into this change.
+- **Next Sprint Phase:** Decide whether to distinguish `Loading` from genuinely empty in `MainScreen`, and level `main` with `perf/baseline-profile`.
+
+---
+
 ## [2026-09-30 11:28:16] - Session `28194b79` (Opus 5 - dependency refresh)
 
 > **In plain English:** Updated every outside piece of software the app is built from - the build tools, the screen library, the database engine, the Google sign-in and backup parts - to their newest versions. Two updates were deliberately skipped because "newest" would have broken the app: the latest Google sign-in release has the sign-in feature removed entirely, and the latest Kotlin has no matching database code generator. Nothing about how the app looks or works changed, and your existing designs, prices and orders read back exactly as before.
