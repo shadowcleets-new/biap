@@ -45,7 +45,18 @@ the commit record; they were not written at the time.
 
 ### 3. Verification & Validation
 - **Execution Commands & Diagnostics:** `:app:testDebugUnitTest` -> **90/90 pass**. `adb shell dumpsys gfxinfo` used for the baseline above. Compose compiler metrics were generated temporarily and confirmed **136/136 composables skippable, zero unstable UI types** - recomposition was never the problem, so no effort was spent there. The metrics block was reverted.
-- **Resulting App State:** Built and unit-tested. **NOT yet installed or re-measured** - wireless debugging dropped before the install, so the on-device before/after comparison is still outstanding.
+- **Resulting App State:** Installed and measured. **Memory is transformed; scrolling smoothness is barely changed, and that is the honest result.** Three matched runs of the same swipe protocol from a cold start, alternating builds on the same device in the same session:
+
+  | Run | Janky frames before -> after | 95th percentile before -> after | Graphics memory before -> after |
+  |---|---|---|---|
+  | 1 (cold) | 18.04% -> 15.57% | 44ms -> 40ms | 293 MB -> 80 MB |
+  | 2 | 9.42% -> 8.51% | 30ms -> 25ms | 271 MB -> 91 MB |
+  | 3 | 3.39% -> 3.25% | 17ms -> 15ms | 278 MB -> 89 MB |
+
+  Graphics memory fell by about **3x**, consistently. Jank moved by 5-15% relative, which is inside the run-to-run variance and cannot be called a win. **The reason is instructive: Coil decodes off the main thread, so the 48 MB decode was never on the frame-drawing thread to begin with.** It was costing memory and GC pressure, not frame time. The "Slow UI thread" jank is composition and layout - which means it is dominated by the items deliberately left undone (BoxWithConstraints subcomposition per row, the per-cell animations) plus debug-build overhead.
+
+  An earlier reading of 0.37% jank was discarded: it had been taken on the Design Detail screen rather than the catalogue, and a later 4.74% reading was taken while a sync was running. Neither was comparable.
+- **UI verified unchanged by pixel comparison**, top of catalogue, before against after: the row with no photograph, the row text and size cells, and the bottom navigation bar are all **100.00% byte-identical**. The attention banner is 99.34%. The only region that differs is the inside of a photograph, where 74% of pixels are within 8/255 - the resampling differs because the image is now decoded at display size instead of downscaled from 12.5 MP at draw time. Framing, size and position are identical.
 - **Deliberately NOT done, pending the owner's approval, because each changes the UI:**
   - `BoxWithConstraints` per row (subcomposition): removing it means assuming how many size cells fit rather than measuring, which risks overflow on a narrower phone.
   - `animateDpAsState` + `MutableInteractionSource` per size cell (~36 live objects): removing them removes the press animation.
