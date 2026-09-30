@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -171,6 +172,7 @@ fun ReadingTopBar(
     onArchive: () -> Unit,
     onRestore: () -> Unit,
     onDelete: () -> Unit,
+    onResetStock: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
     Row(
@@ -207,6 +209,10 @@ fun ReadingTopBar(
             }
             CircleButton(Icons.Default.Delete, "Delete permanently", onDelete, tint = scheme.error)
         } else {
+            // Reset sits beside edit rather than behind an overflow: it is a thing the
+            // owner does deliberately and often enough to look for, and it confirms before
+            // doing anything, so a mis-tap costs a dialog rather than the stock.
+            CircleButton(Icons.Default.RestartAlt, "Reset all stock", onResetStock)
             CircleButton(Icons.Default.Edit, "Edit design", onEdit)
             CircleButton(Icons.Default.Archive, "Archive", onArchive)
         }

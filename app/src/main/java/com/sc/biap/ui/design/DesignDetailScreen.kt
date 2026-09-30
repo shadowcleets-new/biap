@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Archive
@@ -129,6 +130,51 @@ fun DesignDetailScreen(
     var editBaseUpdatedAt by rememberSaveable { mutableStateOf(0L) }
     var showConflictDialog by remember { mutableStateOf(false) }
 
+    // The size whose batch sheet is open, and the number to pre-fill in it. The number is
+    // fetched when the sheet opens rather than held for every size, because it is a database
+    // read and only one sheet is ever open.
+    var sheetSize by remember { mutableStateOf<SizeInventory?>(null) }
+    var suggestedBatchNumber by remember { mutableStateOf(1) }
+    var confirmingResetAll by remember { mutableStateOf(false) }
+
+    val batchesBySize by viewModel.batchesBySize.collectAsStateWithLifecycle()
+    val hubKarigars by viewModel.hubKarigars.collectAsStateWithLifecycle()
+    val detailMessage by viewModel.message.collectAsStateWithLifecycle()
+
+    LaunchedEffect(sheetSize?.size) {
+        sheetSize?.let { suggestedBatchNumber = viewModel.suggestBatchNumber(it.size) }
+    }
+
+    // Automatic assignment from the Business Hub.
+    //
+    // When the work written on a design names something a karigar is assigned to - "Block
+    // Printing" against Printing - that karigar goes onto the design without being asked
+    // for. Only while editing, because it writes into the edit buffer rather than saving.
+    //
+    // ADDITIVE ONLY, and the asymmetry is deliberate. Changing a work value never removes
+    // anybody: somebody put there by hand is a deliberate act, and "this is no longer block
+    // printing" is not a statement that the person who was doing it has stopped. Taking
+    // someone off stays a manual decision, which is what the chips in the dialog are for.
+    LaunchedEffect(editCustomFields, hubKarigars, isEditing) {
+        if (!isEditing) return@LaunchedEffect
+        val implied = viewModel.impliedKarigars(editCustomFields, editKarigars)
+        if (implied.isNotEmpty()) editKarigars = editKarigars + implied
+    }
+
+    // Anything the batch or reset paths needed to say. Shown as a dialog rather than a
+    // snackbar because this screen has no scaffold to host one, and every message here is
+    // a refusal the owner has to act on rather than a passing note.
+    detailMessage?.let { text ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearMessage() },
+            title = { Text("Could not do that") },
+            text = { Text(text) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearMessage() }) { Text("OK") }
+            },
+        )
+    }
+
     val scope = rememberCoroutineScope()
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -157,6 +203,38 @@ fun DesignDetailScreen(
                 }
             }
         }
+    }
+
+    sheetSize?.let { inventory ->
+        // Re-read from the design rather than using the captured copy, so stock and price in
+        // the sheet follow a batch being added instead of freezing at the moment it opened.
+        val live = (state as? DesignDetailUiState.Success)
+            ?.design?.sizeInventories?.firstOrNull { it.size == inventory.size }
+            ?: inventory
+        SizeBatchSheet(
+            designName = (state as? DesignDetailUiState.Success)?.design?.name.orEmpty(),
+            inventory = live,
+            batches = batchesBySize[live.size].orEmpty(),
+            suggestedNumber = suggestedBatchNumber,
+            onAddBatch = { number, quantity, price, note ->
+                viewModel.addBatch(live.size, number, quantity, price, note)
+            },
+            onResetSize = { viewModel.resetSize(live.size) },
+            onEditSizes = { sheetSize = null; isEditing = true },
+            onDismiss = { sheetSize = null },
+        )
+    }
+
+    if (confirmingResetAll) {
+        val design = (state as? DesignDetailUiState.Success)?.design
+        ResetConfirmation(
+            title = "Reset all stock to 0?",
+            body = "Every size of " + (design?.name ?: "this design") + " goes to 0. Prices, " +
+                "karigars, photographs and every other detail stay exactly as they are, and " +
+                "the batch history is kept - each batch just shows nothing left.",
+            onConfirm = { viewModel.resetWholeDesign(); confirmingResetAll = false },
+            onDismiss = { confirmingResetAll = false },
+        )
     }
 
     if (showDeleteDialog) {
@@ -268,6 +346,7 @@ fun DesignDetailScreen(
                             onArchive = { viewModel.setArchived(true) },
                             onRestore = { viewModel.setArchived(false) },
                             onDelete = { showDeleteDialog = true },
+                            onResetStock = { confirmingResetAll = true },
                         )
                     }
                 },
@@ -330,11 +409,13 @@ fun DesignDetailScreen(
                             MatrixHeader(design)
                             SizeMatrix(
                                 design = design,
-                                // Tapping a size goes straight to editing it. The per-size
-                                // detail card this replaces existed only to reveal what is
-                                // now permanently on screen - keeping it would have meant
-                                // tapping a row to see the row.
-                                onSizeClick = { if (!design.isArchived) isEditing = true },
+                                // Tapping a size opens its batch history, where adding a
+                                // batch and resetting that size both live. Editing is one
+                                // button inside the sheet, so the tap gained a destination
+                                // rather than losing the one it had.
+                                onSizeClick = { inventory ->
+                                    if (!design.isArchived) sheetSize = inventory
+                                },
                             )
                             UnpricedBanner(
                                 sizes = design.sizeInventories
@@ -384,6 +465,8 @@ fun DesignDetailScreen(
                             design = design,
                             isEditing = isEditing,
                             editKarigars = editKarigars,
+                            hubKarigars = hubKarigars,
+                            onAddToHub = { viewModel.addKarigarToHub(it) },
                             viewModel = viewModel,
                             onEditKarigarsChange = { editKarigars = it },
                             onDismiss = { showEditKarigarsDialog = false },
@@ -1133,112 +1216,149 @@ private fun InventoryPricingCard(design: Design, focusSize: String? = null) {
  * Its working copy and the new-name input are local; only the confirmed list crosses
  * back out, so the parent still owns what gets saved.
  */
+/**
+ * Pick this design's karigars from the Business Hub list.
+ *
+ * WHY THIS IS A PICKER AND NOT A TEXT FIELD ANY MORE:
+ *   Typed names cannot be matched across designs. "Deen Mohd." on one and "Deen Mohd" on
+ *   another are two people to the app and one to the workshop, which is exactly what breaks
+ *   assigning work by activity. The Hub is the master list, so the ordinary path is tapping
+ *   a name that already exists.
+ *
+ *   Adding someone new is still here, because the alternative is being unable to record a
+ *   karigar until you have visited another screen. A name added here joins the Hub, so the
+ *   two lists never diverge.
+ *
+ * The design keeps NAMES rather than ids, deliberately: a design is a historical record and
+ * should still read correctly if somebody is later removed from the Hub.
+ */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun KarigarEditorDialog(
     design: Design,
     isEditing: Boolean,
     editKarigars: List<String>,
+    hubKarigars: List<com.sc.biap.data.Karigar>,
+    onAddToHub: (String) -> Unit,
     viewModel: DesignDetailViewModel,
     onEditKarigarsChange: (List<String>) -> Unit,
     onDismiss: () -> Unit,
 ) {
-val karigarsListToUse = if (isEditing) editKarigars else design.karigars
-var tempKarigars by remember(karigarsListToUse) { mutableStateOf(karigarsListToUse) }
-var newKarigarInput by remember { mutableStateOf("") }
+    val karigarsListToUse = if (isEditing) editKarigars else design.karigars
+    var tempKarigars by remember(karigarsListToUse) { mutableStateOf(karigarsListToUse) }
+    var newKarigarInput by remember { mutableStateOf("") }
+    val scheme = MaterialTheme.colorScheme
 
-AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text("Manage Karigars", style = MaterialTheme.typography.titleLargeStrong) },
-    text = {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            OutlinedTextField(
-                value = newKarigarInput,
-                onValueChange = { if (it.length <= 50) newKarigarInput = it },
-                label = { Text("Karigar Name") },
-                singleLine = true,
-                shape = AtelierShapes.CornerMedium,
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    IconButton(
-                        onClick = {
-                            val trimmed = newKarigarInput.trim()
-                            if (trimmed.isNotBlank() && !tempKarigars.contains(trimmed)) {
-                                tempKarigars = tempKarigars + trimmed
-                                newKarigarInput = ""
-                            }
-                        }
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Karigar")
-                    }
-                }
-            )
-
-            if (tempKarigars.isEmpty()) {
-                Text(
-                    "No Karigars in list.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(vertical = AtelierSpacing.Micro),
-                    horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
-                ) {
-                    tempKarigars.forEach { karigar ->
-                        InputChip(
-                            selected = false,
-                            onClick = {},
-                            label = { Text(karigar) },
-                            trailingIcon = {
-                                // 48dp tap target on the Box; glyph stays 18dp.
-                                Box(
-                                    modifier = Modifier
-                                        .minimumInteractiveComponentSize()
-                                        .clickable(
-                                            role = Role.Button,
-                                            onClickLabel = "Remove"
-                                        ) { tempKarigars = tempKarigars - karigar },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.Clear,
-                                        contentDescription = "Remove $karigar",
-                                        modifier = Modifier.size(RemoveIconSize)
-                                    )
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    },
-    confirmButton = {
-        Button(shapes = ButtonDefaults.shapes(), onClick = {
-                if (isEditing) {
-                    onEditKarigarsChange(tempKarigars)
-                } else {
-                    viewModel.updateKarigars(tempKarigars)
-                }
-                onDismiss()
-            }
-        ) {
-            Text("Save Changes")
-        }
-    },
-    dismissButton = {
-        TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) {
-            Text("Cancel")
+    fun toggle(name: String) {
+        tempKarigars = if (tempKarigars.any { it.equals(name, ignoreCase = true) }) {
+            tempKarigars.filterNot { it.equals(name, ignoreCase = true) }
+        } else {
+            tempKarigars + name
         }
     }
-)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Assign karigars", style = MaterialTheme.typography.titleLargeStrong) },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (hubKarigars.isEmpty()) {
+                    Text(
+                        "Nobody on the Hub list yet. Add someone below, or open Business Hub " +
+                            "from the account menu.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        "Tap a name to put them on this design.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
+                        verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        hubKarigars.forEach { karigar ->
+                            val on = tempKarigars.any { it.equals(karigar.name, ignoreCase = true) }
+                            FilterChip(
+                                selected = on,
+                                onClick = { toggle(karigar.name) },
+                                label = { Text(karigar.name) },
+                                leadingIcon = if (on) {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null,
+                            )
+                        }
+                    }
+                }
+
+                // Anyone on this design who is no longer on the Hub - removed since, or
+                // typed in before the Hub existed. Shown so they can still be taken off,
+                // rather than being stuck on the design with no control for them.
+                val offHub = tempKarigars.filterNot { name ->
+                    hubKarigars.any { it.name.equals(name, ignoreCase = true) }
+                }
+                if (offHub.isNotEmpty()) {
+                    Text(
+                        "Not on the Hub list",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
+                        verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact),
+                    ) {
+                        offHub.forEach { name ->
+                            FilterChip(
+                                selected = true,
+                                onClick = { toggle(name) },
+                                label = { Text(name) },
+                            )
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = newKarigarInput,
+                    onValueChange = { if (it.length <= 50) newKarigarInput = it },
+                    label = { Text("Add someone new") },
+                    singleLine = true,
+                    shape = AtelierShapes.CornerMedium,
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                val trimmed = newKarigarInput.trim()
+                                if (trimmed.isNotBlank() &&
+                                    tempKarigars.none { it.equals(trimmed, ignoreCase = true) }
+                                ) {
+                                    tempKarigars = tempKarigars + trimmed
+                                    // Joins the Hub too, so the master list stays master.
+                                    onAddToHub(trimmed)
+                                    newKarigarInput = ""
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Add karigar")
+                        }
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (isEditing) onEditKarigarsChange(tempKarigars)
+                else viewModel.updateKarigars(tempKarigars)
+                onDismiss()
+            }) { Text("Done") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /**
