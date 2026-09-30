@@ -1,6 +1,21 @@
 # Chronos Changelog
 
+Every session is recorded here, newest first, stamped with the date and time it
+finished. **Nothing is archived or pruned** - this file is meant to grow.
+
+Each entry is written twice over:
+
+- **In plain English** - what actually changed, for the person running the
+  business. No jargon, no file names.
+- **The numbered sections** - the technical record, for developers: exact files,
+  schema changes, commands run and what was verified.
+
+The entries dated 13-15 August 2026 were reconstructed on 30 September 2026 from
+the commit record; they were not written at the time.
+
 ## [2026-09-30 11:28:16] - Session `28194b79` (Opus 5 - dependency refresh)
+
+> **In plain English:** Updated every outside piece of software the app is built from - the build tools, the screen library, the database engine, the Google sign-in and backup parts - to their newest versions. Two updates were deliberately skipped because "newest" would have broken the app: the latest Google sign-in release has the sign-in feature removed entirely, and the latest Kotlin has no matching database code generator. Nothing about how the app looks or works changed, and your existing designs, prices and orders read back exactly as before.
 
 ### 1. Intent, Roles, & Context
 - **The Problem:** Take the three upgrades the AGP Upgrade Assistant offered (Gradle 9.6.0, AGP 9.4.1, KSP/Compose plugin bumps) and, beyond them, move every dependency in the project to its newest available release without breaking the running app.
@@ -29,7 +44,379 @@
 
 ---
 
+## [2026-08-15 02:00:29] - Session `28194b79` (Opus 5) - commit `f148e73`
+
+> **In plain English:** Added a file that makes the app start up faster by telling the
+> phone in advance which parts of the code to prepare. It only takes effect in the final
+> published version of the app, so you will not notice it in the test builds on your
+> phone.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Cold start did more just-in-time compilation than it needed to.
+- **Specialist Personas Invoked:** Android Performance Engineer, Release Manager.
+- **The Strategy:** Add a `:baselineprofile` module and generate the profile on a Gradle Managed Device rather than the connected phone.
+
+### 2. Surgical Technical Modifications
+- **New Files:** `baselineprofile/build.gradle.kts`, `baselineprofile/src/main/java/com/sc/biap/baselineprofile/BaselineProfileGenerator.kt`, `baselineprofile/.gitignore`, `app/src/release/generated/baselineProfiles/baseline-prof.txt` (14,728 lines)
+- **Modified Files:** `app/build.gradle.kts`, `build.gradle.kts`, `settings.gradle.kts`, `gradle/libs.versions.toml` (benchmark 1.4.1, profileinstaller 1.4.1)
+- **Irreversible Actions:** None.
+- **SAFETY:** `useConnectedDevices = false` is a safety setting, not a preference. Generating on the phone installs a release-signed `com.sc.biap`, which forces an uninstall, which destroys the Keystore key that encrypts the catalogue.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** Release APK confirmed to contain `assets/dexopt/baseline.prof` (14,222 B) and `baseline.profm` (1,616 B); rebuild produced a byte-identical APK; 82/82 unit tests pass.
+- **Resulting App State:** Faster cold start in release builds only. The emulator has no signed-in account, so the recorded journey reaches the sign-in screen - it covers Compose runtime, Material theme, splash and navigation startup, but not catalogue-only code.
+
+---
+
+## [2026-08-15 01:20:33] - Session `28194b79` (Opus 5) - commit `6521d01`
+
+> **In plain English:** Fixed the stutter when scrolling the catalogue. The work of
+> sorting and filtering every design was being done on the very thread that draws the
+> screen, so the screen could not keep up. Dropped frames while scrolling fell from about
+> 13% to between 3% and 7%.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Janky scrolling and screen transitions; measured on device, 35 of 36 dropped frames were "slow UI thread".
+- **Specialist Personas Invoked:** Android Performance Engineer.
+- **The Strategy:** Move the catalogue pipeline off `Dispatchers.Main.immediate`, and stop recomputing per-design values inside the sort comparator.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** `app/src/main/java/com/sc/biap/ui/main/MainScreenViewModel.kt` - added `.flowOn(Dispatchers.Default)`; hoisted `stats()` and `name.lowercase()` into `statsById`/`sortKeyById` maps computed once per emission instead of roughly 220 times per sort.
+- **Payload/Schema Changes:** None.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** `adb shell dumpsys gfxinfo com.sc.biap` before and after, both warm. An earlier cold-vs-warm comparison wrongly showed a 26% regression and was discarded.
+- **Resulting App State:** Scrolling is smooth. A data change now lands one frame later, which is the intended trade.
+
+---
+
+## [2026-08-15 00:46:57] - Session `28194b79` (Opus 5) - commit `6e4db10`
+
+> **In plain English:** Swapped the tool that writes the app's database code for a faster
+> one. Builds got about 11% quicker. Nothing about the app itself changed.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Room was using kapt, which is slower and deprecated in favour of KSP.
+- **Specialist Personas Invoked:** Build Toolchain Engineer.
+- **The Strategy:** Move Room's annotation processing to KSP.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** `gradle/libs.versions.toml`, `app/build.gradle.kts`, `build.gradle.kts`
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** Measured with the build cache **off**: kapt 1m09.6s vs KSP 1m02.1s. An earlier "7.6s" figure was measured with the cache on and was meaningless.
+- **Resulting App State:** Identical behaviour, faster builds.
+
+---
+
+## [2026-08-15 00:17:48] - Session `28194b79` (Opus 5) - commit `4c59f02`
+
+> **In plain English:** Routine build-tooling update. Nothing visible changed.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** AGP and Gradle were a release behind.
+- **The Strategy:** AGP 9.2.1 -> 9.3.1, Gradle 9.4.1 -> 9.5.0, keeping the wrapper checksum-pinned.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** `gradle/libs.versions.toml`, `gradle/wrapper/gradle-wrapper.properties`
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** The wrapper refused the new distribution until its SHA-256 was re-pinned; the official checksum was fetched and the source validated by confirming 9.4.1's fetched checksum matched the existing pin byte-for-byte.
+- **Resulting App State:** Unchanged.
+
+---
+
+## [2026-08-14 23:45:39] - Session `28194b79` (Opus 5) - commit `44692e4`
+
+> **In plain English:** Added Android's predictive back gesture - as you swipe back, you
+> get a preview of the screen you are returning to instead of a blank jump.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** `AndroidManifest.xml` (`enableOnBackInvokedCallback`), navigation layer (`predictivePopTransitionSpec`), `BackHandler(enabled = ...)` call sites.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Resulting App State:** Back gestures animate a preview of the destination.
+
+---
+
+## [2026-08-14 23:22:45] - Session `28194b79` (Opus 5) - commit `faa30c3`
+
+> **In plain English:** Editing a design record now looks clearly different from simply
+> reading it, so you always know which mode you are in.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** `app/src/main/java/com/sc/biap/ui/design/DesignDetailScreen.kt`, `DetailPieces.kt` (`ReadingTopBar` / `EditingTopBar`).
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Resulting App State:** Confirmed working on device by the owner.
+
+---
+
+## [2026-08-14 23:11:36] - Session `28194b79` (Opus 5) - commit `42f01bb`
+
+> **In plain English:** The app was bleeding into the status bar at the top of the screen,
+> making the clock and battery icons hard to read. Fixed, and the icons now follow the
+> app's own light or dark theme.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** `app/src/main/java/com/sc/biap/theme/Theme.kt` - `WindowCompat.getInsetsController` with `isAppearanceLightStatusBars`/`isAppearanceLightNavigationBars`, and `isNavigationBarContrastEnforced = false` on Q+.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Resulting App State:** Edge-to-edge per Android's guideline, with legible system bar icons in both themes.
+
+---
+
+## [2026-08-14 23:05:09] - Session `28194b79` (Opus 5) - commit `de37158`
+
+> **In plain English:** Rebuilt the Add Design form in the same visual language as the
+> rest of the app - numbered sections and cleaner fields.
+
+### 2. Surgical Technical Modifications
+- **New Files:** `app/src/main/java/com/sc/biap/ui/design/AddPieces.kt` (`StepRail`, `FormSection`, `FieldWell`, `WellTextField`, `TonalPill`, `EmptyPhotoSlot`)
+- **Modified Files:** `AddDesignScreen.kt`
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Resulting App State:** Add Design matches the catalogue. An earlier attempt shipped only the Detail screen and was corrected after the owner reported no visible change.
+
+---
+
+## [2026-08-14 22:48:42] - Session `28194b79` (Opus 5) - commit `38f3839`
+
+> **In plain English:** Rebuilt the Design Detail screen so it matches the rest of the
+> app, including the full size-and-stock grid.
+
+### 2. Surgical Technical Modifications
+- **New Files:** `app/src/main/java/com/sc/biap/ui/design/DetailPieces.kt` (`SizeMatrix`, `MatrixRow`, `StatePill`, `UnpricedBanner`, `KarigarChip`, `AttributeGroup` and others)
+- **Modified Files:** `DesignDetailScreen.kt`
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Resulting App State:** Detail screen reads as one design language with the catalogue.
+
+---
+
+## [2026-08-14 22:20:30] - Session `28194b79` (Opus 5) - commit `361ee80`
+
+> **In plain English:** If you take every piece off an order while editing it, the app
+> now treats that as cancelling the order and puts the stock back - rather than leaving an
+> empty order sitting in the list.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** order edit path in `DataRepository` / `DesignDao` and the Orders UI. Chosen by the owner as "Option B" from the alternatives offered.
+- **Payload/Schema Changes:** None.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Resulting App State:** Emptying an order cancels it, with the confirmation step kept.
+
+---
+
+## [2026-08-14 22:16:06] - Session `28194b79` (Opus 5) - commit `bf58fc8`
+
+> **In plain English:** Orders can now be edited after they are placed, not only
+> cancelled. Stock moves by the difference only, and the prices already recorded stay as
+> they were - so editing a June order in August still shows June's prices, even if you
+> have since re-priced that size for a new batch.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** A placed order could only be cancelled outright.
+- **The Strategy:** Delta-based stock movement plus price immutability on recorded lines.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** `data/Order.kt` (`stockDeltas`, `keepRecordedPrices`), `data/room/DesignDao.kt` (`@Transaction editOrder`), `DataRepository.kt`, Orders UI.
+- **Detail:** `editOrder` applies per design+size deltas - decrement guarded by `stock >= qty`, increment otherwise - and the ceiling offered in the UI is `stock + heldOnThisOrder`.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Resulting App State:** Orders are editable; historical prices are preserved across re-pricing and re-stocking.
+
+---
+
+## [2026-08-14 21:47:05] - Session `28194b79` (Opus 5) - commit `89c1ad4`
+
+> **In plain English:** You can now keep up to five photographs per design instead of
+> one, and the detail screen stopped cropping them. This also fixed a serious hidden bug
+> that would have deleted live photographs from your Google Drive backup.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** One photo per design, and the detail view cropped it.
+- **Specialist Personas Invoked:** Android Architect, Database Specialist, Security Auditor.
+- **The Strategy:** Add an `extraImages` list alongside the existing cover column so the cover never moves.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** `data/Design.kt` (`DesignPhoto`, `extraImages`, `MAX_PHOTOS = 5`), `data/room/AppDatabase.kt` (**MIGRATION_7_8**, `ALTER TABLE designs ADD extraImages`), `data/SyncMerger.kt`, `util/DriveImageStore.kt`
+- **New Files:** `ui/design/DesignPhotos.kt` (`DesignPhotoFrame` using `ContentScale.Fit`, never `Crop`)
+- **Payload/Schema Changes:** **Database schema v7 -> v8.** Additive column with a default; cannot lose a design.
+- **Irreversible Actions:** Schema bump to v8 - an older build cannot open a v8 database.
+- **Critical fix:** `DriveImageStore.pruneToLatest` protected only ONE key before filtering; with five photos per design it would have pruned live photographs out of Drive. Now takes `protectKeys: Set<String>` and filters protected names **before** `dropLast(keep)`.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** Unit tests over the merge and pruning logic; `DesignPhotosTest` had to pin `updatedAt = 1_000L` because a real-clock value dwarfed the merge timestamps.
+- **Resulting App State:** Up to five photographs per design, shown uncropped, with Drive retention no longer able to delete live images.
+
+---
+
+## [2026-08-14 10:58:38] - Session `28194b79` (Opus 5) - commit `3bb23bf`
+
+> **In plain English:** Each order card now shows a strip of the design photographs with
+> the ordered sizes written across them. A straight run reads "L - 5XL"; a run with gaps
+> reads "XL, 2XL & 5XL" - so you can take in an order at a glance.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** `data/Order.kt` (`orderedSizeLabel`), Orders UI (`HorizontalMultiBrowseCarousel`).
+- **Detail:** The range form is used only when the ordered sizes are an unbroken run of **that design's own** size ladder. Comparison is by `SizeUtils.getSizeSortWeight`, so "2XL" matches "XXL", while the label echoes the order's own spelling.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** Unit tests over `orderedSizeLabel`. One test expectation was itself wrong (expected `L - XXL` where `L - 2XL` is correct) and was fixed rather than the code.
+- **Resulting App State:** Orders are readable at a glance.
+
+---
+
+## [2026-08-14 10:27:36] - Session `28194b79` (Opus 5) - commit `6f1a2a7`
+
+> **In plain English:** Fixed a bug where the plus and minus buttons disappeared as soon
+> as you picked a size.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** New-order stepper controls.
+- **Root cause:** `Color.copy(alpha = ...)` **replaces** alpha rather than multiplying it. A 12%-alpha container followed by `.copy(alpha = 1f)` produced a solid `onSecondaryContainer` background behind same-coloured icons. Fixed by giving the buttons a fixed `surfaceContainerHighest`/`onSurface` pair and dimming only the icon.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Resulting App State:** Steppers stay visible in every selection state.
+
+---
+
+## [2026-08-14 10:14:31] - Session `28194b79` (Opus 5) - commit `e8b195b`
+
+> **In plain English:** The New Order list now shows each design's photograph, so you can
+> pick by sight instead of reading names.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** `ui/orders/NewOrderScreen.kt`
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Resulting App State:** Designs are chosen visually.
+
+---
+
+## [2026-08-14 09:45:01] - Session `28194b79` (Opus 5) - commit `8a6675b`
+
+> **In plain English:** Split the app into two tabs along the bottom: **Inventory** (what
+> you have) and **Orders** (what has gone out). Placing an order now takes those pieces
+> out of stock automatically, so the two tabs can never disagree.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Stock was recorded but sales were not, so the catalogue drifted from reality.
+- **Specialist Personas Invoked:** Android Architect, Database Specialist, UX Architect.
+- **The Strategy:** A Material 3 `NavigationBar` with two destinations, and a stock-deducting transaction behind order placement. Explicitly scoped by the owner: an orders tab, not an ERP.
+
+### 2. Surgical Technical Modifications
+- **New Files:** `data/Order.kt` (`Order`, `OrderLine`), `ui/orders/` screens
+- **Modified Files:** `data/room/AppDatabase.kt` (**MIGRATION_6_7**, `CREATE TABLE orders` + `deleted_orders`), `data/room/DesignDao.kt` (`@Transaction placeOrder` / `cancelOrder`), `data/SyncMerger.kt` (orders with tombstones), `MainScreen.kt`
+- **Payload/Schema Changes:** **Database schema v6 -> v7.** Two new tables; reads nothing existing, so no design can be lost.
+- **Irreversible Actions:** Schema bump to v7 - an older build cannot open a v7 database.
+- **Detail:** `decrementStock` carries `AND stock >= :qty` and returns the row count, so an oversell fails the transaction rather than writing a negative stock.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** Unit tests over order maths and the stock guard; full suite green.
+- **Resulting App State:** Inventory and Orders as two tabs, with stock moved transactionally on every order.
+
+---
+
+## [2026-08-14 01:21:24] - Session `28194b79` (Opus 5) - commit `6e660da`
+
+> **In plain English:** Added a Light / Dark / Auto theme choice, and the ability to
+> change or reset the passphrase that protects your Google Drive backup.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** Settings screen, theme layer, `PassphraseStore`.
+- **Irreversible Actions:** A passphrase **reset** overwrites the previous Drive backup in place. Once run, the old backup is gone - and it was undecryptable anyway.
+
+### 3. Verification & Validation
+- **Resulting App State:** Theme choice persists; passphrase can be changed or reset. `resetSyncPassphrase` has still never been exercised against a real Drive account.
+
+---
+
+## [2026-08-14 00:27:55] - Session `28194b79` (Opus 5) - commit `0134dfe`
+
+> **In plain English:** Tidy-up only. Menu corner shapes now come from the design system
+> instead of being typed in by hand. Nothing visible changed.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** menu composables - hardcoded corner values replaced with `MenuDefaults`.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Resulting App State:** Visually identical, less hardcoding.
+
+---
+
+## [2026-08-14 00:17:33] - Session `28194b79` (Opus 5) - commit `cd287b0`
+
+> **In plain English:** Added a proper account menu and a Settings screen, including a
+> switch that locks the app behind your fingerprint.
+
+### 2. Surgical Technical Modifications
+- **New Files:** Settings screen, account menu composables.
+- **Modified Files:** `MainScreen.kt`, app-lock wiring (`BiometricPrompt`, `lifecycle-process` to detect the whole app backgrounding rather than one screen).
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Resulting App State:** Account menu, Settings, and an optional biometric app lock.
+
+---
+
+## [2026-08-13 23:23:49] - Session `28194b79` (Opus 5) - commit `e362669`
+
+> **In plain English:** The header used to say it had synced when it had not. It now
+> reports what actually happened.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** catalogue header sync-label logic.
+- **Irreversible Actions:** None.
+
+### 3. Verification & Validation
+- **Resulting App State:** The sync label is truthful.
+
+---
+
+## [2026-08-13 22:24:21] - Session `28194b79` (Opus 5) - commit `01df215`
+
+> **In plain English:** Rebuilt the main screen from a wall of photographs into a working
+> list you can run the business from - every design shows its sizes with stock at a
+> glance, with filters for what needs attention. Designs are now retired (archived)
+> rather than deleted, so nothing is ever really lost.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** The catalogue was a photo grid; it looked good and told you nothing about stock.
+- **Specialist Personas Invoked:** UX Architect, Android Architect, Product Logic Designer.
+- **The Strategy:** Rebuild the main screen as an operations index - dense rows, a size matrix per design, and filters for what needs attention.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:** `ui/main/MainScreen.kt`, `MainScreenViewModel.kt`, `data/Design.kt` (`stats()`, `summarise()`), `data/room/AppDatabase.kt`
+- **Payload/Schema Changes:** Archive columns (**schema v6**).
+- **Irreversible Actions:** Schema bump to v6. Git tag `pre-catalogue-rebuild` marks the commit before this.
+- **Detail:** `fallbackToDestructiveMigration` was **removed** deliberately - it had been silently wiping designs on schema changes.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** Full unit suite; pull-to-refresh and filter behaviour checked on device.
+- **Resulting App State:** The catalogue reports stock, low and out-of-stock states per size, sorted so that what needs attention rises to the top.
+
+---
+
 ## [2026-07-13 00:45:00] - Session `28194b79` (Fable 5 — architecture)
+
+> **In plain English:** Wrote a step-by-step repair manual listing all 30 known faults in the app - including one that could wipe synced data and a bug showing wrong prices - so another assistant could work through them mechanically without guessing. No app code changed today; this was planning only.
 
 ### 1. Intent, Roles, & Context
 - **The Problem:** Produce a zero-ambiguity operation manual enabling Claude Haiku 4.5 to mechanically fix every audited defect (30 tracked bugs incl. sync data-wipe race, plaintext key fallback, paise display bug) and adopt Material 3 Expressive, per owner directives (Kotlin-only, full M3 Expressive, fix all bugs).
@@ -49,6 +436,8 @@
 ---
 
 ## [2026-06-28 18:11:00] - Session `c49cbf06-96c3-4f32-b186-db9a77429051`
+
+> **In plain English:** Fixed how sizes are ordered and how prices are typed in. Sizes now run in proper order (XXS up to 10XL) instead of alphabetically, prices stop resetting themselves while you type, and if you accidentally un-tick a size you now get a warning instead of silently losing that size's stock and price.
 
 ### 1. Intent, Roles, & Context
 
@@ -81,6 +470,8 @@
 
 ## [2026-06-25 19:20:00] - Session `c49cbf06-96c3-4f32-b186-db9a77429051`
 
+> **In plain English:** Put back some missing building blocks that an earlier rollback had stripped out and that were stopping the app from compiling. Installed it on a test device afterwards to confirm the database opened properly.
+
 ### 1. Intent, Roles, & Context
 
 - **The Problem:** Re-add missing dependencies to the Gradle catalog and app dependencies (which were stripped in a previous rollback) to resolve compilation errors, compile/install the APK, and verify Room database transaction behavior on emulator startup.
@@ -111,6 +502,8 @@
 ---
 
 ## [2026-06-24 17:35:00] - Session `c49cbf06-96c3-4f32-b186-db9a77429051`
+
+> **In plain English:** A polish pass on readability and feel: warning text got a stronger colour so it is legible for everyone, side-scrolling rows now fade out at the edges instead of looking chopped off, and screen transitions became smoother on capable phones while staying plain on weaker ones.
 
 ### 1. Intent, Roles, & Context
 
@@ -146,6 +539,8 @@
 ---
 
 ## [2026-06-24 17:20:00] - Session `c49cbf06-96c3-4f32-b186-db9a77429051`
+
+> **In plain English:** Three data-safety fixes. Custom fields you deleted stopped reappearing after a sync, unused design photos now get cleared off the phone automatically once a day, and if you had added designs before signing in, the app now offers to merge them into your account rather than leaving them stranded.
 
 ### 1. Intent, Roles, & Context
 
@@ -184,6 +579,8 @@
 
 ## [2026-06-24 16:30:00] - Session `c49cbf06-96c3-4f32-b186-db9a77429051`
 
+> **In plain English:** Moved the backup key off something guessable and onto a proper random key kept in a hidden folder inside your own Google Drive. Also fixed prices being stored in a way that could drift by a paisa, and stopped the app crashing in a loop if its database file ever got damaged.
+
 ### 1. Intent, Roles, & Context
 
 - **The Problem:** Refactor data modeling (price to Long), resolve decimal text recomposition, ensure secure/portable automated cloud key backup, prevent database race conditions, and fix WAL corruption recovery.
@@ -219,6 +616,8 @@
 
 ## [2026-06-24 15:42:00] - Session `7990abea-c506-4613-97cd-3bf83501ce32`
 
+> **In plain English:** A review of how the app looks and how easy it is to use. Nothing was changed - this produced a written report listing problems to fix, such as buttons too small to tap reliably and some colours being hard to read.
+
 ### 1. Intent, Roles, & Context
 
 - **The Problem:** Conduct a detailed UX and UI audit of the 'biap' Android application codebase, focusing on User Journeys, usability/accessibility (contrast & touch targets), navigation transition animations, and design system (spacing, shapes, themes) compliance.
@@ -244,6 +643,8 @@
 
 ## [2026-06-24 15:45:00] - Session `c9d14fd1-a5fa-49ca-975b-0c7985d7dddc`
 
+> **In plain English:** A review of the app's internal structure and speed. Again nothing was changed - a written report covering how data is stored, how photos load, and what should be modernised next.
+
 ### 1. Intent, Roles, & Context
 
 - **The Problem:** Conduct a detailed software architecture, performance, code health, and database migration audit of the biap Android application.
@@ -268,6 +669,8 @@
 ---
 
 ## [2026-06-22 15:36:10] - Session `e25d8bd5-8f40-4aad-9149-175678e87583`
+
+> **In plain English:** Made the design detail screen use the extra room on a tablet, with the photograph on the left and the details on the right. Also made every button and chip big enough to tap reliably.
 
 ### 1. Intent, Roles, & Context
 
@@ -300,6 +703,8 @@
 ---
 
 ## [2026-06-22 15:31:00] - Session `e25d8bd5-8f40-4aad-9149-175678e87583`
+
+> **In plain English:** Replaced the app's single large data file with a proper database. This is the foundation everything later depends on - fast search, orders, and reliable syncing.
 
 ### 1. Intent, Roles, & Context
 
@@ -338,6 +743,8 @@
 
 ## [2026-06-20 22:56:49] - Session `c49cbf06-96c3-4f32-b186-db9a77429051`
 
+> **In plain English:** Made sure your data survives app updates and reinstalls. Photos are now found by name rather than by a fixed location on the phone, and if the data file is ever damaged the app restores from a backup copy instead of starting empty.
+
 ### 1. Intent, Roles, & Context
 
 - **The Problem:** Guarantee that application data remains 100% intact across app upgrades or re-installs, protecting against file path changes, user profile shifts, or JSON schema parsing corruptions.
@@ -367,6 +774,8 @@
 ---
 
 ## [2026-06-20 20:30:00] - Session `c49cbf06-96c3-4f32-b186-db9a77429051`
+
+> **In plain English:** A batch of safety and reliability fixes: each Google account's data is kept separate, signing out clears the previous account from memory, the camera no longer loses a photo if the phone rotates mid-shot, search now also matches karigar names, and you can pinch to zoom a design photograph.
 
 ### 1. Intent, Roles, & Context
 
@@ -403,6 +812,8 @@
 
 ## [2026-06-20 19:10:00] - Session `c49cbf06-96c3-4f32-b186-db9a77429051`
 
+> **In plain English:** Made the app tell you what is happening. Sync now shows a message when it succeeds or fails, with a Retry button on failure; a failed sign-in says so instead of doing nothing; and an empty catalogue shows an "Add Your First Design" button.
+
 ### 1. Intent, Roles, & Context
 
 - **The Problem:** Finalize UX Indicators for sync, sign-in errors, empty state calls to action, and input enhancements for tailors.
@@ -435,6 +846,8 @@
 
 ## [2026-06-20 18:00:00] - Session `c49cbf06-96c3-4f32-b186-db9a77429051`
 
+> **In plain English:** Another review-only session, producing two reports on usability and visual design. The main findings were that the app gave no warning before losing unsaved work, and that sync failures passed silently.
+
 ### 1. Intent, Roles, & Context
 
 - **The Problem:** Perform a comprehensive UX & UI audit of the 'biap' Android application using specialized subagents based on UX Architect and UI Design Director configurations.
@@ -463,6 +876,8 @@
 ---
 
 ## [2026-06-20 14:35:00] - Session `12121147-8ecb-4c90-baf9-fd623e466407`
+
+> **In plain English:** Stopped the app uploading to Drive automatically after every single change - syncing now happens only when you ask for it. Also fixed deleted designs coming back to life after a sync.
 
 ### 1. Intent, Roles, & Context
 
@@ -500,6 +915,8 @@
 
 ## [2026-06-20 00:20:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
 
+> **In plain English:** Created the brand's logo and a draped-silk opening screen, and added it to the app as an animated splash before the catalogue appears.
+
 ### 1. Intent, Roles, & Context
 
 - **The Problem:** Create high-quality, premium visual identity brand assets (logo, splash screen background) using Imagen and mock them in Google Stitch, then integrate an animated Contemporary Heritage splash screen into the Android application.
@@ -531,6 +948,8 @@
 ---
 
 ## [2026-06-19 22:05:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
+
+> **In plain English:** Added Google sign-in and encrypted backup to Google Drive. Your catalogue is scrambled before it leaves the phone and stored in a private folder that only this app can see.
 
 ### 1. Intent, Roles, & Context
 
@@ -574,6 +993,8 @@
 
 ## [2026-06-19 20:30:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
 
+> **In plain English:** Added karigars to designs - assign your artisans when creating a design, and change who is assigned later.
+
 ### 1. Intent, Roles, & Context
 
 - **The Problem:** Link assigned Karigars (artisans/tailors) to specific design portfolio entries and support dynamic addition and re-assignment later.
@@ -607,6 +1028,8 @@
 
 ## [2026-06-19 20:20:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
 
+> **In plain English:** Made the app lighter on older phones and in battery-saver mode, switched to Android's privacy-safe photo picker, and added limits so unusually long or odd entries cannot crash it.
+
 ### 1. Intent, Roles, & Context
 
 - **The Problem:** Adhere to Android's latest safety and privacy standards, implement adaptive performance profiling for battery-saving and low-end hardware, and enforce strict input validation to avoid system crashes.
@@ -638,6 +1061,8 @@
 
 ## [2026-06-19 20:07:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
 
+> **In plain English:** Replaced the fixed size list (S to XXL) with sizes you control yourself, including custom ones well past 6XL.
+
 ### 1. Intent, Roles, & Context
 
 - **The Problem:** Replace fixed hardcoded size scales (S, M, L, XL, XXL) with a fully dynamic size configuration matrix to prevent UI bloat and support custom sizes (e.g. 3XL all the way to 6XL+).
@@ -667,6 +1092,8 @@
 ---
 
 ## [2026-06-19 19:46:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
+
+> **In plain English:** Added the option to take a photograph with the camera there and then, instead of only picking one already in the gallery.
 
 ### 1. Intent, Roles, & Context
 
@@ -698,6 +1125,8 @@
 
 ## [2026-06-19 19:42:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
 
+> **In plain English:** Added search. Type and the catalogue filters instantly by name, category, size or any custom attribute.
+
 ### 1. Intent, Roles, & Context
 
 - **The Problem:** Implement a robust, dynamic search filtering system matching names, categories, size availabilities, and custom attributes.
@@ -726,6 +1155,8 @@
 ---
 
 ## [2026-06-19 19:37:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
+
+> **In plain English:** A visual upgrade to the main grid: cards press in and spring back when tapped, and the tabs became rounded pills.
 
 ### 1. Intent, Roles, & Context
 
@@ -757,6 +1188,8 @@
 ---
 
 ## [2026-06-19 19:05:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
+
+> **In plain English:** Set the app's visual identity - its colours, fonts and a written design plan - and fixed tabs that were wrapping onto two lines.
 
 ### 1. Intent, Roles, & Context
 
@@ -791,6 +1224,8 @@
 ---
 
 ## [2026-06-19 18:40:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
+
+> **In plain English:** Renamed the project to "biap" and built the core of it: adding a design, tracking stock and price for each size, and the three-piece structure (Top, Bottom, Dupatta).
 
 ### 1. Intent, Roles, & Context
 
@@ -829,6 +1264,8 @@
 ---
 
 ## [2026-06-19 14:10:00] - Session `bcd7f83e-34ea-4da0-b29f-917437ddf6eb`
+
+> **In plain English:** Created the project from nothing - an empty Android app, version control set up, folders organised. The starting point.
 
 ### 1. Intent, Roles, & Context
 
