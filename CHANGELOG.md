@@ -1,5 +1,34 @@
 # Chronos Changelog
 
+## [2026-09-30 11:28:16] - Session `28194b79` (Opus 5 - dependency refresh)
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Take the three upgrades the AGP Upgrade Assistant offered (Gradle 9.6.0, AGP 9.4.1, KSP/Compose plugin bumps) and, beyond them, move every dependency in the project to its newest available release without breaking the running app.
+- **Specialist Personas Invoked:** Build Toolchain Engineer, Principal Security Auditor, Release Manager.
+- **The Strategy:** Resolve versions from the Maven repositories themselves (`maven-metadata.xml` on Google Maven and Maven Central) rather than from search results or the Assistant's bundled table, then verify every high-risk jump against the actual artifact - unzipping AARs to diff their class lists - before changing a line. Upgrade in two stages (toolchain, then libraries) so a failure is attributable. Went past the Assistant where it was conservative (Gradle 9.8.0, not the 9.6.0 minimum) and stopped short of "latest" twice where latest is destructive.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:**
+  - `gradle/wrapper/gradle-wrapper.properties` (Lines 3-4): Gradle 9.5.0 -> 9.8.0 with its official SHA-256 re-pinned
+  - `gradle/libs.versions.toml` (versions + libraries + plugins blocks): AGP 9.3.1 -> 9.4.1, Kotlin 2.1.0 -> 2.3.21, KSP 2.1.0-1.0.29 -> 2.3.12, Compose BOM 2026.03.01 -> 2026.09.00, material3 1.5.0-alpha25 -> alpha29, core-ktx 1.19.1, lifecycle 2.11.0, Room 2.8.5, WorkManager 2.9.0 -> 2.12.0, DataStore 1.2.1, sqlite 2.7.1, Nav3 1.2.0, coroutines 1.11.0, serialization-json 1.6.3 -> 1.11.0, Coil 3.0.4 -> 3.6.3, OkHttp 4.12.0 -> 5.5.0, SQLCipher 4.6.1 -> 4.19.1, Firebase BOM 33.6.0 -> 34.19.0, google-services 4.5.0, benchmark 1.5.0
+- **Deletions:** `material-kolor`, `navigation-compose`, `navigation-runtime-ktx` - declared in the catalog, referenced by no module (the app is on Navigation 3).
+- **Payload/Schema Changes:** None. No database migration, no schema version change, no app source edited.
+- **Irreversible Actions:** None.
+- **Held back on purpose (both verified by unzipping the artifact, not by reading notes):**
+  - `play-services-auth` pinned to the 21.x line (21.2.0 -> 21.6.0). 22.0.0 **deletes** the legacy Google Sign-In API: `GoogleSignIn`, `GoogleSignInClient`, `GoogleSignInApi`, `GoogleSignInResult` and `GoogleSignInStatusCodes` are absent from the 22.0.0 AAR. AuthManager, MainActivity and MainScreen are built on exactly those classes, and the Drive appdata token is obtained through that account. 22.x is a port to Credential Manager + AuthorizationClient, not a bump.
+  - `kotlin` pinned to 2.3.21 although 2.4.20 is released. KSP publishes no 2.4.x at all; its newest is 2.3.12, built on Kotlin 2.3.20. KSP is a compiler plugin, so a newer compiler than it was built against breaks Room codegen.
+- **Compatibility checks performed before moving:**
+  - `security-crypto` 1.1.0-alpha06 -> 1.1.0 seals the database key, so both AARs were unzipped and diffed: the public API is identical (only compiler-generated `$1` inner classes differ) and both resolve the same Tink 1.8.0, so the on-disk EncryptedSharedPreferences format is unchanged and existing installs keep reading.
+  - Firebase BOM 34 removed every `-ktx` artifact; `firebase-auth-ktx`/`firebase-firestore-ktx` renamed to the main modules. No import in the app changes, because the Kotlin API moved into them.
+  - `kotlin-stdlib` resolves to 2.4.10 (pulled by Coil 3.6.3) against a 2.3.21 compiler - inside the supported N+1 metadata window, and it compiles clean.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** `:app:compileDebugKotlin` (toolchain stage, isolated); `:app:assembleDebug :app:testDebugUnitTest` -> **82/82 pass, 0 failures**; `:app:assembleRelease` -> passes R8 minification, resource shrinking and `lintVitalRelease`; `:baselineprofile:assemble` on AGP 9.4.1 + benchmark 1.5.0; `:app:dependencies` and `:app:dependencyInsight` to confirm what actually resolved rather than what was declared.
+- **Resulting App State:** Unchanged behaviour by construction - no app source was edited. OkHttp 5 makes `Response.body` non-null, so six `body?.string()` calls in `GoogleDriveSyncManager` now warn as redundant safe calls; behaviour is identical and the code was deliberately left alone to keep this a pure dependency diff.
+- **Next Sprint Phase:** Install the debug APK and smoke-test sign-in and a Drive sync on the device (the one path unit tests cannot cover), then level `main` with `perf/baseline-profile`, which now carries this refresh.
+
+---
+
 ## [2026-07-13 00:45:00] - Session `28194b79` (Fable 5 — architecture)
 
 ### 1. Intent, Roles, & Context
