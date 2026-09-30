@@ -5,6 +5,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 // #endregion
 
 // #region Constants
@@ -54,17 +55,38 @@ fun syncStamp(
         days <= 0L -> "SYNCED AT ${timeOf(syncedAt, use24Hour, locale)}"
         days == 1L -> "SYNCED YESTERDAY AT ${timeOf(syncedAt, use24Hour, locale)}"
         days < DAYS_BEFORE_SHOWING_A_DATE -> "SYNCED $days DAYS AGO"
-        else -> "SYNCED ON ${SimpleDateFormat("dd/MM/yyyy", locale).format(Date(syncedAt))}"
+        else -> "SYNCED ON ${formatter("dd/MM/yyyy", locale).format(Date(syncedAt))}"
     }
 }
 // #endregion
 
 // #region Helpers
 
+/**
+ * Formatters are reused, because building one is not cheap.
+ *
+ * A SimpleDateFormat parses its pattern and pulls in locale data on construction, and this
+ * runs inside composition of the catalogue header. ThreadLocal rather than a shared cache
+ * because SimpleDateFormat is mutable and not thread-safe; this way each thread gets its
+ * own and no locking is needed.
+ *
+ * THE TIMEZONE IS PART OF THE KEY, and that is not incidental. A SimpleDateFormat captures
+ * the default timezone when it is constructed and keeps it forever. Cached on pattern and
+ * locale alone, a phone carried across a timezone would keep printing the old zone's clock
+ * time while the day bucketing below - which reads the timezone afresh each call - moved to
+ * the new one. The label would disagree with itself.
+ */
+private val formatters = ThreadLocal.withInitial { HashMap<String, SimpleDateFormat>() }
+
+private fun formatter(pattern: String, locale: Locale): SimpleDateFormat =
+    formatters.get()!!.getOrPut("$pattern|$locale|${TimeZone.getDefault().id}") {
+        SimpleDateFormat(pattern, locale)
+    }
+
 private fun timeOf(at: Long, use24Hour: Boolean, locale: Locale): String {
     val pattern = if (use24Hour) "HH:mm" else "h:mm a"
     // Uppercased so "7:45 pm" matches the header's voice; a 24-hour stamp is unaffected.
-    return SimpleDateFormat(pattern, locale).format(Date(at)).uppercase(locale)
+    return formatter(pattern, locale).format(Date(at)).uppercase(locale)
 }
 
 /**

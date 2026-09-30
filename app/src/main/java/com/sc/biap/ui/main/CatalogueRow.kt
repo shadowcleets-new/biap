@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -265,6 +266,16 @@ private fun SizeCell(
         label = "cellRadius",
     )
 
+    val density = LocalDensity.current
+    val dashedOutline = remember(density) {
+        with(density) {
+            Stroke(
+                width = 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())),
+            )
+        }
+    }
+
     Column(
         modifier = modifier
             .size(width = CellWidth, height = CellSize)
@@ -278,12 +289,11 @@ private fun SizeCell(
                         drawRoundRect(
                             color = outlineVariant,
                             cornerRadius = CornerRadius(radius.toPx()),
-                            style = Stroke(
-                                width = 1.5.dp.toPx(),
-                                pathEffect = PathEffect.dashPathEffect(
-                                    floatArrayOf(4.dp.toPx(), 3.dp.toPx())
-                                ),
-                            ),
+                            // Hoisted: this used to build a PathEffect and a Stroke inside
+                            // the draw call, so every out-of-stock cell allocated two objects
+                            // on every frame it was on screen. The dash pattern depends only
+                            // on density, so it never needed to be rebuilt.
+                            style = dashedOutline,
                         )
                     }
                 } else {

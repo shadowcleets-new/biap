@@ -1,6 +1,5 @@
 package com.sc.biap.ui.design
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -42,7 +41,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.rememberAsyncImagePainter
+import coil3.compose.AsyncImage
 import com.sc.biap.data.Design
 import com.sc.biap.data.DesignPhoto
 import com.sc.biap.ui.DesignImageState
@@ -102,8 +101,11 @@ fun DesignPhotoFrame(
     val image = rememberDesignImage(photo.localPath, photo.ref)
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         when (val state = image.state) {
-            is DesignImageState.Ready -> Image(
-                painter = rememberAsyncImagePainter(state.model),
+            // AsyncImage so the decode is bounded by the frame it is drawn in; the
+            // painter form decodes at full camera resolution. See CatalogueList for the
+            // numbers. ContentScale.Fit is preserved, so the framing is unchanged.
+            is DesignImageState.Ready -> AsyncImage(
+                model = state.model,
                 contentDescription = contentDescription,
                 modifier = Modifier.fillMaxSize(),
                 // The whole photograph, never a crop of it. See the file header.

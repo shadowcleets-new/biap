@@ -1,6 +1,5 @@
 package com.sc.biap.ui.main
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -49,7 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.rememberAsyncImagePainter
+import coil3.compose.AsyncImage
 import com.sc.biap.data.CatalogueSummary
 import com.sc.biap.data.Design
 import com.sc.biap.data.SizeInventory
@@ -379,7 +378,9 @@ fun CatalogueList(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "header") { header() }
-        items(designs, key = { it.id }) { design ->
+        // contentType tells LazyColumn every row is the same shape, so a row scrolling in
+        // reuses the slot of one scrolling out rather than being built from nothing.
+        items(designs, key = { it.id }, contentType = { "design" }) { design ->
             CatalogueRow(
                 design = design,
                 onClick = { onOpenDesign(design) },
@@ -399,8 +400,16 @@ fun CatalogueList(
 @Composable
 fun DesignThumbnail(design: Design, size: Dp) {
     when (val imageState = rememberDesignImage(design.imagePath, design.imageRef).state) {
-        is DesignImageState.Ready -> Image(
-            painter = rememberAsyncImagePainter(imageState.model),
+        // AsyncImage, NOT Image(rememberAsyncImagePainter(...)).
+        //
+        // The painter form never learns how large it will be drawn, so Coil decodes at the
+        // file's own resolution: these photographs are 4080x3072, which is 48 MB of bitmap
+        // for a 104x138dp thumbnail - about 170 times more pixels than are shown. That was
+        // the dominant cost while scrolling the catalogue. AsyncImage measures its
+        // constraints first and decodes to that size. Same modifier, same contentScale, so
+        // what is drawn is unchanged.
+        is DesignImageState.Ready -> AsyncImage(
+            model = imageState.model,
             contentDescription = design.name,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,

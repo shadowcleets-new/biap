@@ -32,6 +32,36 @@ object FileUtils {
         }
     }
 
+    /** Stands in for "resolved, and it is not there" - ConcurrentHashMap cannot hold null. */
+    private val MISSING = File("")
+    private val resolvedImages = java.util.concurrent.ConcurrentHashMap<String, File>()
+
+    /**
+     * [resolveImageFile], but the answer is remembered and it only counts a file that exists.
+     *
+     * WHY THIS IS CACHED:
+     *   It is called from composition. Resolving needs File.exists() - a disk stat on the
+     *   very thread that draws frames - and every catalogue row does it. Rows are disposed
+     *   and rebuilt constantly while scrolling, so the same handful of paths were stat-ed
+     *   again and again mid-scroll.
+     *
+     * WHY CACHING CANNOT GO WRONG HERE:
+     *   A given path's answer does not change under us. A photo that is added or replaced is
+     *   written under a NEW name, so it arrives as a new key rather than a stale hit. A
+     *   cached "present" stays true because the only thing that deletes local photographs is
+     *   OrphanImageCleanup, which by definition only removes files no design refers to. And a
+     *   cached "absent" is harmless even if it were wrong: the caller falls through to the
+     *   uploaded copy, which is the correct behaviour anyway and still shows the photograph.
+     */
+    fun resolveExistingImageFile(context: Context, path: String?): File? {
+        if (path.isNullOrBlank()) return null
+        resolvedImages[path]?.let { return if (it === MISSING) null else it }
+        val resolved = resolveImageFile(context, path)?.takeIf { it.exists() }
+        // Bounded: a runaway catalogue should not pin an unbounded map in memory.
+        if (resolvedImages.size < 512) resolvedImages[path] = resolved ?: MISSING
+        return resolved
+    }
+
     /**
      * Copies a Uri content to local app filesDir asynchronously on IO dispatcher,
      * closing the input stream to prevent file descriptor leaks.

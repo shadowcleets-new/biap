@@ -13,6 +13,49 @@ Each entry is written twice over:
 The entries dated 13-15 August 2026 were reconstructed on 30 September 2026 from
 the commit record; they were not written at the time.
 
+## [2026-09-30 13:05:00] - Session `28194b79` (Opus 5) - scroll performance, part 1
+
+> **In plain English:** Scrolling stuttered mainly because every design photo was being
+> opened at full camera size - 4080x3072, twelve megapixels - just to fill a thumbnail the
+> size of a postage stamp. That is about 170 times more picture than the screen shows, and
+> it cost 48 MB of memory per photo. The app now opens each photo at the size it actually
+> displays. Four smaller savings went in alongside it. Nothing about the app looks or
+> behaves differently - that was the condition of this work.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Measured on the Pixel 9 while scrolling the catalogue: 9.25% janky frames, 95th percentile 30ms, 27 missed vsyncs, every janky frame flagged "Slow UI thread" while the GPU idled at 2-3ms. 287 MB of graphics memory for 25 designs.
+- **Specialist Personas Invoked:** Android Performance Engineer, UI Motion Designer.
+- **The Strategy:** Fix only what is provably invisible. Anything needing a visual or behavioural change was left alone and raised for a decision instead.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:**
+  - `ui/main/CatalogueList.kt` - `Image(rememberAsyncImagePainter(..))` -> `AsyncImage`; `contentType` on the list items.
+  - `ui/design/DesignPhotos.kt`, `ui/profile/ProfileScreen.kt` - same painter -> `AsyncImage` switch.
+  - `ui/ProfileAvatar.kt` - cannot be `AsyncImage` (it reads the painter's own state), so an explicit `size()` + `Scale.FILL` on the request instead.
+  - `util/FileUtils.kt` - new `resolveExistingImageFile`, memoised.
+  - `ui/DesignImage.kt` - uses it, so composition no longer stats the disk.
+  - `ui/main/CatalogueRow.kt` - the dashed out-of-stock outline's `Stroke` and `PathEffect` hoisted out of `drawBehind`.
+  - `ui/orders/OrdersList.kt` - the carousel scrim `Brush` hoisted into `remember`.
+  - `ui/main/SyncStamp.kt` - `SimpleDateFormat` instances reused, keyed by pattern, locale **and timezone**.
+  - `ui/design/AddDesignScreen.kt`, `ui/design/DesignDetailScreen.kt` - dead Coil imports removed.
+- **Payload/Schema Changes:** None.
+- **Irreversible Actions:** None.
+- **The central finding:** `rememberAsyncImagePainter` never learns the size it will be drawn at, so Coil decodes at the file's own resolution. The catalogue's photographs are 4080x3072 (12.5 MP, ~3.8 MB JPEGs) shown in a 104x138dp thumbnail - roughly 170x more pixels than are displayed, at 48 MB of bitmap each. `AsyncImage` measures its constraints first. Same modifier, same `ContentScale`, so the drawn result is unchanged.
+- **A bug introduced and caught in the same session:** caching `SimpleDateFormat` by pattern and locale alone would have gone stale across a timezone change - the formatter captures the zone at construction, while the day bucketing reads it fresh, so the label would have contradicted itself. The timezone is part of the cache key.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** `:app:testDebugUnitTest` -> **90/90 pass**. `adb shell dumpsys gfxinfo` used for the baseline above. Compose compiler metrics were generated temporarily and confirmed **136/136 composables skippable, zero unstable UI types** - recomposition was never the problem, so no effort was spent there. The metrics block was reverted.
+- **Resulting App State:** Built and unit-tested. **NOT yet installed or re-measured** - wireless debugging dropped before the install, so the on-device before/after comparison is still outstanding.
+- **Deliberately NOT done, pending the owner's approval, because each changes the UI:**
+  - `BoxWithConstraints` per row (subcomposition): removing it means assuming how many size cells fit rather than measuring, which risks overflow on a narrower phone.
+  - `animateDpAsState` + `MutableInteractionSource` per size cell (~36 live objects): removing them removes the press animation.
+  - `DesignDetailScreen` / `AddDesignScreen` scrolling with `verticalScroll` rather than a lazy list: converting 1,582 and 1,160 lines risks scroll and spacing differences.
+  - The "No designs yet" flash while the database opens on a cold start.
+- **Not a code change:** the phone runs a **debug** build, which is materially slower than release and does not apply the baseline profile. A release build cannot be tested on that phone without an uninstall, which would destroy the catalogue's encryption key.
+- **Next Sprint Phase:** Reinstall, re-measure jank, and diff before/after screenshots to prove the UI is untouched.
+
+---
+
 ## [2026-09-30 12:25:55] - Session `28194b79` (Opus 5) - the "NOT SYNCED YET" bug
 
 > **In plain English:** The header always said "NOT SYNCED YET", even right after a

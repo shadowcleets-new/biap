@@ -74,8 +74,10 @@ fun rememberDesignImage(imagePath: String?, imageRef: String?): DesignImage {
     // starts from a clean slate rather than inheriting a previous failure's attempts.
     val attempts = remember(imagePath, imageRef) { mutableIntStateOf(0) }
 
+    // Cached resolution: this runs during composition for every row, and the disk stat it
+    // needs was landing on the frame-drawing thread every time a row scrolled back in.
     val localFile = remember(imagePath) {
-        FileUtils.resolveImageFile(context, imagePath)?.takeIf { it.exists() }
+        FileUtils.resolveExistingImageFile(context, imagePath)
     }
     val remoteKey = imageRef?.takeIf { it.isNotBlank() }
 

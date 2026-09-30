@@ -20,7 +20,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -48,7 +47,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.rememberAsyncImagePainter
+import coil3.compose.AsyncImage
 import com.sc.biap.data.AccessLevel
 import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.security.AppLock
@@ -205,8 +204,9 @@ private fun ProfileHeader(
                     }
                 }
                 if (model != null) {
-                    Image(
-                        painter = rememberAsyncImagePainter(model),
+                    // AsyncImage bounds the decode to the frame; see CatalogueList.
+                    AsyncImage(
+                        model = model,
                         contentDescription = "Profile photo",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop

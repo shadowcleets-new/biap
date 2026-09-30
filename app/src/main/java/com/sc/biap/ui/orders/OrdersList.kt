@@ -378,15 +378,18 @@ private fun OrderCarousel(order: Order, designs: Map<String, Design>) {
                 )
             }
 
+            // Hoisted out of the modifier: the gradient is constant, so rebuilding it on
+            // every composition of every carousel item was pure allocation.
+            val scrim = remember {
+                Brush.verticalGradient(
+                    0.45f to Color.Transparent,
+                    1f to Color.Black.copy(alpha = 0.65f),
+                )
+            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0.45f to Color.Transparent,
-                            1f to Color.Black.copy(alpha = 0.65f),
-                        )
-                    )
+                    .background(scrim)
             )
 
             Text(
