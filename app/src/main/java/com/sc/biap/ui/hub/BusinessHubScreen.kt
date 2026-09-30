@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -131,6 +132,11 @@ fun BusinessHubScreen(
     val dropZones = remember { mutableStateMapOf<String, Rect>() }
     var hovered by remember { mutableStateOf<String?>(null) }
 
+    // Where the content Box sits in the window, and how big the floating chip turns out to
+    // be. Both are needed to put the chip under the finger; see the offset below.
+    var containerOrigin by remember { mutableStateOf(Offset.Zero) }
+    var previewSize by remember { mutableStateOf(IntSize.Zero) }
+
     var addKarigarOpen by remember { mutableStateOf(false) }
     var addActivityOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<Karigar?>(null) }
@@ -154,7 +160,12 @@ fun BusinessHubScreen(
             )
         },
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .onGloballyPositioned { containerOrigin = it.positionInRoot() },
+        ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
@@ -221,22 +232,34 @@ fun BusinessHubScreen(
                 }
             }
 
-            // The chip that follows the finger. Drawn last so it floats over the board, and
-            // offset by half its own height so it sits under the fingertip rather than
-            // beneath it where the finger would cover it.
+            // The chip that follows the finger. Drawn last, so it floats over the board.
+            //
+            // TWO CORRECTIONS, both of which it got wrong first time and which together put
+            // it hundreds of pixels away from the finger:
+            //
+            //  - dragPosition is in WINDOW coordinates, because that is the space the drop
+            //    zones record their bounds in and the two have to be comparable. This Surface
+            //    is positioned relative to the content Box, which starts below the status bar
+            //    and the top app bar. Subtracting the Box's own origin converts one to the
+            //    other; without it the chip trails the finger by the height of everything
+            //    above it.
+            //  - the chip is centred on its MEASURED size rather than a guessed half-width.
+            //    The guess was right for one name length and wrong for every other, so the
+            //    error changed depending on whose name you picked up.
             dragging?.let { karigar ->
-                val density = LocalDensity.current
                 Surface(
                     shape = RoundedCornerShape(ChipRadius),
                     color = scheme.primary,
                     contentColor = scheme.onPrimary,
                     shadowElevation = 8.dp,
-                    modifier = Modifier.offset {
-                        IntOffset(
-                            (dragPosition.x - with(density) { 48.dp.toPx() }).roundToInt(),
-                            (dragPosition.y - with(density) { 20.dp.toPx() }).roundToInt(),
-                        )
-                    },
+                    modifier = Modifier
+                        .onGloballyPositioned { previewSize = it.size }
+                        .offset {
+                            IntOffset(
+                                (dragPosition.x - containerOrigin.x - previewSize.width / 2f).roundToInt(),
+                                (dragPosition.y - containerOrigin.y - previewSize.height / 2f).roundToInt(),
+                            )
+                        },
                 ) {
                     Text(
                         karigar.name,
