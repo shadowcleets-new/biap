@@ -29,6 +29,7 @@ import com.sc.biap.ui.design.DesignDetailScreen
 import com.sc.biap.ui.orders.NewOrderScreen
 import com.sc.biap.ui.settings.SettingsScreen
 import com.sc.biap.ui.profile.AccessManagementScreen
+import com.sc.biap.ui.hub.BusinessHubScreen
 import com.sc.biap.ui.profile.ProfileScreen
 import com.sc.biap.ui.rememberPerformanceProfile
 
@@ -163,6 +164,12 @@ fun MainNavigation() {
         }
         entry<Settings> {
           SettingsScreen(
+            onBack = { backStack.removeLastOrNull() },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<BusinessHub> {
+          BusinessHubScreen(
             onBack = { backStack.removeLastOrNull() },
             modifier = Modifier.safeDrawingPadding()
           )

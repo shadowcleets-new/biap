@@ -9,6 +9,10 @@ import com.sc.biap.data.BusinessIntelligenceData
 import com.sc.biap.data.Design
 import com.sc.biap.data.DesignPhoto
 import com.sc.biap.data.OrderLine
+import com.sc.biap.data.Batch
+import com.sc.biap.data.allocateOldestFirst
+import com.sc.biap.data.nextBatchNumber
+import com.sc.biap.data.returnNewestFirst
 import com.sc.biap.data.stockDeltas
 import com.sc.biap.data.SizeInventory
 import kotlinx.coroutines.flow.Flow
@@ -166,6 +170,112 @@ interface DesignDao {
     @Query("UPDATE designs SET updatedAt = :now WHERE id = :id")
     suspend fun touchDesign(id: String, now: Long)
 
+    // #region Batches - the ledger beside the stock column
+
+    @Query("SELECT * FROM batches WHERE designId = :designId AND size = :size ORDER BY number")
+    suspend fun batchesFor(designId: String, size: String): List<BatchEntity>
+
+    @Query("SELECT * FROM batches ORDER BY designId, size, number")
+    suspend fun allBatchesOnce(): List<BatchEntity>
+
+    @Query("SELECT * FROM batches ORDER BY designId, size, number")
+    fun allBatchesFlow(): Flow<List<BatchEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBatch(batch: BatchEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBatches(batches: List<BatchEntity>)
+
+    @Query("UPDATE batches SET remaining = remaining - :qty, updatedAt = :now WHERE id = :id")
+    suspend fun takeFromBatch(id: String, qty: Int, now: Long)
+
+    @Query("UPDATE batches SET remaining = remaining + :qty, updatedAt = :now WHERE id = :id")
+    suspend fun returnToBatch(id: String, qty: Int, now: Long)
+
+    @Query("UPDATE batches SET remaining = 0, updatedAt = :now WHERE designId = :designId AND size = :size")
+    suspend fun emptyBatchesForSize(designId: String, size: String, now: Long)
+
+    @Query("UPDATE batches SET remaining = 0, updatedAt = :now WHERE designId = :designId")
+    suspend fun emptyBatchesForDesign(designId: String, now: Long)
+
+    @Query("UPDATE size_inventories SET stock = 0 WHERE designId = :designId AND size = :size")
+    suspend fun zeroStockForSize(designId: String, size: String)
+
+    @Query("UPDATE size_inventories SET stock = 0 WHERE designId = :designId")
+    suspend fun zeroStockForDesign(designId: String)
+
+    @Query("UPDATE size_inventories SET stock = stock + :qty WHERE designId = :designId AND size = :size")
+    suspend fun addStock(designId: String, size: String, qty: Int)
+
+    /**
+     * Move pieces out of the ledger to match a deduction already made on the stock column.
+     *
+     * Separate from [decrementStock] rather than folded into it, because the two are not
+     * always both needed: a design that predates batches has stock and no ledger, and must
+     * keep selling. An empty ledger therefore means "unbatched" and is left alone rather
+     * than being treated as "nothing left" - which would refuse every order on every design
+     * that existed before the batch feature.
+     */
+    @Transaction
+    suspend fun takeFromLedger(designId: String, size: String, qty: Int, now: Long) {
+        val ledger = batchesFor(designId, size)
+        if (ledger.isEmpty()) return
+        val moves = allocateOldestFirst(ledger.map { it.toDomain() }, qty)
+        for (move in moves) takeFromBatch(move.batchId, move.quantity, now)
+    }
+
+    /** The mirror of [takeFromLedger], for a cancellation or a reduced order. */
+    @Transaction
+    suspend fun returnToLedger(designId: String, size: String, qty: Int, now: Long) {
+        val ledger = batchesFor(designId, size)
+        if (ledger.isEmpty()) return
+        val moves = returnNewestFirst(ledger.map { it.toDomain() }, qty)
+        for (move in moves) returnToBatch(move.batchId, move.quantity, now)
+    }
+
+    /**
+     * Add a batch and put its pieces into stock, in one transaction.
+     *
+     * The number is the caller's: [nextBatchNumber] suggests one, and the owner may type
+     * over it. Both halves move together so the ledger cannot describe pieces the stock
+     * column does not have.
+     */
+    @Transaction
+    suspend fun addBatch(batch: BatchEntity) {
+        insertBatch(batch)
+        addStock(batch.designId, batch.size, batch.remaining)
+        touchDesign(batch.designId, batch.updatedAt)
+    }
+
+    /** Suggests the next number for a size, so the UI and the DAO agree on one rule. */
+    suspend fun suggestBatchNumber(designId: String, size: String): Int =
+        nextBatchNumber(batchesFor(designId, size).map { it.toDomain() })
+
+    /**
+     * Reset one size to zero, keeping everything else about it.
+     *
+     * The price stays on the size, the karigars and details stay on the design, and every
+     * batch keeps its row and its quantity - only `remaining` goes to 0. What was made is
+     * history; what is left is a number.
+     */
+    @Transaction
+    suspend fun resetSizeStock(designId: String, size: String, now: Long) {
+        zeroStockForSize(designId, size)
+        emptyBatchesForSize(designId, size, now)
+        touchDesign(designId, now)
+    }
+
+    /** The same, for every size of a design at once. */
+    @Transaction
+    suspend fun resetDesignStock(designId: String, now: Long) {
+        zeroStockForDesign(designId)
+        emptyBatchesForDesign(designId, now)
+        touchDesign(designId, now)
+    }
+
+    // #endregion
+
     /**
      * Record an order and take its pieces out of stock.
      *
@@ -179,6 +289,7 @@ interface DesignDao {
             require(changed == 1) {
                 "Not enough stock left for size ${line.size}"
             }
+            takeFromLedger(line.designId, line.size, line.quantity, order.createdAt)
             touchDesign(line.designId, order.createdAt)
         }
         insertOrder(order)
@@ -210,8 +321,10 @@ interface DesignDao {
             if (delta > 0) {
                 val changed = decrementStock(designId, size, delta)
                 require(changed == 1) { "Not enough stock left for size $size" }
+                takeFromLedger(designId, size, delta, now)
             } else {
                 incrementStock(designId, size, -delta)
+                returnToLedger(designId, size, -delta, now)
             }
             touchDesign(designId, now)
         }
@@ -226,11 +339,74 @@ interface DesignDao {
         val order = getOrderById(id) ?: return
         for (line in order.lines) {
             incrementStock(line.designId, line.size, line.quantity)
+            returnToLedger(line.designId, line.size, line.quantity, deletedAt)
             touchDesign(line.designId, deletedAt)
         }
         deleteOrder(id)
         insertDeletedOrder(DeletedOrderEntity(id, deletedAt))
     }
+
+    // #region Business Hub - karigars and the activities they do
+
+    @Query("SELECT * FROM karigars ORDER BY name COLLATE NOCASE")
+    fun karigarsFlow(): Flow<List<KarigarEntity>>
+
+    @Query("SELECT * FROM karigars ORDER BY name COLLATE NOCASE")
+    suspend fun karigarsOnce(): List<KarigarEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertKarigar(karigar: KarigarEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertKarigars(karigars: List<KarigarEntity>)
+
+    @Query("DELETE FROM karigars WHERE id = :id")
+    suspend fun deleteKarigarRow(id: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDeletedKarigar(row: DeletedKarigarEntity)
+
+    @Query("SELECT * FROM deleted_karigars")
+    suspend fun deletedKarigarsOnce(): List<DeletedKarigarEntity>
+
+    @Query("DELETE FROM deleted_karigars WHERE karigarId = :id")
+    suspend fun clearDeletedKarigar(id: String)
+
+    /** Removing a karigar leaves a tombstone, or the next sync brings them straight back. */
+    @Transaction
+    suspend fun deleteKarigar(id: String, now: Long) {
+        deleteKarigarRow(id)
+        insertDeletedKarigar(DeletedKarigarEntity(id, now))
+    }
+
+    @Query("SELECT * FROM activities ORDER BY name COLLATE NOCASE")
+    fun activitiesFlow(): Flow<List<ActivityEntity>>
+
+    @Query("SELECT * FROM activities")
+    suspend fun activitiesOnce(): List<ActivityEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertActivity(activity: ActivityEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertActivities(activities: List<ActivityEntity>)
+
+    @Query("DELETE FROM activities WHERE name = :name")
+    suspend fun deleteActivityRow(name: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDeletedActivity(row: DeletedActivityEntity)
+
+    @Query("SELECT * FROM deleted_activities")
+    suspend fun deletedActivitiesOnce(): List<DeletedActivityEntity>
+
+    @Transaction
+    suspend fun deleteActivity(name: String, now: Long) {
+        deleteActivityRow(name)
+        insertDeletedActivity(DeletedActivityEntity(name, now))
+    }
+
+    // #endregion
 
     // Global custom fields
     // --- Profile (exactly one row; see UserProfileEntity) ---

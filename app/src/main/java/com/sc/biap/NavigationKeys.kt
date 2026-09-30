@@ -27,3 +27,6 @@ import kotlinx.serialization.Serializable
 @Serializable data object Profile : NavKey
 @Serializable data object AccessManagement : NavKey
 @Serializable data object Settings : NavKey
+
+/** The workshop side of the business: who works here and what each of them does. */
+@Serializable data object BusinessHub : NavKey

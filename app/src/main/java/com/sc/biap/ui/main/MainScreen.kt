@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
 import com.sc.biap.AddDesign
+import com.sc.biap.BusinessHub
 import com.sc.biap.DesignDetail
 import com.sc.biap.AccessManagement
 import com.sc.biap.NewOrder
@@ -531,6 +532,13 @@ fun MainScreen(
                                     onClick = {
                                         showMenu = false
                                         onItemClick(Profile)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Business Hub") },
+                                    onClick = {
+                                        showMenu = false
+                                        onItemClick(BusinessHub)
                                     }
                                 )
                                 if (myAccessLevel.canManageAccess) {

@@ -6,8 +6,10 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
+import com.sc.biap.data.Batch
 import com.sc.biap.data.Design
 import com.sc.biap.data.DesignPhoto
+import com.sc.biap.data.Karigar
 import com.sc.biap.data.Order
 import com.sc.biap.data.OrderLine
 import com.sc.biap.data.SizeInventory
@@ -105,6 +107,70 @@ data class OrderEntity(
     val createdAt: Long,
     val lines: List<OrderLine>,
     val updatedAt: Long
+)
+
+/**
+ * Added in schema v9 - see AppDatabase.MIGRATION_8_9.
+ *
+ * Cascades with its design, like size_inventories: a batch of a design that no longer
+ * exists is not history, it is a dangling row. There is deliberately NO tombstone table,
+ * because nothing deletes a batch on its own - emptying a size sets `remaining` to 0 and
+ * keeps the row, so there is no deletion for a sync to undo.
+ */
+@Entity(
+    tableName = "batches",
+    foreignKeys = [
+        ForeignKey(
+            entity = DesignEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["designId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["designId", "size"]),
+        Index(value = ["designId", "size", "number"], unique = true)
+    ]
+)
+data class BatchEntity(
+    @PrimaryKey val id: String,
+    val designId: String,
+    val size: String,
+    val number: Int,
+    val quantity: Int,
+    val remaining: Int,
+    val price: Long,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val note: String = ""
+)
+
+/** Added in schema v9. The workshop's people; `activities` is a JSON list. */
+@Entity(tableName = "karigars")
+data class KarigarEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val activities: List<String> = emptyList(),
+    val updatedAt: Long = 0L
+)
+
+@Entity(tableName = "deleted_karigars")
+data class DeletedKarigarEntity(
+    @PrimaryKey val karigarId: String,
+    val deletedAt: Long
+)
+
+/** Added in schema v9. Seeded with [com.sc.biap.data.Activities.DEFAULTS], then editable. */
+@Entity(tableName = "activities")
+data class ActivityEntity(
+    @PrimaryKey val name: String,
+    val updatedAt: Long = 0L
+)
+
+@Entity(tableName = "deleted_activities")
+data class DeletedActivityEntity(
+    @PrimaryKey val name: String,
+    val deletedAt: Long
 )
 
 @Entity(tableName = "deleted_orders")
@@ -210,3 +276,43 @@ fun SizeInventory.toEntity(designId: String): SizeInventoryEntity {
         price = price
     )
 }
+
+fun BatchEntity.toDomain(): Batch = Batch(
+    id = id,
+    designId = designId,
+    size = size,
+    number = number,
+    quantity = quantity,
+    remaining = remaining,
+    price = price,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    note = note,
+)
+
+fun Batch.toEntity(): BatchEntity = BatchEntity(
+    id = id,
+    designId = designId,
+    size = size,
+    number = number,
+    quantity = quantity,
+    remaining = remaining,
+    price = price,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    note = note,
+)
+
+fun KarigarEntity.toDomain(): Karigar = Karigar(
+    id = id,
+    name = name,
+    activities = activities,
+    updatedAt = updatedAt,
+)
+
+fun Karigar.toEntity(): KarigarEntity = KarigarEntity(
+    id = id,
+    name = name,
+    activities = activities,
+    updatedAt = updatedAt,
+)

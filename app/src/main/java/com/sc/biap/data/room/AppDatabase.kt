@@ -15,9 +15,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DeletedCustomFieldEntity::class,
         UserProfileEntity::class,
         OrderEntity::class,
-        DeletedOrderEntity::class
+        DeletedOrderEntity::class,
+        BatchEntity::class,
+        KarigarEntity::class,
+        DeletedKarigarEntity::class,
+        ActivityEntity::class,
+        DeletedActivityEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -152,8 +157,88 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v8 -> v9: batches, and the workshop's people.
+         *
+         * Five new tables and not one existing column touched, so a failure here cannot cost
+         * a design, a price or a piece of stock - the same shape as the orders and profile
+         * migrations before it.
+         *
+         * WHAT IS NOT HERE, DELIBERATELY: no backfill. Designs that already hold stock get no
+         * batch rows, so their sizes read as "stock, but no batch history" rather than being
+         * handed an invented batch 1 dated today that nobody ever made. The first real refill
+         * starts the history honestly. DataRepository treats an empty ledger for a size as
+         * "unbatched" and leaves the stock column alone, which is why the catalogue and the
+         * order path keep working untouched for every design that existed before today.
+         *
+         * `batches` cascades from designs and has no tombstone table: nothing deletes a batch
+         * on its own, because emptying a size sets `remaining` to 0 and keeps the row.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS batches (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        designId TEXT NOT NULL,
+                        size TEXT NOT NULL,
+                        number INTEGER NOT NULL,
+                        quantity INTEGER NOT NULL,
+                        remaining INTEGER NOT NULL,
+                        price INTEGER NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL,
+                        note TEXT NOT NULL DEFAULT '',
+                        FOREIGN KEY(designId) REFERENCES designs(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_batches_designId_size ON batches (designId, size)")
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_batches_designId_size_number " +
+                        "ON batches (designId, size, number)"
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS karigars (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        activities TEXT NOT NULL DEFAULT '[]',
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS deleted_karigars (
+                        karigarId TEXT NOT NULL PRIMARY KEY,
+                        deletedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS activities (
+                        name TEXT NOT NULL PRIMARY KEY,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS deleted_activities (
+                        name TEXT NOT NULL PRIMARY KEY,
+                        deletedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         /** Every migration the app knows about. Pass to `addMigrations(*ALL_MIGRATIONS)`. */
-        val ALL_MIGRATIONS: Array<Migration> =
-            arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+        val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+            MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
+            MIGRATION_8_9
+        )
     }
 }

@@ -145,5 +145,17 @@ data class BusinessIntelligenceData(
      * The owner's own details. Null on payloads written before profiles existed, which is
      * why it is defaulted rather than required - an older device's upload must still parse.
      */
-    val profile: UserProfile? = null
+    val profile: UserProfile? = null,
+    /**
+     * Batches, the ledger behind each size's stock. Defaulted like every field added after
+     * the first release: a payload from an older build carries no batches at all and must
+     * still parse rather than failing the whole sync.
+     */
+    val batches: List<Batch> = emptyList(),
+    /** The workshop's people, and the activities each is assigned to. */
+    val karigars: List<Karigar> = emptyList(),
+    val deletedKarigars: Map<String, Long> = emptyMap(),
+    /** Activity names, with when each was last touched, so they merge like custom fields. */
+    val activities: Map<String, Long> = emptyMap(),
+    val deletedActivities: Map<String, Long> = emptyMap(),
 )

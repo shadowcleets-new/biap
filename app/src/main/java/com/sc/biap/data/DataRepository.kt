@@ -128,6 +128,38 @@ interface DataRepository {
      * happened would leave the order sitting there having apparently been removed.
      */
     suspend fun cancelOrder(orderId: String): String?
+
+    // --- Batches ---
+
+    /** The number to put in the field when adding a batch. The owner may type over it. */
+    suspend fun suggestBatchNumber(designId: String, size: String): Int
+
+    /** Adds a batch and puts its pieces into stock. Null on success, a message on failure. */
+    suspend fun addBatch(
+        designId: String,
+        size: String,
+        number: Int,
+        quantity: Int,
+        price: Long,
+        note: String = "",
+    ): String?
+
+    /** Empties one size: stock to 0, every batch remainder to 0, everything else kept. */
+    suspend fun resetSizeStock(designId: String, size: String): String?
+
+    /** The same for every size of a design. */
+    suspend fun resetDesignStock(designId: String): String?
+
+    // --- Business Hub ---
+
+    suspend fun addKarigar(name: String): String?
+    suspend fun renameKarigar(id: String, name: String): String?
+    suspend fun deleteKarigar(id: String)
+
+    /** Sets the whole activity list for a karigar - what a drop onto an activity writes. */
+    suspend fun setKarigarActivities(id: String, activities: List<String>)
+    suspend fun addActivity(name: String): String?
+    suspend fun deleteActivity(name: String)
     fun addGlobalCustomField(field: String)
     fun removeGlobalCustomField(field: String)
 
@@ -302,6 +334,36 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                         }
                     }
 
+                    // Seed the Business Hub the first time this database is opened.
+                    //
+                    // Guarded on BOTH tables being empty AND no tombstones, rather than just
+                    // "no rows". Without the tombstone check, deleting every activity would
+                    // look identical to a fresh database and the app would helpfully put
+                    // them all back on the next launch - the deletion would never stick.
+                    repositoryScope.launch {
+                        try {
+                            if (dao.activitiesOnce().isEmpty() && dao.deletedActivitiesOnce().isEmpty()) {
+                                val now = System.currentTimeMillis()
+                                dao.upsertActivities(Activities.DEFAULTS.map { ActivityEntity(it, now) })
+                            }
+                            if (dao.karigarsOnce().isEmpty() && dao.deletedKarigarsOnce().isEmpty()) {
+                                val now = System.currentTimeMillis()
+                                dao.upsertKarigars(
+                                    DEFAULT_KARIGARS.map {
+                                        KarigarEntity(
+                                            id = java.util.UUID.randomUUID().toString(),
+                                            name = it,
+                                            activities = emptyList(),
+                                            updatedAt = now,
+                                        )
+                                    }
+                                )
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+
                     // Retry any photo that exists on this device but never reached Storage.
                     repositoryScope.launch { backfillPendingImageUploads(dao) }
 
@@ -322,6 +384,12 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                             dao.getAllDeletedOrdersFlow()
                         ) { orders, deletedOrders -> orders to deletedOrders }
 
+                        val hubFlow = combine(
+                            dao.allBatchesFlow(),
+                            dao.karigarsFlow(),
+                            dao.activitiesFlow()
+                        ) { batches, karigars, activities -> Triple(batches, karigars, activities) }
+
                         combine(
                             dao.getAllDesignsFlow(),
                             dao.getAllGlobalCustomFieldsFlow(),
@@ -340,9 +408,22 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                                 orders = ordersList.map { it.toDomain() },
                                 deletedOrders = deletedOrdersList.associate { it.orderId to it.deletedAt }
                             )
-                        }.collect { merged ->
-                            _biData.value = merged
                         }
+                            // The Hub and the batch ledger ride in on a second combine for
+                            // the same reason the orders pair do: five sources is the typed
+                            // limit, and an untyped vararg here would turn four different
+                            // row types into List<Any?> at the exact point they are mapped.
+                            .combine(hubFlow) { data, hub ->
+                                val (batchRows, karigarRows, activityRows) = hub
+                                data.copy(
+                                    batches = batchRows.map { it.toDomain() },
+                                    karigars = karigarRows.map { it.toDomain() },
+                                    activities = activityRows.associate { it.name to it.updatedAt },
+                                )
+                            }
+                            .collect { merged ->
+                                _biData.value = merged
+                            }
                     }
                 }
             }
@@ -1215,6 +1296,159 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             "Could not cancel the order."
         }
     }
+
+    // #region Batches
+
+    override suspend fun suggestBatchNumber(designId: String, size: String): Int =
+        withContext(Dispatchers.IO) {
+            val dao = awaitDao() ?: return@withContext 1
+            dao.suggestBatchNumber(designId, size)
+        }
+
+    override suspend fun addBatch(
+        designId: String,
+        size: String,
+        number: Int,
+        quantity: Int,
+        price: Long,
+        note: String,
+    ): String? = withContext(Dispatchers.IO) {
+        if (quantity <= 0) return@withContext "A batch needs at least one piece."
+        if (number <= 0) return@withContext "A batch number has to be 1 or more."
+        val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+        try {
+            val design = dao.getDesignById(designId)
+                ?: return@withContext "That design no longer exists."
+            if (design.inventories.none { it.size == size }) {
+                return@withContext "Size " + size + " is no longer on " + design.design.name + "."
+            }
+            val existing = dao.batchesFor(designId, size).map { it.toDomain() }
+            if (!isBatchNumberFree(existing, number)) {
+                return@withContext "Batch " + number + " already exists for size " + size + "."
+            }
+            val now = System.currentTimeMillis()
+            dao.addBatch(
+                Batch(
+                    id = java.util.UUID.randomUUID().toString(),
+                    designId = designId,
+                    size = size,
+                    number = number,
+                    quantity = quantity,
+                    remaining = quantity,
+                    price = price,
+                    createdAt = now,
+                    updatedAt = now,
+                    note = note.trim(),
+                ).toEntity()
+            )
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            e.message ?: "Could not add that batch."
+        }
+    }
+
+    override suspend fun resetSizeStock(designId: String, size: String): String? =
+        withContext(Dispatchers.IO) {
+            val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+            try {
+                dao.resetSizeStock(designId, size, System.currentTimeMillis())
+                null
+            } catch (e: Exception) {
+                e.printStackTrace()
+                e.message ?: "Could not reset that size."
+            }
+        }
+
+    override suspend fun resetDesignStock(designId: String): String? = withContext(Dispatchers.IO) {
+        val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+        try {
+            dao.resetDesignStock(designId, System.currentTimeMillis())
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            e.message ?: "Could not reset that design."
+        }
+    }
+
+    // #endregion
+
+    // #region Business Hub
+
+    override suspend fun addKarigar(name: String): String? = withContext(Dispatchers.IO) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return@withContext "A name cannot be blank."
+        val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+        // Case-insensitive, because two rows differing only in capitals are one person to
+        // the workshop and would silently split their work between them.
+        if (dao.karigarsOnce().map { it.toDomain() }.any { it.key == clean.lowercase() }) {
+            return@withContext clean + " is already on the list."
+        }
+        dao.upsertKarigar(
+            KarigarEntity(
+                java.util.UUID.randomUUID().toString(),
+                clean,
+                emptyList(),
+                System.currentTimeMillis(),
+            )
+        )
+        null
+    }
+
+    override suspend fun renameKarigar(id: String, name: String): String? = withContext(Dispatchers.IO) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return@withContext "A name cannot be blank."
+        val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+        val all = dao.karigarsOnce().map { it.toDomain() }
+        if (all.any { it.id != id && it.key == clean.lowercase() }) {
+            return@withContext clean + " is already on the list."
+        }
+        val current = all.firstOrNull { it.id == id }
+            ?: return@withContext "That karigar is no longer on the list."
+        dao.upsertKarigar(current.copy(name = clean, updatedAt = System.currentTimeMillis()).toEntity())
+        null
+    }
+
+    override suspend fun deleteKarigar(id: String): Unit = withContext(Dispatchers.IO) {
+        val dao = awaitDao() ?: return@withContext
+        dao.deleteKarigar(id, System.currentTimeMillis())
+    }
+
+    override suspend fun setKarigarActivities(id: String, activities: List<String>): Unit =
+        withContext(Dispatchers.IO) {
+            val dao = awaitDao() ?: return@withContext
+            val current = dao.karigarsOnce().firstOrNull { it.id == id } ?: return@withContext
+            dao.upsertKarigar(
+                current.copy(
+                    activities = activities.distinct(),
+                    updatedAt = System.currentTimeMillis(),
+                )
+            )
+        }
+
+    override suspend fun addActivity(name: String): String? = withContext(Dispatchers.IO) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return@withContext "An activity needs a name."
+        val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+        if (dao.activitiesOnce().any { it.name.equals(clean, ignoreCase = true) }) {
+            return@withContext clean + " is already an activity."
+        }
+        dao.upsertActivity(ActivityEntity(clean, System.currentTimeMillis()))
+        null
+    }
+
+    override suspend fun deleteActivity(name: String): Unit = withContext(Dispatchers.IO) {
+        val dao = awaitDao() ?: return@withContext
+        val now = System.currentTimeMillis()
+        dao.deleteActivity(name, now)
+        // Take it off everyone who was doing it. Left behind, they keep an assignment to
+        // something that no longer exists and the auto-assignment keeps firing on it.
+        dao.karigarsOnce()
+            .filter { name in it.activities }
+            .forEach { dao.upsertKarigar(it.copy(activities = it.activities - name, updatedAt = now)) }
+    }
+
+    // #endregion
 
     override fun setDesignArchived(designId: String, archived: Boolean) {
         repositoryScope.launch {

@@ -123,6 +123,63 @@ object SyncMerger {
             order == null || deletedAt >= order.updatedAt
         }
 
+        // 6. Merge batches (LWW on updatedAt), keyed by id and dropped with their design.
+        //
+        // No tombstone table, because nothing deletes a batch on its own: emptying a size
+        // sets `remaining` to 0 and keeps the row. A batch therefore only disappears when
+        // its design does, which is why it is filtered against the design tombstones rather
+        // than against any of its own.
+        //
+        // LWW on the whole row is right here in a way it is not for a design: a batch has no
+        // independently-edited parts, and `remaining` moving is the only thing that normally
+        // changes. The cost is that two devices selling from the same batch while offline
+        // resolve to one of the two counts rather than the sum of both deductions - the same
+        // limitation stock has always had, and the reason the app syncs rather than merging
+        // arithmetic.
+        val mergedBatches = (localData.batches + remoteData.batches)
+            .groupBy { it.id }
+            .mapValues { (_, rows) -> rows.maxByOrNull { it.updatedAt }!! }
+            .values
+            .filter { batch ->
+                val deletedAt = finalDeleted[batch.designId] ?: -1L
+                deletedAt < 0L || batch.updatedAt > deletedAt
+            }
+
+        // 7. Merge karigars (LWW with tombstones), exactly as designs are merged.
+        val mergedDeletedKarigars =
+            (localData.deletedKarigars.keys + remoteData.deletedKarigars.keys).associateWith { id ->
+                maxOf(localData.deletedKarigars[id] ?: 0L, remoteData.deletedKarigars[id] ?: 0L)
+            }
+        val allKarigars = (localData.karigars + remoteData.karigars)
+            .groupBy { it.id }
+            .mapValues { (_, rows) -> rows.maxByOrNull { it.updatedAt }!! }
+        val mergedKarigars = allKarigars.values.filter { karigar ->
+            val deletedAt = mergedDeletedKarigars[karigar.id] ?: -1L
+            karigar.updatedAt > deletedAt
+        }
+        val finalDeletedKarigars = mergedDeletedKarigars.filter { (id, deletedAt) ->
+            val karigar = allKarigars[id]
+            karigar == null || deletedAt >= karigar.updatedAt
+        }
+
+        // 8. Merge activities, which are names with a timestamp - the same shape as the
+        // global custom fields above, and merged the same way.
+        val mergedDeletedActivities =
+            (localData.deletedActivities.keys + remoteData.deletedActivities.keys).associateWith { name ->
+                maxOf(localData.deletedActivities[name] ?: 0L, remoteData.deletedActivities[name] ?: 0L)
+            }
+        val allActivities = (localData.activities.keys + remoteData.activities.keys).associateWith { name ->
+            maxOf(localData.activities[name] ?: 0L, remoteData.activities[name] ?: 0L)
+        }
+        val mergedActivities = allActivities.filter { (name, updatedAt) ->
+            val deletedAt = mergedDeletedActivities[name] ?: -1L
+            updatedAt > deletedAt
+        }
+        val finalDeletedActivities = mergedDeletedActivities.filter { (name, deletedAt) ->
+            val updatedAt = allActivities[name]
+            updatedAt == null || deletedAt >= updatedAt
+        }
+
         return BusinessIntelligenceData(
             designs = mergedDesigns,
             globalCustomFields = mergedFields.keys,
@@ -132,7 +189,12 @@ object SyncMerger {
             deletedCustomFields = finalDeletedFields,
             orders = mergedOrders,
             deletedOrders = finalDeletedOrders,
-            profile = mergedProfile
+            profile = mergedProfile,
+            batches = mergedBatches,
+            karigars = mergedKarigars,
+            deletedKarigars = finalDeletedKarigars,
+            activities = mergedActivities,
+            deletedActivities = finalDeletedActivities,
         )
     }
 }
