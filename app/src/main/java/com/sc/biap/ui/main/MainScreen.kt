@@ -465,6 +465,10 @@ fun MainScreen(
                                         showMenu = false
                                         viewModel.syncWithGoogleDrive()
                                     },
+                                    onBusinessHub = {
+                                        showMenu = false
+                                        onItemClick(BusinessHub)
+                                    },
                                     onProfile = {
                                         showMenu = false
                                         onItemClick(Profile)

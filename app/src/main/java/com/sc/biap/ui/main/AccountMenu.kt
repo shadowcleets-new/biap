@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Handyman
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
@@ -77,6 +78,7 @@ fun AccountMenu(
     canManageAccess: Boolean,
     onSync: () -> Unit,
     onProfile: () -> Unit,
+    onBusinessHub: () -> Unit,
     onTeamAccess: () -> Unit,
     onSettings: () -> Unit,
     onSignOut: () -> Unit,
@@ -130,6 +132,7 @@ fun AccountMenu(
                     )
                 )
                 add(MenuEntry(Icons.Default.Person, "Profile", onClick = onProfile))
+                add(MenuEntry(Icons.Default.Handyman, "Business Hub", onClick = onBusinessHub))
                 if (canManageAccess) {
                     add(MenuEntry(Icons.Default.Groups, "Team Access", onClick = onTeamAccess))
                 }
