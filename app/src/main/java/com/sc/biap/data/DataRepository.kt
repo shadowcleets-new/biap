@@ -158,6 +158,12 @@ interface DataRepository {
 
     /** Sets the whole activity list for a karigar - what a drop onto an activity writes. */
     suspend fun setKarigarActivities(id: String, activities: List<String>)
+    /**
+     * Fold one karigar into another, everywhere: the same person under two spellings.
+     * Null on success, a message on failure.
+     */
+    suspend fun mergeKarigar(fromId: String, intoId: String): String?
+
     suspend fun addActivity(name: String): String?
     suspend fun deleteActivity(name: String)
     fun addGlobalCustomField(field: String)
@@ -230,6 +236,8 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     // identity exactly like the database file, so the two always describe the same catalogue.
     private val SYNC_PREFS = "biap_sync"
     private val KEY_LAST_SYNC_AT = "last_sync_at"
+    /** Set once the hand-typed karigar names on existing designs have been tied to the Hub. */
+    private val KEY_KARIGARS_LINKED = "karigars_linked"
     private val dbLock = Mutex()
     private val backupLock = Mutex()
 
@@ -363,6 +371,10 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                             e.printStackTrace()
                         }
                     }
+
+                    // Tie the karigar names already on designs to the Hub list. Runs once
+                    // per database, after the seeding above so there is a list to tie them to.
+                    repositoryScope.launch { linkDesignKarigarsToHub(dao, suffix) }
 
                     // Retry any photo that exists on this device but never reached Storage.
                     repositoryScope.launch { backfillPendingImageUploads(dao) }
@@ -1373,6 +1385,58 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     // #endregion
 
+    /**
+     * Tie the karigar names typed on existing designs to the Hub list.
+     *
+     * Before the Hub existed, every design carried names typed by hand, so the same person
+     * appears as "Mohd. Yusuf" on one design and "Mohd Yusuf" on another and the app could
+     * not tell they were one man. That is exactly what assigning work by activity needs to
+     * know, so the old records are brought onto the list rather than left behind.
+     *
+     * NOTHING IS DROPPED. A name the Hub has never heard of joins the Hub; it is not removed
+     * from the design. A design records who actually made it, and deleting a name to tidy a
+     * list would be losing history.
+     *
+     * ONCE PER DATABASE, not on every launch. Re-running it would undo a deliberate removal:
+     * take somebody off the Hub while a design still names them, and a second pass would put
+     * them straight back. A design is only written when its names actually change, so the
+     * pass is also harmless if it does run twice.
+     */
+    private suspend fun linkDesignKarigarsToHub(dao: DesignDao, suffix: String) {
+        if (syncPrefs().getBoolean(KEY_KARIGARS_LINKED + suffix, false)) return
+        try {
+            val designs = dao.getAllDesignsOnce()
+            val hub = dao.karigarsOnce().map { it.toDomain() }
+            val plan = planKarigarLinks(designs.flatMap { it.design.karigars }, hub)
+
+            if (!plan.isEmpty) {
+                val now = System.currentTimeMillis()
+                if (plan.toAdd.isNotEmpty()) {
+                    dao.upsertKarigars(
+                        plan.toAdd.map {
+                            KarigarEntity(java.util.UUID.randomUUID().toString(), it, emptyList(), now)
+                        }
+                    )
+                }
+                for (row in designs) {
+                    val linked = applyKarigarLinks(row.design.karigars, plan)
+                    if (linked != row.design.karigars) {
+                        dao.setDesignKarigars(row.design.id, linked, now)
+                    }
+                }
+                android.util.Log.i(
+                    "DataRepository",
+                    "Linked karigars to the Hub: ${plan.renames.size} renamed, ${plan.toAdd.size} added"
+                )
+            }
+            syncPrefs().edit().putBoolean(KEY_KARIGARS_LINKED + suffix, true).apply()
+        } catch (e: Exception) {
+            // Left unflagged on failure, so the next launch tries again rather than leaving
+            // the catalogue half-linked for good.
+            e.printStackTrace()
+        }
+    }
+
     // #region Business Hub
 
     override suspend fun addKarigar(name: String): String? = withContext(Dispatchers.IO) {
@@ -1424,6 +1488,53 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                     updatedAt = System.currentTimeMillis(),
                 )
             )
+        }
+
+    /**
+     * Fold one karigar into another.
+     *
+     * The same man turns up as "Umesh" on an old design and "Umesh Devaliya" on the Hub, and
+     * no amount of matching can safely decide that on its own - "Babli" and "Bablu" differ by
+     * as little and are two people. So the app refuses to guess and this is how the owner
+     * says so.
+     *
+     * Every design naming the one being folded away is rewritten to the survivor, the
+     * survivor inherits both sets of activities, and only then does the duplicate leave the
+     * Hub. Order matters: dropping the duplicate first would leave any design still naming
+     * it pointing at somebody the Hub no longer has.
+     */
+    override suspend fun mergeKarigar(fromId: String, intoId: String): String? =
+        withContext(Dispatchers.IO) {
+            if (fromId == intoId) return@withContext "Those are the same person already."
+            val dao = awaitDao()
+                ?: return@withContext "Still opening your catalogue - try again in a moment."
+            try {
+                val all = dao.karigarsOnce().map { it.toDomain() }
+                val from = all.firstOrNull { it.id == fromId }
+                    ?: return@withContext "That karigar is no longer on the list."
+                val into = all.firstOrNull { it.id == intoId }
+                    ?: return@withContext "That karigar is no longer on the list."
+
+                val now = System.currentTimeMillis()
+                val plan = KarigarLinkPlan(renames = mapOf(from.name to into.name))
+                for (row in dao.getAllDesignsOnce()) {
+                    val linked = applyKarigarLinks(row.design.karigars, plan)
+                    if (linked != row.design.karigars) {
+                        dao.setDesignKarigars(row.design.id, linked, now)
+                    }
+                }
+                dao.upsertKarigar(
+                    into.copy(
+                        activities = (into.activities + from.activities).distinct(),
+                        updatedAt = now,
+                    ).toEntity()
+                )
+                dao.deleteKarigar(from.id, now)
+                null
+            } catch (e: Exception) {
+                e.printStackTrace()
+                e.message ?: "Could not merge those two."
+            }
         }
 
     override suspend fun addActivity(name: String): String? = withContext(Dispatchers.IO) {

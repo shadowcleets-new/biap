@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -153,6 +155,7 @@ fun BusinessHubScreen(
     var renaming by remember { mutableStateOf<Karigar?>(null) }
     var removing by remember { mutableStateOf<Karigar?>(null) }
     var removingActivity by remember { mutableStateOf<String?>(null) }
+    var merging by remember { mutableStateOf<Karigar?>(null) }
 
     fun zoneAt(point: Offset): String? =
         dropZones.entries.firstOrNull { it.value.contains(point) }?.key
@@ -247,6 +250,7 @@ fun BusinessHubScreen(
                         onDragCancel = { dragging = null; hovered = null },
                         onRename = { renaming = it },
                         onRemove = { removing = it },
+                        onMerge = { merging = it },
                         onAdd = { addKarigarOpen = true },
                     )
                 }
@@ -380,6 +384,45 @@ fun BusinessHubScreen(
         )
     }
 
+    merging?.let { from ->
+        val others = state.karigars.filter { it.id != from.id }
+        AlertDialog(
+            onDismissRequest = { merging = null },
+            title = { Text("Merge ${from.name} into") },
+            text = {
+                Column(
+                    modifier = Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        "Pick the name to keep. Every design saying ${from.name} will say that " +
+                            "name instead, and ${from.name} comes off the Hub. Nothing is deleted " +
+                            "from a design.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    others.forEach { into ->
+                        Text(
+                            into.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    viewModel.mergeKarigar(from.id, into.id)
+                                    merging = null
+                                }
+                                .padding(horizontal = 10.dp, vertical = 12.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { merging = null }) { Text("Cancel") } },
+        )
+    }
+
     removingActivity?.let { activity ->
         AlertDialog(
             onDismissRequest = { removingActivity = null },
@@ -433,6 +476,7 @@ private fun KarigarPool(
     onDragCancel: () -> Unit,
     onRename: (Karigar) -> Unit,
     onRemove: (Karigar) -> Unit,
+    onMerge: (Karigar) -> Unit,
     onAdd: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -462,6 +506,7 @@ private fun KarigarPool(
                         onDragCancel = onDragCancel,
                         onRename = onRename,
                         onRemove = onRemove,
+                        onMerge = onMerge,
                     )
                 }
             }
@@ -558,6 +603,7 @@ private fun DraggableKarigarChip(
     onDragCancel: () -> Unit,
     onRename: (Karigar) -> Unit,
     onRemove: (Karigar) -> Unit,
+    onMerge: (Karigar) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     var origin by remember { mutableStateOf(Offset.Zero) }
@@ -628,7 +674,10 @@ private fun DraggableKarigarChip(
                 )
             },
             confirmButton = {
-                TextButton(onClick = { menuOpen = false; onRename(karigar) }) { Text("Rename") }
+                Row {
+                    TextButton(onClick = { menuOpen = false; onMerge(karigar) }) { Text("Merge") }
+                    TextButton(onClick = { menuOpen = false; onRename(karigar) }) { Text("Rename") }
+                }
             },
             dismissButton = {
                 TextButton(onClick = { menuOpen = false; onRemove(karigar) }) { Text("Remove") }

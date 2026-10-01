@@ -81,6 +81,73 @@ val DEFAULT_KARIGARS: List<String> = listOf(
     "Deen Mohd.",
 )
 
+/**
+ * The key two spellings of the same person share.
+ *
+ * Punctuation is dropped and runs of anything non-alphanumeric become one space, so
+ * "Mohd. Yusuf", "Mohd Yusuf" and "mohd  yusuf" are one person. That matters because the
+ * names on existing designs were typed by hand over months, while the Hub list was seeded
+ * from one careful spelling - matching on the exact string would leave most of them
+ * unlinked and quietly duplicate the workshop.
+ *
+ * It does NOT try to be clever beyond that: no initials, no fuzzy distance. Two names that
+ * differ by an actual letter are two people, and merging them would be worse than leaving
+ * them apart.
+ */
+internal fun matchKey(name: String): String =
+    name.trim().lowercase().replace(Regex("""[^\p{L}\p{N}]+"""), " ").trim()
+
+/** What linking a set of hand-typed names to the Hub would do. */
+@Immutable
+data class KarigarLinkPlan(
+    /** Typed spelling to the Hub's spelling, for names that differ only in how they were written. */
+    val renames: Map<String, String> = emptyMap(),
+    /** Names on designs that nobody on the Hub matches; these join the Hub as they are. */
+    val toAdd: List<String> = emptyList(),
+) {
+    val isEmpty: Boolean get() = renames.isEmpty() && toAdd.isEmpty()
+}
+
+/**
+ * Work out how to tie hand-typed karigar names to the Hub list.
+ *
+ * Nothing is ever dropped. A name the Hub does not know joins the Hub rather than being
+ * deleted off the design - a design is a record of who actually made it, and discarding a
+ * name because the Hub had not heard of them would be losing history to tidy a list.
+ */
+fun planKarigarLinks(designNames: Collection<String>, hub: List<Karigar>): KarigarLinkPlan {
+    val byKey = hub.associateBy { matchKey(it.name) }
+    val renames = mutableMapOf<String, String>()
+    val toAdd = mutableListOf<String>()
+    val added = mutableSetOf<String>()
+
+    for (raw in designNames) {
+        val name = raw.trim()
+        if (name.isEmpty()) continue
+        val key = matchKey(name)
+        val known = byKey[key]
+        if (known != null) {
+            if (known.name != name) renames[name] = known.name
+        } else if (added.add(key)) {
+            toAdd += name
+        }
+    }
+    return KarigarLinkPlan(renames, toAdd)
+}
+
+/** The design's list after linking: canonical spellings, de-duplicated, order kept. */
+fun applyKarigarLinks(names: List<String>, plan: KarigarLinkPlan): List<String> {
+    val seen = mutableSetOf<String>()
+    val out = mutableListOf<String>()
+    for (raw in names) {
+        val name = raw.trim()
+        if (name.isEmpty()) continue
+        val canonical = plan.renames[name] ?: name
+        if (seen.add(matchKey(canonical))) out += canonical
+    }
+    return out
+}
+
 // #endregion
 
 // #region 3. Matching work to an activity

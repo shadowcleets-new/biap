@@ -76,6 +76,11 @@ class BusinessHubViewModel(private val repository: DataRepository) : ViewModel()
         viewModelScope.launch { _message.value = repository.renameKarigar(id, name) }
     }
 
+    /** The same person under two spellings: fold one into the other everywhere. */
+    fun mergeKarigar(fromId: String, intoId: String) {
+        viewModelScope.launch { _message.value = repository.mergeKarigar(fromId, intoId) }
+    }
+
     fun removeKarigar(id: String) {
         viewModelScope.launch { repository.deleteKarigar(id) }
     }

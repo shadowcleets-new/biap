@@ -170,6 +170,17 @@ interface DesignDao {
     @Query("UPDATE designs SET updatedAt = :now WHERE id = :id")
     suspend fun touchDesign(id: String, now: Long)
 
+    /**
+     * Rewrite only a design's karigar names.
+     *
+     * Deliberately one column rather than re-inserting the whole row: linking names to the
+     * Hub runs over every design at once, and a full upsert would carry whatever this
+     * device happens to hold for the photo pointer, the archive flag and the rest into a
+     * write whose only purpose is a spelling.
+     */
+    @Query("UPDATE designs SET karigars = :karigars, updatedAt = :now WHERE id = :id")
+    suspend fun setDesignKarigars(id: String, karigars: List<String>, now: Long)
+
     // #region Batches - the ledger beside the stock column
 
     @Query("SELECT * FROM batches WHERE designId = :designId AND size = :size ORDER BY number")

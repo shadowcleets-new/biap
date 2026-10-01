@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Archive
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sc.biap.data.DefaultDataRepository
+import com.sc.biap.ui.hub.KarigarIcon
 import com.sc.biap.data.Design
 import com.sc.biap.data.DesignPhoto
 import com.sc.biap.data.SizeInventory
@@ -429,6 +431,7 @@ fun DesignDetailScreen(
                     if (isEditing) {
                         AssignedKarigarsCard(
                             design = design,
+                            hubKarigars = hubKarigars,
                             isEditing = true,
                             editKarigars = editKarigars,
                             onManageKarigars = { showEditKarigarsDialog = true },
@@ -1370,6 +1373,7 @@ private fun AssignedKarigarsCard(
     design: Design,
     isEditing: Boolean,
     editKarigars: List<String>,
+    hubKarigars: List<com.sc.biap.data.Karigar>,
     onManageKarigars: () -> Unit,
 ) {
 // Assigned Karigars Card
@@ -1416,11 +1420,44 @@ Card(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 karigarsListToUse.forEach { karigar ->
-                    SuggestionChip(
-                        onClick = {},
-                        label = { Text(karigar, style = MaterialTheme.typography.labelLarge) },
-                        shape = AtelierShapes.CornerSmall
-                    )
+                    // On the Hub or not. After the one-time linking pass every name should
+                    // be, but somebody removed from the Hub later still shows on the designs
+                    // they actually worked on - and that wants saying rather than hiding.
+                    val onHub = hubKarigars.any {
+                        it.name.equals(karigar, ignoreCase = true)
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(
+                                if (onHub) MaterialTheme.colorScheme.secondaryContainer
+                                else MaterialTheme.colorScheme.surfaceContainerHigh
+                            )
+                            .padding(start = 10.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+                    ) {
+                        KarigarIcon(
+                            modifier = Modifier.size(17.dp),
+                            tint = if (onHub) MaterialTheme.colorScheme.onSecondaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(7.dp))
+                        Text(
+                            karigar,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (onHub) MaterialTheme.colorScheme.onSecondaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (!onHub) {
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                Icons.Default.HelpOutline,
+                                contentDescription = "Not on the Business Hub list",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
                 }
             }
         }
