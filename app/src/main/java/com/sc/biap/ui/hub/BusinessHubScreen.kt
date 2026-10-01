@@ -70,11 +70,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.data.Karigar
+import com.sc.biap.data.rankMergeTargets
+import com.sc.biap.data.mergeCandidateScore
+import com.sc.biap.data.LIKELY_MERGE_SCORE
 import kotlin.math.roundToInt
 // #endregion
 
@@ -385,13 +389,19 @@ fun BusinessHubScreen(
     }
 
     merging?.let { from ->
-        val others = state.karigars.filter { it.id != from.id }
+        // Ranked, not alphabetical. Merging is nearly always a short form onto a full one,
+        // and the answer being eleven names down a scrollable dialog is how it felt the
+        // first time. The likely one now sits at the top, called out.
+        val others = remember(from.id, state.karigars) {
+            rankMergeTargets(from.name, state.karigars.filter { it.id != from.id })
+        }
+        val likely = others.filter { mergeCandidateScore(from.name, it.name) >= LIKELY_MERGE_SCORE }
         AlertDialog(
             onDismissRequest = { merging = null },
             title = { Text("Merge ${from.name} into") },
             text = {
                 Column(
-                    modifier = Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()),
+                    modifier = Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(
@@ -401,20 +411,43 @@ fun BusinessHubScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.height(8.dp))
-                    others.forEach { into ->
-                        Text(
-                            into.name,
-                            style = MaterialTheme.typography.bodyLarge,
+                    Spacer(Modifier.height(10.dp))
+                    others.forEachIndexed { index, into ->
+                        // One heading above the likely ones and one above the rest, so the
+                        // top of the list is obviously a suggestion and not just an order.
+                        if (index == 0 && likely.isNotEmpty()) {
+                            MergeGroupLabel("LIKELY THE SAME PERSON")
+                        }
+                        if (index == likely.size && likely.isNotEmpty()) {
+                            Spacer(Modifier.height(10.dp))
+                            MergeGroupLabel("EVERYONE ELSE")
+                        }
+                        val isLikely = index < likely.size
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (isLikely) scheme.secondaryContainer else Color.Transparent
+                                )
                                 .clickable {
                                     viewModel.mergeKarigar(from.id, into.id)
                                     merging = null
                                 }
-                                .padding(horizontal = 10.dp, vertical = 12.dp),
-                        )
+                                .padding(horizontal = 12.dp, vertical = 13.dp),
+                        ) {
+                            KarigarIcon(
+                                modifier = Modifier.size(18.dp),
+                                tint = if (isLikely) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                into.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (isLikely) scheme.onSecondaryContainer else scheme.onSurface,
+                            )
+                        }
                     }
                 }
             },
@@ -684,6 +717,17 @@ private fun DraggableKarigarChip(
             },
         )
     }
+}
+
+@Composable
+private fun MergeGroupLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        letterSpacing = 1.1.sp,
+        modifier = Modifier.padding(start = 12.dp, bottom = 4.dp),
+    )
 }
 
 @Composable

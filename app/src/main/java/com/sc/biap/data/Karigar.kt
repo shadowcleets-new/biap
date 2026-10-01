@@ -148,6 +148,70 @@ fun applyKarigarLinks(names: List<String>, plan: KarigarLinkPlan): List<String> 
     return out
 }
 
+/**
+ * How likely two names are to be the same person, for ordering the merge picker.
+ *
+ * NOT a matcher. Nothing is merged on this score - the owner still chooses - so it is free
+ * to be generous in a way [matchKey] must not be. Its only job is to put the obvious
+ * candidate first so the answer is on screen rather than down a scroll.
+ *
+ * What it rewards, in the order these actually come up in a workshop:
+ *   - one name being the start of the other: "Umesh" against "Umesh Devaliya"
+ *   - a whole word in common: "Salim Master" against "Saleem Master"
+ *   - a first name a typo away: "Salim" against "Saleem"
+ */
+fun mergeCandidateScore(from: String, candidate: String): Int {
+    val a = matchKey(from)
+    val b = matchKey(candidate)
+    if (a.isEmpty() || b.isEmpty()) return 0
+
+    var score = 0
+    if (a == b) return 1000
+    if (a.startsWith(b) || b.startsWith(a)) score += 100
+
+    val wordsA = a.split(" ").filter { it.isNotEmpty() }
+    val wordsB = b.split(" ").filter { it.isNotEmpty() }
+    score += wordsA.count { it in wordsB } * 30
+
+    // A first name one or two letters out - "salim" against "saleem" - is the common case
+    // for a name written down by two different people.
+    val firstA = wordsA.firstOrNull().orEmpty()
+    val firstB = wordsB.firstOrNull().orEmpty()
+    if (firstA.isNotEmpty() && firstB.isNotEmpty() && firstA != firstB) {
+        val d = editDistance(firstA, firstB)
+        if (d <= 2 && d < maxOf(firstA.length, firstB.length)) score += (3 - d) * 25
+    }
+    return score
+}
+
+/** Above this, a candidate is worth calling out rather than leaving in the long list. */
+const val LIKELY_MERGE_SCORE = 40
+
+/** The merge picker's order: most likely first, then everyone else alphabetically. */
+fun rankMergeTargets(from: String, candidates: List<Karigar>): List<Karigar> =
+    candidates.sortedWith(
+        compareByDescending<Karigar> { mergeCandidateScore(from, it.name) }
+            .thenBy { it.name.lowercase() }
+    )
+
+/** Plain Levenshtein, on names short enough that nothing cleverer is worth the code. */
+internal fun editDistance(a: String, b: String): Int {
+    if (a == b) return 0
+    if (a.isEmpty()) return b.length
+    if (b.isEmpty()) return a.length
+    var prev = IntArray(b.length + 1) { it }
+    val cur = IntArray(b.length + 1)
+    for (i in 1..a.length) {
+        cur[0] = i
+        for (j in 1..b.length) {
+            val cost = if (a[i - 1] == b[j - 1]) 0 else 1
+            cur[j] = minOf(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost)
+        }
+        prev = cur.copyOf()
+    }
+    return prev[b.length]
+}
+
 // #endregion
 
 // #region 3. Matching work to an activity

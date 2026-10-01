@@ -107,6 +107,59 @@ class KarigarLinkTest {
         assertEquals(names, applyKarigarLinks(names, plan))
     }
 
+    // --- ordering the merge picker ---
+
+    @Test
+    fun `the real three put the right name first`() {
+        // Exactly the merges that had to be done by hand, and the scroll that prompted this.
+        for ((from, expected) in listOf(
+            "Salim Master" to "Saleem Master",
+            "Umesh" to "Umesh Devaliya",
+            "Dinesh" to "Dinesh Soni",
+        )) {
+            val ranked = rankMergeTargets(from, seeded.filter { it.name != from })
+            assertEquals("$from should suggest $expected first", expected, ranked.first().name)
+        }
+    }
+
+    @Test
+    fun `the obvious match is called out, not just ordered`() {
+        assertTrue(mergeCandidateScore("Umesh", "Umesh Devaliya") >= LIKELY_MERGE_SCORE)
+        assertTrue(mergeCandidateScore("Salim Master", "Saleem Master") >= LIKELY_MERGE_SCORE)
+        assertTrue(mergeCandidateScore("Dinesh", "Dinesh Soni") >= LIKELY_MERGE_SCORE)
+    }
+
+    @Test
+    fun `unrelated names are not called out as likely`() {
+        assertTrue(mergeCandidateScore("Umesh", "Atul") < LIKELY_MERGE_SCORE)
+        assertTrue(mergeCandidateScore("Israr", "Deen Mohd.") < LIKELY_MERGE_SCORE)
+        // Babli and Bablu are a letter apart and are NOT the same person. Suggesting them
+        // is acceptable - the owner still chooses - but they must not outrank a real match.
+        val ranked = rankMergeTargets("Bablu", seeded.filter { it.name != "Bablu" })
+        assertTrue(ranked.isNotEmpty())
+    }
+
+    @Test
+    fun `everyone is still offered, however unlikely`() {
+        val others = seeded.filter { it.name != "Umesh Devaliya" }
+        assertEquals(others.size, rankMergeTargets("Umesh Devaliya", others).size)
+    }
+
+    @Test
+    fun `the tail stays alphabetical so it can be read down`() {
+        val ranked = rankMergeTargets("Zzz Nobody", seeded)
+        assertEquals(seeded.map { it.name }.sortedBy { it.lowercase() }, ranked.map { it.name })
+    }
+
+    @Test
+    fun `edit distance behaves on the names it will actually see`() {
+        assertEquals(0, editDistance("salim", "salim"))
+        // salim -> saleem: i becomes e, and an e is inserted.
+        assertEquals(2, editDistance("salim", "saleem"))
+        assertEquals(1, editDistance("sandeep", "sandeen"))
+        assertTrue(editDistance("umesh", "atul") > 2)
+    }
+
     // --- merging two spellings of one person ---
 
     @Test
