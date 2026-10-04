@@ -3,21 +3,17 @@
 # Advanced rather than default so the configuration is a file in this repository that can be
 # read, reviewed and changed, instead of a setting held in a web page nobody opens again.
 #
-# WHY build-mode: none, AND WHEN TO CHANGE IT:
-#   CodeQL analyses Kotlin either by watching a real compile or by reading the source
-#   directly. Watching a compile is more precise - it resolves types through dependencies and
-#   so follows data further - but it needs the whole Android build to succeed on a clean
-#   runner, and this project is on compileSdk 37, AGP 9 and Gradle 9.8. That is a lot of very
-#   new to ask a hosted runner for, and a scan that fails to build produces NO findings at
-#   all, which is worse than a shallower scan that runs every time.
+# WHY java-kotlin BUILDS, AND actions DOES NOT:
+#   CodeQL extracts Kotlin by watching the compiler work. There is no source-reading mode
+#   for it - build-mode "none" was tried here first and failed with "could not process any
+#   of it", having extracted nothing at all. Kotlin is not Java in this respect; the
+#   extractor is a compiler plugin, so without a compile there is nothing to plug into.
 #
-#   So this reads the source. It still finds the things worth finding in an app like this -
-#   hardcoded credentials, weak or misused cryptography, unsafe deserialisation, injection
-#   into queries and intents - because those are visible in the code itself.
+#   The same failed run proved the other half: Gradle resolved the entire project on a
+#   hosted runner in 2m08s, BUILD SUCCESSFUL, on AGP 9 and compileSdk 37. The toolchain is
+#   new but the runner handles it, so building here is not the gamble it looked like.
 #
-#   To switch to the deeper analysis later, set build-mode to "manual" for java-kotlin and
-#   uncomment the build steps below. Do it once there is a CI workflow proving the build is
-#   green on a runner; until then this would be the first thing to discover it is not.
+#   The "actions" language has no compile step and correctly uses build-mode none.
 
 name: CodeQL
 
@@ -52,7 +48,7 @@ jobs:
       matrix:
         include:
           - language: java-kotlin
-            build-mode: none
+            build-mode: manual
           # Scans the workflow files in this directory for the things that go wrong in CI:
           # a third-party action pinned to a mutable tag, a script interpolating untrusted
           # input, permissions wider than the job needs.
@@ -64,7 +60,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -73,33 +69,33 @@ jobs:
           # still a readable number.
           queries: security-extended
 
-      # --- The deeper analysis, for when the build is known to be green on a runner. ---
-      #
-      # Set build-mode to "manual" for java-kotlin above and uncomment all of this.
-      #
-      # - name: Set up JDK
-      #   if: matrix.language == 'java-kotlin'
-      #   uses: actions/setup-java@v4
-      #   with:
-      #     distribution: temurin
-      #     # Two of them: Gradle and AGP run on the newer one, while jvmToolchain(17) in
-      #     # app/build.gradle.kts needs a 17 to compile against.
-      #     java-version: |
-      #       17
-      #       21
-      #
-      # - name: Set up Android SDK
-      #   if: matrix.language == 'java-kotlin'
-      #   uses: android-actions/setup-android@v3
-      #
-      # - name: Build
-      #   if: matrix.language == 'java-kotlin'
-      #   run: ./gradlew :app:assembleDebug --no-daemon --no-configuration-cache
-      #   # No configuration cache: it is on in gradle.properties and is a cache of the build
-      #   # configuration itself, which a one-shot runner cannot reuse and CodeQL's extractor
-      #   # has been known to disagree with.
+      - name: Set up JDK
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # Two of them. Gradle and AGP run on the newer one, while jvmToolchain(17) in
+          # app/build.gradle.kts needs a 17 to compile against. Listed in this order so
+          # JAVA_HOME ends up pointing at 21.
+          java-version: |
+            17
+            21
+
+      - name: Set up Android SDK
+        if: matrix.language == 'java-kotlin'
+        uses: android-actions/setup-android@v3
+
+      - name: Build the app
+        if: matrix.language == 'java-kotlin'
+        # Debug, not release: release would want a signing keystore that is deliberately
+        # not in this repository, and the bytecode CodeQL reads is the same either way.
+        #
+        # No configuration cache. It is on in gradle.properties, it is a cache of the build
+        # configuration that a one-shot runner cannot reuse anyway, and it can skip the
+        # very compiler invocations the extractor needs to observe.
+        run: ./gradlew :app:assembleDebug --no-daemon --no-configuration-cache --stacktrace
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"
