@@ -1,0 +1,107 @@
+# Dependabot version updates for BIAP.
+#
+# WHAT THIS IS FOR: being told when something has moved, not merging it automatically.
+# Every entry below opens a pull request and stops. Nothing reaches main without somebody
+# building it, which matters here because this app has already been bitten twice by a
+# version that was newer and wrong.
+#
+# THE GROUPS EXIST TO STOP NOISE. Eighty dependencies updating individually would be a
+# dozen pull requests a week, and a dozen a week is a stream nobody reads. Grouped, a
+# quiet week produces one or two.
+#
+# NOT COVERED BY DEPENDABOT: the Gradle wrapper itself
+# (gradle/wrapper/gradle-wrapper.properties). Dependabot updates dependencies, not the
+# build tool, so Gradle is upgraded by hand with `./gradlew wrapper --gradle-version=X`
+# and the distribution SHA-256 checked.
+
+version: 2
+
+updates:
+  - package-ecosystem: "gradle"
+    # Covers the version catalog at gradle/libs.versions.toml and every build.gradle.kts
+    # under it - app, baselineprofile and the root.
+    directory: "/"
+
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Kolkata"
+
+    # Five at a time. A dependency robot that can open twenty is one whose pull requests
+    # get closed unread, and then it is worse than not having it.
+    open-pull-requests-limit: 5
+
+    # Matches the commit style used in this repository.
+    commit-message:
+      prefix: "build"
+      include: "scope"
+
+    labels:
+      - "dependencies"
+
+    groups:
+      # THESE THREE MOVE TOGETHER OR NOT AT ALL.
+      #
+      # The Kotlin version is capped by what KSP supports, because KSP runs inside the
+      # Kotlin compiler and a mismatch breaks Room's code generation rather than failing
+      # cleanly. The Compose compiler plugin is versioned with Kotlin itself. Proposed
+      # separately, each would be an un-mergeable pull request every week; proposed
+      # together, the group is either buildable or obviously not.
+      #
+      # Merge this one only when the build actually passes - that is the whole test.
+      kotlin-toolchain:
+        patterns:
+          - "org.jetbrains.kotlin*"
+          - "com.google.devtools.ksp*"
+
+      # One pull request for the whole Compose stack. These are released in lockstep and
+      # are meaningless to review one at a time.
+      compose:
+        patterns:
+          - "androidx.compose*"
+          - "androidx.activity:activity-compose"
+          - "androidx.navigation*"
+          - "androidx.lifecycle*"
+
+      androidx:
+        patterns:
+          - "androidx.*"
+        exclude-patterns:
+          - "androidx.compose*"
+          - "androidx.navigation*"
+          - "androidx.lifecycle*"
+          # Holds the encrypted-preferences format that existing installs read. Worth
+          # seeing on its own rather than buried in a group of twenty.
+          - "androidx.security*"
+
+      firebase:
+        patterns:
+          - "com.google.firebase*"
+
+      testing:
+        patterns:
+          - "junit*"
+          - "org.junit*"
+          - "io.mockk*"
+          - "org.robolectric*"
+          - "androidx.test*"
+        # Test-only, so these are the safest thing here to take without ceremony.
+        update-types:
+          - "minor"
+          - "patch"
+
+    ignore:
+      # DO NOT TAKE 22.x. It is not a normal major bump: GoogleSignIn, GoogleSignInAccount,
+      # GoogleSignInOptions and GoogleSignInStatusCodes are deleted from the artifact
+      # outright, and this app's sign-in and its Drive token are built on exactly those.
+      # Moving means porting to Credential Manager and AuthorizationClient first, which is
+      # a piece of work and not a dependency bump. 21.6.0 is the last release that still
+      # ships the API in use.
+      #
+      # This is ignored rather than left to review because the pull request would look
+      # entirely ordinary, and the breakage is at runtime on the sign-in screen rather than
+      # at compile time.
+      - dependency-name: "com.google.android.gms:play-services-auth"
+        update-types:
+          - "version-update:semver-major"
