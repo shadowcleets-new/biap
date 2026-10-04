@@ -4,6 +4,14 @@ package com.sc.biap.ui.design
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sc.biap.data.Batch
+import com.sc.biap.data.suggestCut
+import com.sc.biap.data.sizeDemand
+import com.sc.biap.data.productionHistory
+import com.sc.biap.data.designPace
+import com.sc.biap.data.SizeDemand
+import com.sc.biap.data.ProductionHistory
+import com.sc.biap.data.DesignPace
+import com.sc.biap.data.CutSuggestion
 import com.sc.biap.data.DataRepository
 import com.sc.biap.data.Design
 import com.sc.biap.data.Karigar
@@ -62,6 +70,38 @@ class DesignDetailViewModel(
         }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /**
+     * What the records already kept say about this design.
+     *
+     * Derived, never stored. Every number here comes out of batches and orders the owner
+     * entered for other reasons, so nothing on this card costs them a keystroke.
+     */
+    val insights: StateFlow<DesignInsights> = repository.biData
+        .map { data ->
+            val design = data.designs.firstOrNull { it.id == designId }
+                ?: return@map DesignInsights()
+            val mine = data.batches.filter { it.designId == designId }
+            val demand = sizeDemand(design, data.batches, data.orders)
+            val history = productionHistory(mine)
+            // Suggest a run the size of the last one, because that is the decision actually
+            // being made: the same cut again, split better. Falling back to what is on the
+            // shelf keeps it sensible for a design whose batches predate the ledger.
+            val lastRunSize = mine
+                .filter { history.lastMadeAt != null && it.createdAt >= history.lastMadeAt - 86_400_000L }
+                .sumOf { it.quantity }
+                .takeIf { it > 0 }
+                ?: design.sizeInventories.sumOf { it.stock }
+            DesignInsights(
+                history = history,
+                demand = demand,
+                pace = designPace(design, data.batches, data.orders, System.currentTimeMillis()),
+                suggestedCut = suggestCut(demand, lastRunSize),
+                suggestedTotal = lastRunSize,
+            )
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DesignInsights())
 
     suspend fun suggestBatchNumber(size: String): Int = repository.suggestBatchNumber(designId, size)
 
@@ -133,4 +173,19 @@ class DesignDetailViewModel(
     fun updateDesign(design: Design) {
         repository.addOrUpdateDesign(design)
     }
+}
+
+/**
+ * Read-only advice drawn from the ledger. Empty is a valid and common state - a design made
+ * once last week has nothing to say yet, and saying nothing is better than saying zero.
+ */
+data class DesignInsights(
+    val history: ProductionHistory = ProductionHistory(),
+    val demand: List<SizeDemand> = emptyList(),
+    val pace: DesignPace = DesignPace(),
+    val suggestedCut: List<CutSuggestion> = emptyList(),
+    val suggestedTotal: Int = 0,
+) {
+    /** Nothing was ever cut and nothing ever sold: there is no history to read. */
+    val isEmpty: Boolean get() = history.runs == 0 && pace.sold == 0
 }

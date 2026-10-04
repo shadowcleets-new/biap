@@ -42,6 +42,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import java.util.Date
+import java.text.SimpleDateFormat
+import java.util.Locale
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -140,6 +143,7 @@ fun DesignDetailScreen(
     var confirmingResetAll by remember { mutableStateOf(false) }
 
     val batchesBySize by viewModel.batchesBySize.collectAsStateWithLifecycle()
+    val insights by viewModel.insights.collectAsStateWithLifecycle()
     val hubKarigars by viewModel.hubKarigars.collectAsStateWithLifecycle()
     val detailMessage by viewModel.message.collectAsStateWithLifecycle()
 
@@ -495,6 +499,10 @@ fun DesignDetailScreen(
                                 }
                             }
                         }
+                    }
+
+                    if (!isEditing && !insights.isEmpty) {
+                        LedgerSaysCard(insights)
                     }
 
                     if (showSourceSelector) {
@@ -1737,3 +1745,110 @@ private fun DetailStatusScaffold(
         }
     }
 }
+
+// #region What the records say
+
+/**
+ * Advice drawn from the ledger, shown only when the ledger has something to say.
+ *
+ * Deliberately quiet. A design cut once last week gets no card at all, because a confident
+ * looking suggestion built on one run would send real cloth to the cutting table on the
+ * strength of nothing.
+ */
+@Composable
+private fun LedgerSaysCard(insights: DesignInsights) {
+    val scheme = MaterialTheme.colorScheme
+    val dateOf = remember { SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeading("What the records say")
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(scheme.surfaceVariant.copy(alpha = 0.5f))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            val h = insights.history
+            if (h.runs > 0) {
+                Text(
+                    buildString {
+                        append(if (h.runs == 1) "Made once" else "Made ${h.runs} times")
+                        append(" · ${h.totalMade} pieces in all")
+                        h.lastMadeAt?.let { append("\nLast cut on ${dateOf.format(Date(it))}") }
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurface,
+                )
+            }
+
+            val p = insights.pace
+            Text(
+                when {
+                    p.sold == 0 -> "Nothing sold yet."
+                    p.soldPerMonth <= 0.0 -> "${p.sold} sold."
+                    else -> "${p.sold} sold · about ${formatPace(p.soldPerMonth)} a month"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onSurfaceVariant,
+            )
+
+            // Only worth saying once enough time has passed that silence means something.
+            p.daysSinceLastSale?.takeIf { it >= 90 }?.let {
+                Text(
+                    "Nothing sold in $it days.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.error,
+                )
+            }
+
+            if (insights.suggestedCut.isNotEmpty() && insights.suggestedTotal > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "NEXT CUT OF ${insights.suggestedTotal}",
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = 1.1.sp,
+                    color = scheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(2.dp))
+                insights.suggestedCut.forEach { c ->
+                    val was = insights.demand.firstOrNull { it.size == c.size }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            c.size,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = scheme.onSurfaceVariant,
+                            modifier = Modifier.width(52.dp),
+                        )
+                        Text(
+                            "${c.pieces}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = scheme.onSurface,
+                            modifier = Modifier.width(40.dp),
+                        )
+                        Text(
+                            buildString {
+                                append("was ${c.previously}")
+                                was?.let { append(" · sold ${it.sold}") }
+                                if (was?.soldOut == true) append(" · ran out")
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** "2" rather than "2.0", but "1.5" kept, because half a piece a month is a real difference. */
+private fun formatPace(v: Double): String =
+    if (v >= 10 || v == v.toInt().toDouble()) v.toInt().toString()
+    else String.format(Locale.getDefault(), "%.1f", v)
+// #endregion
