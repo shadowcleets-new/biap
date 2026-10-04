@@ -262,13 +262,18 @@ fun BusinessHubScreen(
                     )
                 }
 
-                if (outWithKarigars.isNotEmpty()) {
-                    item(key = "out-heading") {
-                        SectionHeading(
-                            title = "Out with karigars",
-                            hint = "Pieces that have left the building.",
-                        )
-                    }
+                // Shown even when there is nothing out. Hidden-when-empty made the whole
+                // feature invisible until the first time it was used, which is precisely
+                // when nobody knows to go looking for it.
+                item(key = "out-heading") {
+                    SectionHeading(
+                        title = "Out with karigars",
+                        hint = "Pieces that have left the building.",
+                    )
+                }
+                if (outWithKarigars.isEmpty()) {
+                    item(key = "out-empty") { NothingOutYet() }
+                } else {
                     items(outWithKarigars.size, key = { "out-" + outWithKarigars[it].karigar }) { i ->
                         OutLoadRow(outWithKarigars[i])
                     }
@@ -490,6 +495,44 @@ fun BusinessHubScreen(
 // #endregion
 
 // #region 2. The board
+
+/**
+ * The empty state, which exists to teach rather than to apologise.
+ *
+ * It names the exact path to the thing, because the feature has no other entrance: a reader
+ * who does not already know about "Send out" cannot find it from here by exploring.
+ */
+@Composable
+private fun NothingOutYet() {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(scheme.surfaceContainerHigh)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            "Nothing is out at the moment.",
+            style = MaterialTheme.typography.titleSmall,
+            color = scheme.onSurface,
+        )
+        Text(
+            "When you send pieces to a karigar for printing, dyeing or any other work, they " +
+                "come off the shelf and appear here - with how many, who has them and how " +
+                "long they have been gone.",
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+        )
+        Text(
+            "To send some out: open a design, tap a size, then Send out.",
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+        )
+    }
+}
 
 /**
  * One karigar's outstanding work.

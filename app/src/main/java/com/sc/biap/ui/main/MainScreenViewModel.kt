@@ -3,6 +3,7 @@ package com.sc.biap.ui.main
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sc.biap.data.DataRepository
+import com.sc.biap.data.openJobs
 import com.sc.biap.data.BusinessIntelligenceData
 import com.sc.biap.data.CatalogueSummary
 import com.sc.biap.data.stats
@@ -157,6 +158,18 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
    * so an order placed on this device shows up the instant its transaction commits - the same
    * commit that took its pieces out of the stock shown one tab over.
    */
+  /**
+   * Pieces currently out with karigars.
+   *
+   * On the header because "where are my goods" is a question asked far more often than it
+   * is worth opening a screen for, and because the tracking is otherwise invisible until
+   * the day something is sent out - which is exactly when nobody thinks to look for it.
+   */
+  val piecesWithKarigars: StateFlow<Int> = dataRepository.biData
+    .map { data -> openJobs(data.jobWork).sumOf { it.outstanding } }
+    .flowOn(Dispatchers.Default)
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
   val orders: StateFlow<List<com.sc.biap.data.Order>> = dataRepository.biData
     .map { data -> data.orders.sortedByDescending { it.createdAt } }
     .flowOn(Dispatchers.Default)

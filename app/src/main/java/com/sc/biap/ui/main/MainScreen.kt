@@ -239,13 +239,22 @@ fun MainScreen(
      * [syncStamp] carries the rest: a clock time only while it still identifies a moment on
      * its own, and an age or a date once it does not.
      */
+    val piecesWithKarigars by viewModel.piecesWithKarigars.collectAsStateWithLifecycle()
+
     val catalogueStatusLine: (MainScreenUiState, Boolean, Long) -> String = { s, syncing, syncedAt ->
         val total = (s as? MainScreenUiState.Success)?.totalCount ?: 0
         val designs = if (total == 1) "1 DESIGN" else "$total DESIGNS"
+        // Said as WITH KARIGARS rather than OUT, because the Orders tab one thumb away
+        // already says OUT and means something else entirely - pieces that left in an
+        // order. Two counts both called "out" on adjacent screens would be worse than
+        // showing neither.
+        val withKarigars =
+            if (piecesWithKarigars > 0) " · $piecesWithKarigars WITH KARIGARS" else ""
         when {
             syncing -> "SYNCING…"
             total == 0 -> "NO DESIGNS YET"
-            else -> "$designs · ${syncStamp(syncedAt, System.currentTimeMillis(), use24Hour)}"
+            else -> "$designs$withKarigars · " +
+                syncStamp(syncedAt, System.currentTimeMillis(), use24Hour)
         }
     }
     val orders by viewModel.orders.collectAsStateWithLifecycle()
