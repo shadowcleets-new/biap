@@ -71,7 +71,7 @@ jobs:
 
       - name: Set up JDK
         if: matrix.language == 'java-kotlin'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           # Two of them. Gradle and AGP run on the newer one, while jvmToolchain(17) in
@@ -81,12 +81,13 @@ jobs:
             17
             21
 
-      - name: Set up Android SDK
-        if: matrix.language == 'java-kotlin'
-        uses: android-actions/setup-android@v3
-
       - name: Build the app
         if: matrix.language == 'java-kotlin'
+        # No setup-android step. The runner image already ships the SDK with its licences
+        # accepted, and AGP downloads any platform it is missing. The action that was here
+        # tried to install a legacy "tools" package that no longer exists and died on it -
+        # while the very first run, which had no such step, resolved the whole project fine.
+        #
         # Debug, not release: release would want a signing keystore that is deliberately
         # not in this repository, and the bytecode CodeQL reads is the same either way.
         #
