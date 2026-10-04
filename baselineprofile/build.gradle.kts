@@ -32,7 +32,7 @@ android {
         // Macrobenchmark needs 28+; the app itself still supports 24. This floor applies only
         // to the generator, never to what ships.
         minSdk = 28
-        targetSdk = 36
+        targetSdk = 37
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
