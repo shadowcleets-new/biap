@@ -55,6 +55,10 @@ import com.sc.biap.data.WorkKind
 import com.sc.biap.data.WorkLot
 import com.sc.biap.data.label
 import com.sc.biap.data.overdueDays
+import coil3.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import com.sc.biap.ui.components.VoiceNotePlayer
+import java.io.File
 import com.sc.biap.ui.main.DesignThumbnail
 // #endregion
 
@@ -178,16 +182,16 @@ fun WorkManagementScreen(
         AddWorkSheet(
             state = state,
             onDismiss = { adding = false },
-            onSample = { name, karigar, activity, note ->
-                viewModel.startSample(name, karigar, activity, note, null)
+            onSample = { name, karigar, activity, note, photo, voice ->
+                viewModel.startSample(name, karigar, activity, note, photo, voice)
                 adding = false
             },
             onProduction = { designId, karigar, activity, quantities, batch, note ->
                 viewModel.startProduction(designId, karigar, activity, quantities, batch, note)
                 adding = false
             },
-            onAlteration = { designId, size, karigar, qty, note ->
-                viewModel.startAlteration(designId, size, karigar, qty, note, null)
+            onAlteration = { designId, size, karigar, qty, note, photo, voice ->
+                viewModel.startAlteration(designId, size, karigar, qty, note, photo, voice)
                 adding = false
             },
         )
@@ -338,17 +342,32 @@ private fun WorkLotCard(
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Only a real design has a photo for now; a sample's own picture arrives with
-            // the media pass.
-            design?.let {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(scheme.surface),
-                    contentAlignment = Alignment.Center,
-                ) { DesignThumbnail(it, 56.dp) }
-                Spacer(Modifier.width(12.dp))
+            // The lot's OWN photo wins over the design's. On an alteration it shows the
+            // fault, which is the thing being decided about; the catalogue photo shows the
+            // garment as it is supposed to look, which is not the question.
+            val ownPhoto = lot.photoPath
+            when {
+                ownPhoto != null -> {
+                    AsyncImage(
+                        model = File(ownPhoto),
+                        contentDescription = "Photo of the work",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                }
+                design != null -> {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(scheme.surface),
+                        contentAlignment = Alignment.Center,
+                    ) { DesignThumbnail(design, 56.dp) }
+                    Spacer(Modifier.width(12.dp))
+                }
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -375,6 +394,8 @@ private fun WorkLotCard(
         if (lot.note.isNotBlank()) {
             Text(lot.note, style = MaterialTheme.typography.bodySmall, color = quiet)
         }
+
+        lot.voicePath?.let { VoiceNotePlayer(it) }
 
         if (late) {
             Text(
@@ -416,6 +437,17 @@ private fun SampleDecisionCard(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            sample.photoPath?.let {
+                AsyncImage(
+                    model = File(it),
+                    contentDescription = "Photo of the sample",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                )
+                Spacer(Modifier.width(12.dp))
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     sample.designName.ifBlank { "Untitled sample" },
@@ -429,6 +461,7 @@ private fun SampleDecisionCard(
                 )
             }
         }
+        sample.voicePath?.let { VoiceNotePlayer(it) }
         Text(
             "Approving adds it to your catalogue so you can show it and order a run.",
             style = MaterialTheme.typography.bodySmall,

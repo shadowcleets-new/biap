@@ -1458,10 +1458,17 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
 
         val now = System.currentTimeMillis()
+        val id = java.util.UUID.randomUUID().toString()
+        // Uploaded through the same worker the design photos use. A note that only exists on
+        // the phone that recorded it is no use to the person who has to act on it, and this
+        // is going to the whole workshop.
         val job = JobWork(
-            kind = WorkKind.SAMPLE, designName = name, karigar = karigar.trim(),
+            id = id, kind = WorkKind.SAMPLE, designName = name, karigar = karigar.trim(),
             activity = activity.trim(), sentQuantity = 1, sentAt = now, note = note.trim(),
-            photoPath = photoPath, voicePath = voicePath,
+            photoPath = photoPath,
+            photoRef = photoPath?.let { enqueueImageUpload(id, it) },
+            voicePath = voicePath,
+            voiceRef = voicePath?.let { enqueueImageUpload(id, it) },
         )
         try {
             dao.insertJobWork(job.toEntity())
@@ -1491,10 +1498,15 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         if (quantity > inStock) return@withContext "Only $inStock in stock for $size."
 
         val now = System.currentTimeMillis()
+        val id = java.util.UUID.randomUUID().toString()
         val job = JobWork(
-            kind = WorkKind.ALTERATION, designId = designId, size = size,
+            id = id, kind = WorkKind.ALTERATION, designId = designId, size = size,
             karigar = karigar.trim(), activity = "Alteration", sentQuantity = quantity,
-            sentAt = now, note = note.trim(), photoPath = photoPath, voicePath = voicePath,
+            sentAt = now, note = note.trim(),
+            photoPath = photoPath,
+            photoRef = photoPath?.let { enqueueImageUpload(id, it) },
+            voicePath = voicePath,
+            voiceRef = voicePath?.let { enqueueImageUpload(id, it) },
         )
         try {
             dao.sendOutWork(job.toEntity(), now, takeFromStock = true)

@@ -81,9 +81,12 @@ class WorkManagementViewModel(private val repository: DataRepository) : ViewMode
 
     // #region Doing things
 
-    fun startSample(name: String, karigar: String, activity: String, note: String, photo: String?) {
+    fun startSample(
+        name: String, karigar: String, activity: String, note: String,
+        photo: String?, voice: String?,
+    ) {
         viewModelScope.launch {
-            _message.value = repository.startSample(name, karigar, activity, note, photo, null)
+            _message.value = repository.startSample(name, karigar, activity, note, photo, voice)
         }
     }
 
@@ -100,11 +103,11 @@ class WorkManagementViewModel(private val repository: DataRepository) : ViewMode
 
     fun startAlteration(
         designId: String, size: String, karigar: String, quantity: Int,
-        note: String, photo: String?,
+        note: String, photo: String?, voice: String?,
     ) {
         viewModelScope.launch {
             _message.value =
-                repository.startAlteration(designId, size, karigar, quantity, note, photo, null)
+                repository.startAlteration(designId, size, karigar, quantity, note, photo, voice)
         }
     }
 

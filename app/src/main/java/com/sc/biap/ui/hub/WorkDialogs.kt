@@ -51,6 +51,7 @@ import com.sc.biap.data.Design
 import com.sc.biap.data.WorkKind
 import com.sc.biap.data.WorkLot
 import com.sc.biap.data.label
+import com.sc.biap.ui.components.MediaAttachments
 import com.sc.biap.ui.main.DesignThumbnail
 // #endregion
 
@@ -75,12 +76,18 @@ private enum class AddStep { CHOOSE, SAMPLE, PRODUCTION, ALTERATION }
 internal fun AddWorkSheet(
     state: WorkUiState,
     onDismiss: () -> Unit,
-    onSample: (name: String, karigar: String, activity: String, note: String) -> Unit,
+    onSample: (
+        name: String, karigar: String, activity: String, note: String,
+        photo: String?, voice: String?,
+    ) -> Unit,
     onProduction: (
         designId: String, karigar: String, activity: String,
         quantities: Map<String, Int>, batchNumber: Int, note: String,
     ) -> Unit,
-    onAlteration: (designId: String, size: String, karigar: String, qty: Int, note: String) -> Unit,
+    onAlteration: (
+        designId: String, size: String, karigar: String, qty: Int, note: String,
+        photo: String?, voice: String?,
+    ) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var step by remember { mutableStateOf(AddStep.CHOOSE) }
@@ -157,9 +164,14 @@ private fun ChoiceRow(icon: ImageVector, title: String, body: String, onClick: (
 @Composable
 private fun SampleForm(
     state: WorkUiState,
-    onConfirm: (name: String, karigar: String, activity: String, note: String) -> Unit,
+    onConfirm: (
+        name: String, karigar: String, activity: String, note: String,
+        photo: String?, voice: String?,
+    ) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
+    var photo by remember { mutableStateOf<String?>(null) }
+    var voice by remember { mutableStateOf<String?>(null) }
     var karigar by remember { mutableStateOf(state.karigars.firstOrNull()?.name.orEmpty()) }
     var activity by remember { mutableStateOf(state.activities.firstOrNull().orEmpty()) }
     var note by remember { mutableStateOf("") }
@@ -188,10 +200,17 @@ private fun SampleForm(
         label = { Text("Note (optional)") },
         modifier = Modifier.fillMaxWidth(),
     )
+    Label("A PICTURE OR A SPOKEN NOTE")
+    MediaAttachments(
+        photoPath = photo,
+        voicePath = voice,
+        onPhotoChange = { photo = it },
+        onVoiceChange = { voice = it },
+    )
     ConfirmButton(
         text = "Ask for the sample",
         enabled = name.isNotBlank() && karigar.isNotBlank(),
-        onClick = { onConfirm(name, karigar, activity, note) },
+        onClick = { onConfirm(name, karigar, activity, note, photo, voice) },
     )
 }
 
@@ -279,9 +298,14 @@ private fun ProductionForm(
 @Composable
 private fun AlterationForm(
     state: WorkUiState,
-    onConfirm: (designId: String, size: String, karigar: String, qty: Int, note: String) -> Unit,
+    onConfirm: (
+        designId: String, size: String, karigar: String, qty: Int, note: String,
+        photo: String?, voice: String?,
+    ) -> Unit,
 ) {
     var design by remember { mutableStateOf<Design?>(null) }
+    var photo by remember { mutableStateOf<String?>(null) }
+    var voice by remember { mutableStateOf<String?>(null) }
     var size by remember { mutableStateOf("") }
     var karigar by remember { mutableStateOf(state.karigars.firstOrNull()?.name.orEmpty()) }
     var qty by remember { mutableStateOf("1") }
@@ -331,10 +355,20 @@ private fun AlterationForm(
         label = { Text("What is wrong with them?") },
         modifier = Modifier.fillMaxWidth(),
     )
+    // The reason this screen exists. A photograph of the fault and four spoken seconds
+    // about it beat any field asking somebody to write it down, and are far likelier to
+    // actually get filled in.
+    Label("SHOW WHAT IS WRONG")
+    MediaAttachments(
+        photoPath = photo,
+        voicePath = voice,
+        onPhotoChange = { photo = it },
+        onVoiceChange = { voice = it },
+    )
     ConfirmButton(
         text = "Send for alteration",
         enabled = count > 0 && !tooMany && size.isNotBlank() && karigar.isNotBlank(),
-        onClick = { onConfirm(chosen.id, size, karigar, count, note) },
+        onClick = { onConfirm(chosen.id, size, karigar, count, note, photo, voice) },
     )
 }
 // #endregion
