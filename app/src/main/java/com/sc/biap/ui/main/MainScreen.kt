@@ -31,6 +31,9 @@ import com.sc.biap.data.AccessLevelStore
 import com.sc.biap.data.SyncStatus
 import com.sc.biap.security.AppLock
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.background
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -70,7 +73,32 @@ import com.sc.biap.ui.PerformanceProfile
  */
 @Composable
 private fun MainNavigationBar(selected: MainTab, onSelect: (MainTab) -> Unit) {
-    NavigationBar {
+    // THE BAR FLOATS OVER THE CATALOGUE RATHER THAN CARVING A STRIP OUT OF IT.
+    //
+    // An opaque bar costs a band of screen permanently, on a list whose whole job is to show
+    // as many designs at once as it can. Transparent, the designs run to the bottom edge and
+    // scroll out underneath it.
+    //
+    // The gradient is what makes that readable. A label sitting directly on a scrolling
+    // photograph is unreadable at exactly the wrong moments, so the content fades into the
+    // surface colour as it passes behind: solid where the labels are, nothing at the top
+    // edge, so there is no visible line across the screen either.
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier.background(
+            Brush.verticalGradient(
+                // Clear at the top so there is no line across the screen, and fully solid by
+                // the time the labels start. The first attempt faded to 93% and a design
+                // card read straight through the words - which looks like a bug, not like
+                // space. The fade has to finish ABOVE the text, not behind it.
+                0f to Color.Transparent,
+                0.30f to scheme.surface.copy(alpha = 0.75f),
+                0.52f to scheme.surface,
+                1f to scheme.surface,
+            )
+        )
+    ) {
+    NavigationBar(containerColor = Color.Transparent, tonalElevation = 0.dp) {
         NavigationBarItem(
             selected = selected == MainTab.INVENTORY,
             onClick = { onSelect(MainTab.INVENTORY) },
@@ -95,6 +123,7 @@ private fun MainNavigationBar(selected: MainTab, onSelect: (MainTab) -> Unit) {
             },
             label = { Text("Orders") },
         )
+    }
     }
 }
 
@@ -618,7 +647,9 @@ fun MainScreen(
                     onRefresh = { viewModel.syncWithGoogleDrive() },
                     state = pullState,
                     modifier = Modifier
-                        .padding(paddingValues)
+                        // Top only. Reserving the bottom too would put the strip straight
+                        // back, which is the thing being removed.
+                        .padding(top = paddingValues.calculateTopPadding())
                         .fillMaxSize(),
                     indicator = {
                         // The Expressive indicator, which morphs through a sequence of shapes,
@@ -648,6 +679,8 @@ fun MainScreen(
                                 )
                             } else {
                                 CatalogueList(
+                                    bottomClearance =
+                                        paddingValues.calculateBottomPadding() + 96.dp,
                                     designs = data.designs,
                                     onOpenDesign = { onItemClick(DesignDetail(it.id)) },
                                     onOpenSize = { design, size ->
@@ -685,6 +718,8 @@ fun MainScreen(
                             )
                         } else {
                             OrdersList(
+                                bottomClearance =
+                                    paddingValues.calculateBottomPadding() + 96.dp,
                                 orders = orders,
                                 designs = designsById,
                                 onEdit = { onItemClick(NewOrder(orderId = it.id)) },

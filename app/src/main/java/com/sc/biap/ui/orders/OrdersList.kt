@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sc.biap.data.Design
@@ -109,10 +110,14 @@ fun OrdersList(
     onEdit: (Order) -> Unit,
     onCancel: (Order) -> Unit,
     modifier: Modifier = Modifier,
+    /** Room at the end for the navigation bar the list now scrolls underneath. */
+    bottomClearance: Dp = 96.dp,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(
+            start = 20.dp, end = 20.dp, top = 4.dp, bottom = bottomClearance,
+        ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(orders, key = { it.id }) { order ->

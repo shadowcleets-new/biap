@@ -370,11 +370,20 @@ fun CatalogueList(
     onOpenDesign: (Design) -> Unit,
     onOpenSize: (Design, SizeInventory) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Room at the end of the list for whatever floats over it.
+     *
+     * The list now runs under the navigation bar, so the last design would otherwise come to
+     * rest behind it - visible through the fade but not quite reachable.
+     */
+    bottomClearance: Dp = 96.dp,
     header: @Composable () -> Unit = {},
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(
+            start = 20.dp, end = 20.dp, top = 4.dp, bottom = bottomClearance,
+        ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "header") { header() }
