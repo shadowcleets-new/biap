@@ -164,10 +164,33 @@ interface DataRepository {
      */
     suspend fun mergeKarigar(fromId: String, intoId: String): String?
 
-    /** Send pieces to a karigar. Returns a message when it could not be done. */
+    /** Hand finished pieces to a karigar for further work. Needs them to be in stock. */
     suspend fun sendOutForJobWork(
         designId: String, size: String, karigar: String, activity: String,
         quantity: Int, note: String,
+    ): String?
+
+    /**
+     * Commission pieces that do not exist yet.
+     *
+     * Takes nothing off the shelf, so it works on a size that is empty - which is the size
+     * most likely to need making.
+     */
+    suspend fun startProduction(
+        designId: String, karigar: String, activity: String,
+        quantities: Map<String, Int>, batchNumber: Int, note: String,
+    ): String?
+
+    /** Ask a karigar for one sample of a design that does not exist yet. */
+    suspend fun startSample(
+        designName: String, karigar: String, activity: String, note: String,
+        photoPath: String?, voicePath: String?,
+    ): String?
+
+    /** Send a few defective pieces back to be put right. Takes them off the shelf. */
+    suspend fun startAlteration(
+        designId: String, size: String, karigar: String, quantity: Int, note: String,
+        photoPath: String?, voicePath: String?,
     ): String?
 
     /** Record pieces coming back from a karigar. */
@@ -175,6 +198,9 @@ interface DataRepository {
 
     /** Finish a job, whatever is or is not back. */
     suspend fun closeJobWork(jobId: String): String?
+
+    /** Judge a sample. Approving it creates the design in the catalogue. */
+    suspend fun decideSample(jobId: String, approved: Boolean): String?
 
     suspend fun addActivity(name: String): String?
     suspend fun deleteActivity(name: String)
@@ -1342,10 +1368,10 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             dao.suggestBatchNumber(designId, size)
         }
 
-    // #region Job work (v10)
+    // #region Job work (v10), grown to four kinds (v11)
 
     /**
-     * Send pieces to a karigar.
+     * Hand finished pieces to a karigar for further work.
      *
      * The shelf is reduced in the same transaction that writes the job, because the pieces
      * are no longer on it - and the job is what says where they went. Refusing to send more
@@ -1365,11 +1391,11 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
         val now = System.currentTimeMillis()
         val job = JobWork(
-            designId = designId, size = size, karigar = karigar.trim(),
+            kind = WorkKind.OUTWORK, designId = designId, size = size, karigar = karigar.trim(),
             activity = activity.trim(), sentQuantity = quantity, sentAt = now, note = note.trim(),
         )
         try {
-            dao.sendOut(job.toEntity(), now)
+            dao.sendOutWork(job.toEntity(), now, takeFromStock = true)
             null
         } catch (e: Exception) {
             e.printStackTrace()
@@ -1377,15 +1403,147 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         }
     }
 
+    /**
+     * Commission pieces that do not exist yet.
+     *
+     * NOTHING COMES OFF THE SHELF. The karigar is being given an instruction, not goods, so
+     * this works on a size standing at zero - which is the whole point, since an empty size
+     * is the one most likely to need making.
+     *
+     * Every size of one order shares a lot id, so the four rows show as one card and come
+     * back one size at a time, which is how they actually arrive.
+     */
+    override suspend fun startProduction(
+        designId: String, karigar: String, activity: String,
+        quantities: Map<String, Int>, batchNumber: Int, note: String,
+    ): String? = withContext(Dispatchers.IO) {
+        val wanted = quantities.filterValues { it > 0 }
+        if (wanted.isEmpty()) return@withContext "Enter how many of each size to make."
+        if (karigar.isBlank()) return@withContext "Choose who is making them."
+        val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+        dao.getDesignById(designId) ?: return@withContext "That design is gone."
+
+        val now = System.currentTimeMillis()
+        val lotId = java.util.UUID.randomUUID().toString()
+        val rows = wanted.map { (size, qty) ->
+            JobWork(
+                kind = WorkKind.PRODUCTION, lotId = lotId, designId = designId, size = size,
+                karigar = karigar.trim(), activity = activity.trim(), sentQuantity = qty,
+                batchNumber = batchNumber, sentAt = now, note = note.trim(),
+            ).toEntity()
+        }
+        try {
+            dao.insertJobWorks(rows)
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            "Could not start that production."
+        }
+    }
+
+    /**
+     * Ask for one sample of a design that does not exist yet.
+     *
+     * It has a working name and no design id, because half the ideas discussed never become
+     * anything and a catalogue full of those is worse than no record of them. The design is
+     * created when the sample is approved, not before.
+     */
+    override suspend fun startSample(
+        designName: String, karigar: String, activity: String, note: String,
+        photoPath: String?, voicePath: String?,
+    ): String? = withContext(Dispatchers.IO) {
+        val name = designName.trim()
+        if (name.isEmpty()) return@withContext "Give the new design a name to call it by."
+        if (karigar.isBlank()) return@withContext "Choose who is making the sample."
+        val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+
+        val now = System.currentTimeMillis()
+        val job = JobWork(
+            kind = WorkKind.SAMPLE, designName = name, karigar = karigar.trim(),
+            activity = activity.trim(), sentQuantity = 1, sentAt = now, note = note.trim(),
+            photoPath = photoPath, voicePath = voicePath,
+        )
+        try {
+            dao.insertJobWork(job.toEntity())
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            "Could not record that sample."
+        }
+    }
+
+    /**
+     * Send defective pieces back to be put right.
+     *
+     * These DO come off the shelf - they are real pieces being handed over - and they are
+     * the ones that get forgotten, which is why their patience runs out in ten days rather
+     * than thirty.
+     */
+    override suspend fun startAlteration(
+        designId: String, size: String, karigar: String, quantity: Int, note: String,
+        photoPath: String?, voicePath: String?,
+    ): String? = withContext(Dispatchers.IO) {
+        if (quantity <= 0) return@withContext "Enter how many pieces need altering."
+        if (karigar.isBlank()) return@withContext "Choose who is altering them."
+        val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+        val row = dao.getDesignById(designId) ?: return@withContext "That design is gone."
+        val inStock = row.inventories.firstOrNull { it.size == size }?.stock ?: 0
+        if (quantity > inStock) return@withContext "Only $inStock in stock for $size."
+
+        val now = System.currentTimeMillis()
+        val job = JobWork(
+            kind = WorkKind.ALTERATION, designId = designId, size = size,
+            karigar = karigar.trim(), activity = "Alteration", sentQuantity = quantity,
+            sentAt = now, note = note.trim(), photoPath = photoPath, voicePath = voicePath,
+        )
+        try {
+            dao.sendOutWork(job.toEntity(), now, takeFromStock = true)
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            "Could not record that alteration."
+        }
+    }
+
+    /**
+     * Record pieces coming back.
+     *
+     * Where they go depends on where they came from. Produced pieces are NEW and become a
+     * batch of their own; returned pieces go back into the batch they left. Putting produced
+     * pieces back into an old batch would inflate it past the quantity it was made at, and
+     * the batch history would stop describing anything that happened.
+     */
     override suspend fun receiveJobWork(jobId: String, quantity: Int): String? =
         withContext(Dispatchers.IO) {
             val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
             val row = dao.jobWorkById(jobId) ?: return@withContext "That job is gone."
             val now = System.currentTimeMillis()
-            val updated = receive(row.toDomain(), quantity, now)
+            val job = row.toDomain()
+            val updated = receive(job, quantity, now)
                 ?: return@withContext "That is more than went out."
             try {
-                dao.receiveBack(updated.toEntity(), quantity, now)
+                when {
+                    !job.kind.addsToStockOnReceive -> dao.insertJobWork(updated.toEntity())
+
+                    job.kind == WorkKind.PRODUCTION -> {
+                        val number = job.batchNumber.takeIf { it > 0 }
+                            ?: dao.suggestBatchNumber(job.designId, job.size)
+                        dao.receiveProducedWork(
+                            updated.toEntity(),
+                            BatchEntity(
+                                id = java.util.UUID.randomUUID().toString(),
+                                designId = job.designId, size = job.size, number = number,
+                                quantity = quantity, remaining = quantity,
+                                price = dao.priceFor(job.designId, job.size) ?: 0L,
+                                createdAt = now, updatedAt = now,
+                                note = "From ${job.karigar}",
+                            ),
+                            quantity,
+                        )
+                    }
+
+                    else -> dao.receiveReturnedWork(updated.toEntity(), quantity, now)
+                }
                 null
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -1411,6 +1569,44 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             "Could not close that."
         }
     }
+
+    /**
+     * Judge a sample.
+     *
+     * Approving it creates the design, because that is the moment it becomes a real thing the
+     * workshop makes - before that it is an idea, and after it the owner will want to show it
+     * to a customer whether or not any stock exists yet. It is created with no sizes and no
+     * stock, which is honest: nothing has been made.
+     */
+    override suspend fun decideSample(jobId: String, approved: Boolean): String? =
+        withContext(Dispatchers.IO) {
+            val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+            val row = dao.jobWorkById(jobId) ?: return@withContext "That sample is gone."
+            val job = row.toDomain()
+            val now = System.currentTimeMillis()
+            try {
+                dao.insertJobWork(decideSample(job, approved, now).toEntity())
+                if (approved) {
+                    // No sizes and no stock, which is honest: nothing has been made yet.
+                    // The owner prices it and sets its sizes when the first run is ordered.
+                    dao.insertDesign(
+                        DesignEntity(
+                            id = java.util.UUID.randomUUID().toString(),
+                            name = job.designName.ifBlank { "New design" },
+                            category = "Salwar Kameez",
+                            imagePath = job.photoPath,
+                            customFields = emptyMap(),
+                            karigars = listOf(job.karigar),
+                            updatedAt = now,
+                        )
+                    )
+                }
+                null
+            } catch (e: Exception) {
+                e.printStackTrace()
+                "Could not record that decision."
+            }
+        }
     // #endregion
 
     override suspend fun addBatch(

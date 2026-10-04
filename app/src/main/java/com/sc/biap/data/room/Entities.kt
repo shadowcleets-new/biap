@@ -8,6 +8,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Relation
 import com.sc.biap.data.Batch
 import com.sc.biap.data.JobWork
+import com.sc.biap.data.SampleOutcome
+import com.sc.biap.data.WorkKind
 import com.sc.biap.data.Design
 import com.sc.biap.data.DesignPhoto
 import com.sc.biap.data.Karigar
@@ -169,6 +171,17 @@ data class JobWorkEntity(
     val closedAt: Long,
     val note: String = "",
     val updatedAt: Long,
+    // Added in v11. Defaulted throughout so every row written by v10 reads back as what it
+    // was then: a consignment of finished stock sent out for work.
+    val kind: String = "OUTWORK",
+    val lotId: String = "",
+    val designName: String = "",
+    val batchNumber: Int = 0,
+    val outcome: String = "PENDING",
+    val photoPath: String? = null,
+    val photoRef: String? = null,
+    val voicePath: String? = null,
+    val voiceRef: String? = null,
 )
 
 /** Tombstone, so a job deleted on one device does not come back from another. */
@@ -311,15 +324,27 @@ fun SizeInventory.toEntity(designId: String): SizeInventoryEntity {
 }
 
 fun JobWorkEntity.toDomain(): JobWork = JobWork(
-    id = id, designId = designId, size = size, karigar = karigar, activity = activity,
-    sentQuantity = sentQuantity, receivedQuantity = receivedQuantity, sentAt = sentAt,
-    lastReceivedAt = lastReceivedAt, closedAt = closedAt, note = note, updatedAt = updatedAt,
+    id = id,
+    // An unrecognised kind reads as OUTWORK rather than throwing: a row written by a newer
+    // build on another device must not crash this one on sync.
+    kind = runCatching { WorkKind.valueOf(kind) }.getOrDefault(WorkKind.OUTWORK),
+    lotId = lotId.ifBlank { id },
+    designId = designId, designName = designName, size = size, karigar = karigar,
+    activity = activity, sentQuantity = sentQuantity, receivedQuantity = receivedQuantity,
+    batchNumber = batchNumber, sentAt = sentAt, lastReceivedAt = lastReceivedAt,
+    closedAt = closedAt,
+    outcome = runCatching { SampleOutcome.valueOf(outcome) }.getOrDefault(SampleOutcome.PENDING),
+    photoPath = photoPath, photoRef = photoRef, voicePath = voicePath, voiceRef = voiceRef,
+    note = note, updatedAt = updatedAt,
 )
 
 fun JobWork.toEntity(): JobWorkEntity = JobWorkEntity(
     id = id, designId = designId, size = size, karigar = karigar, activity = activity,
     sentQuantity = sentQuantity, receivedQuantity = receivedQuantity, sentAt = sentAt,
     lastReceivedAt = lastReceivedAt, closedAt = closedAt, note = note, updatedAt = updatedAt,
+    kind = kind.name, lotId = lotId, designName = designName, batchNumber = batchNumber,
+    outcome = outcome.name, photoPath = photoPath, photoRef = photoRef,
+    voicePath = voicePath, voiceRef = voiceRef,
 )
 
 fun BatchEntity.toDomain(): Batch = Batch(

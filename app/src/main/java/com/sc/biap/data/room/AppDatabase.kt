@@ -24,7 +24,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         JobWorkEntity::class,
         DeletedJobWorkEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -183,6 +183,30 @@ abstract class AppDatabase : RoomDatabase() {
          * building, and inventing consignments to explain stock that moved for other reasons
          * would put fiction in a ledger whose whole value is being believed.
          */
+/**
+         * v11: job work grows from one kind to four.
+         *
+         * Added as columns with defaults rather than as a new table, because every existing
+         * row IS one of the four - a consignment of finished stock sent out for work - and
+         * splitting them would have meant two places to look for the same question.
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE job_work ADD COLUMN kind TEXT NOT NULL DEFAULT 'OUTWORK'")
+                db.execSQL("ALTER TABLE job_work ADD COLUMN lotId TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE job_work ADD COLUMN designName TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE job_work ADD COLUMN batchNumber INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE job_work ADD COLUMN outcome TEXT NOT NULL DEFAULT 'PENDING'")
+                db.execSQL("ALTER TABLE job_work ADD COLUMN photoPath TEXT")
+                db.execSQL("ALTER TABLE job_work ADD COLUMN photoRef TEXT")
+                db.execSQL("ALTER TABLE job_work ADD COLUMN voicePath TEXT")
+                db.execSQL("ALTER TABLE job_work ADD COLUMN voiceRef TEXT")
+                // An existing row is its own lot of one; toDomain falls back to the id, and
+                // this makes the stored data agree with that rather than relying on it.
+                db.execSQL("UPDATE job_work SET lotId = id WHERE lotId = ''")
+            }
+        }
+
         val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -281,7 +305,8 @@ abstract class AppDatabase : RoomDatabase() {
         val ALL_MIGRATIONS: Array<Migration> = arrayOf(
             MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
             MIGRATION_8_9,
-            MIGRATION_9_10
+            MIGRATION_9_10,
+            MIGRATION_10_11
         )
     }
 }

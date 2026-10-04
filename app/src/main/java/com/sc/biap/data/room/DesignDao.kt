@@ -576,23 +576,62 @@ interface DesignDao {
     suspend fun insertDeletedJobWorks(deleted: List<DeletedJobWorkEntity>)
 
     /**
-     * Send pieces out: the job is written and the shelf is reduced in one transaction.
+     * Write the work, and move the shelf only if this kind of work actually moves it.
      *
-     * Together or not at all. A job written without the stock moving shows pieces in two
-     * places at once; stock moved without a job shows them nowhere.
+     * Commissioning new pieces takes nothing: they do not exist yet, so there is nothing to
+     * hand over. Only an alteration or outwork gives real pieces away.
+     *
+     * BOTH HALVES OF THE SHELF MOVE. The stock column and the batch ledger are separate - a
+     * design from before batches has stock and no ledger - so reducing one without the other
+     * leaves the two disagreeing about the same pieces. The first version of this moved only
+     * the ledger, which meant sending pieces out never reduced stock at all.
      */
     @Transaction
-    suspend fun sendOut(job: JobWorkEntity, now: Long) {
+    suspend fun sendOutWork(job: JobWorkEntity, now: Long, takeFromStock: Boolean) {
         insertJobWork(job)
-        takeFromLedger(job.designId, job.size, job.sentQuantity, now)
+        if (takeFromStock && job.size.isNotBlank() && job.designId.isNotBlank()) {
+            decrementStock(job.designId, job.size, job.sentQuantity)
+            takeFromLedger(job.designId, job.size, job.sentQuantity, now)
+            touchDesign(job.designId, now)
+        }
     }
 
-    /** Pieces back on the shelf, and the job updated to say so. */
+    /**
+     * Pieces coming back to a shelf they left.
+     *
+     * For an alteration or outwork only. The pieces are returning to the batch they came
+     * from, so the ledger takes them back rather than gaining a new entry.
+     */
     @Transaction
-    suspend fun receiveBack(job: JobWorkEntity, quantity: Int, now: Long) {
+    suspend fun receiveReturnedWork(job: JobWorkEntity, quantity: Int, now: Long) {
         insertJobWork(job)
-        returnToLedger(job.designId, job.size, quantity, now)
+        if (job.size.isNotBlank() && job.designId.isNotBlank()) {
+            incrementStock(job.designId, job.size, quantity)
+            returnToLedger(job.designId, job.size, quantity, now)
+            touchDesign(job.designId, now)
+        }
     }
+
+    /**
+     * Pieces arriving from production, which have never been on the shelf before.
+     *
+     * These are NEW, so they become a batch of their own rather than returning to one. Doing
+     * it the other way would inflate an old batch past the quantity it was made at, and the
+     * batch history would stop describing anything that happened.
+     */
+    @Transaction
+    suspend fun receiveProducedWork(job: JobWorkEntity, batch: BatchEntity, quantity: Int) {
+        insertJobWork(job)
+        addBatch(batch)
+    }
+
+    /** The price a size is sold at, so a produced batch records what it was worth. */
+    @Query("SELECT price FROM size_inventories WHERE designId = :designId AND size = :size")
+    suspend fun priceFor(designId: String, size: String): Long?
+
+    /** Only the work still open, for deciding a lot's next batch number. */
+    @Query("SELECT * FROM job_work WHERE lotId = :lotId")
+    suspend fun jobWorkForLot(lotId: String): List<JobWorkEntity>
     // #endregion
 
 }
