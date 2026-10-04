@@ -99,6 +99,7 @@ fun SizeBatchSheet(
     activities: List<String> = emptyList(),
     onAddBatch: (number: Int, quantity: Int, price: Long, note: String) -> Unit,
     onSendOut: (karigar: String, activity: String, quantity: Int, note: String) -> Unit = { _, _, _, _ -> },
+    onMakeMore: (karigar: String, activity: String, quantity: Int, note: String) -> Unit = { _, _, _, _ -> },
     onReceive: (jobId: String, quantity: Int) -> Unit = { _, _ -> },
     onCloseJob: (jobId: String) -> Unit = {},
     onResetSize: () -> Unit,
@@ -109,6 +110,7 @@ fun SizeBatchSheet(
     val scheme = MaterialTheme.colorScheme
     var adding by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
+    var makingMore by remember { mutableStateOf(false) }
     var receiving by remember { mutableStateOf<JobWork?>(null) }
     var confirmingReset by remember { mutableStateOf(false) }
 
@@ -186,13 +188,23 @@ fun SizeBatchSheet(
                     Spacer(Modifier.width(6.dp))
                     Text("Add batch")
                 }
+                // MAKE MORE IS NEVER DISABLED, least of all at zero.
+                //
+                // Commissioning pieces takes nothing off the shelf - the karigar is being
+                // given an instruction, not goods - so an empty size is exactly the one that
+                // should be orderable. The old single "Send out" button got this backwards
+                // and went grey precisely when it was most needed.
                 OutlinedButton(
-                    onClick = { sending = true },
-                    enabled = inventory.stock > 0,
+                    onClick = { makingMore = true },
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("Send out")
+                    Text("Make more")
                 }
+            }
+
+            // Handing real pieces over, which does need them to exist.
+            TextButton(onClick = { sending = true }, enabled = inventory.stock > 0) {
+                Text("Send these pieces for work")
             }
 
             TextButton(onClick = onEditSizes) { Text("Edit sizes") }
@@ -216,6 +228,20 @@ fun SizeBatchSheet(
                 adding = false
             },
             onDismiss = { adding = false },
+        )
+    }
+
+    if (makingMore) {
+        MakeMoreDialog(
+            size = inventory.size,
+            inStock = inventory.stock,
+            karigars = karigars,
+            activities = activities,
+            onConfirm = { karigar, activity, quantity, note ->
+                onMakeMore(karigar, activity, quantity, note)
+                makingMore = false
+            },
+            onDismiss = { makingMore = false },
         )
     }
 
@@ -750,3 +776,74 @@ private fun rememberDictation(
     }
 }
 // #endregion
+
+/**
+ * Ordering more of a size.
+ *
+ * Deliberately says nothing about stock running out, because the pieces being ordered are not
+ * coming off the shelf - it is an instruction to a karigar, and the shelf is untouched until
+ * they arrive. The quantity is NOT pre-filled from stock for the same reason: what is there
+ * now says nothing about how many to make.
+ */
+@Composable
+private fun MakeMoreDialog(
+    size: String,
+    inStock: Int,
+    karigars: List<String>,
+    activities: List<String>,
+    onConfirm: (karigar: String, activity: String, quantity: Int, note: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var karigar by remember { mutableStateOf(karigars.firstOrNull().orEmpty()) }
+    var activity by remember { mutableStateOf(activities.firstOrNull().orEmpty()) }
+    var quantity by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+
+    val count = quantity.toIntOrNull() ?: 0
+    val valid = count > 0 && karigar.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Make more of size $size") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    if (inStock == 0)
+                        "This size is out of stock. Nothing comes off the shelf - these are " +
+                            "being made, and they go into stock when they arrive."
+                    else
+                        "$inStock in stock now. These are additional, and go into stock when " +
+                            "they arrive.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Label("WHO IS MAKING THEM")
+                PickRow(options = karigars, selected = karigar, onSelect = { karigar = it })
+                Label("WHAT WORK")
+                PickRow(options = activities, selected = activity, onSelect = { activity = it })
+                OutlinedTextField(
+                    value = quantity,
+                    onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) quantity = it },
+                    label = { Text("How many to make") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { if (it.length <= 120) note = it },
+                    label = { Text("Note (optional)") },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(karigar, activity, count, note) }, enabled = valid) {
+                Text("Order them")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}

@@ -237,6 +237,9 @@ fun DesignDetailScreen(
             onSendOut = { karigar, activity, quantity, note ->
                 viewModel.sendOut(live.size, karigar, activity, quantity, note)
             },
+            onMakeMore = { karigar, activity, quantity, note ->
+                viewModel.makeMore(live.size, karigar, activity, quantity, note)
+            },
             onReceive = { jobId, quantity -> viewModel.receiveJob(jobId, quantity) },
             onCloseJob = { viewModel.closeJob(it) },
             onResetSize = { viewModel.resetSize(live.size) },

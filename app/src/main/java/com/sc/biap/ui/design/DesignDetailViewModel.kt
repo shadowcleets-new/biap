@@ -132,6 +132,15 @@ class DesignDetailViewModel(
         }
     }
 
+    /** Order more of a size. Nothing leaves the shelf, so it works at zero stock. */
+    fun makeMore(size: String, karigar: String, activity: String, quantity: Int, note: String) {
+        viewModelScope.launch {
+            _message.value = repository.startProduction(
+                designId, karigar, activity, mapOf(size to quantity), 0, note,
+            )
+        }
+    }
+
     fun receiveJob(jobId: String, quantity: Int) {
         viewModelScope.launch { _message.value = repository.receiveJobWork(jobId, quantity) }
     }
