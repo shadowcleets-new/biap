@@ -30,6 +30,8 @@ import com.sc.biap.ui.orders.NewOrderScreen
 import com.sc.biap.ui.settings.SettingsScreen
 import com.sc.biap.ui.profile.AccessManagementScreen
 import com.sc.biap.ui.hub.BusinessHubScreen
+import com.sc.biap.ui.hub.KarigarActivitiesScreen
+import com.sc.biap.ui.hub.WorkManagementScreen
 import com.sc.biap.ui.profile.ProfileScreen
 import com.sc.biap.ui.rememberPerformanceProfile
 
@@ -170,6 +172,20 @@ fun MainNavigation() {
         }
         entry<BusinessHub> {
           BusinessHubScreen(
+            onBack = { backStack.removeLastOrNull() },
+            onKarigarsAndActivities = { backStack.add(KarigarActivities) },
+            onWorkManagement = { backStack.add(WorkManagement) },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<KarigarActivities> {
+          KarigarActivitiesScreen(
+            onBack = { backStack.removeLastOrNull() },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<WorkManagement> {
+          WorkManagementScreen(
             onBack = { backStack.removeLastOrNull() },
             modifier = Modifier.safeDrawingPadding()
           )

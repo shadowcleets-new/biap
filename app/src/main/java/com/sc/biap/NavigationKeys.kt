@@ -30,3 +30,7 @@ import kotlinx.serialization.Serializable
 
 /** The workshop side of the business: who works here and what each of them does. */
 @Serializable data object BusinessHub : NavKey
+
+/** The Hub's two halves, each its own screen so neither has to be scrolled past. */
+@Serializable data object KarigarActivities : NavKey
+@Serializable data object WorkManagement : NavKey

@@ -123,13 +123,12 @@ fun defaultBusinessHubViewModel(): BusinessHubViewModel {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun BusinessHubScreen(
+fun KarigarActivitiesScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: BusinessHubViewModel = defaultBusinessHubViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val outWithKarigars by viewModel.outWithKarigars.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val scheme = MaterialTheme.colorScheme
     val snackbars = remember { SnackbarHostState() }
@@ -209,7 +208,7 @@ fun BusinessHubScreen(
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(
-                title = { Text("Business Hub") },
+                title = { Text("Karigars & Activities") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -262,25 +261,8 @@ fun BusinessHubScreen(
                     )
                 }
 
-                // Shown even when there is nothing out. Hidden-when-empty made the whole
-                // feature invisible until the first time it was used, which is precisely
-                // when nobody knows to go looking for it.
-                item(key = "out-heading") {
-                    SectionHeading(
-                        title = "Out with karigars",
-                        hint = "Pieces that have left the building.",
-                    )
-                }
-                if (outWithKarigars.isEmpty()) {
-                    item(key = "out-empty") { NothingOutYet() }
-                } else {
-                    items(outWithKarigars.size, key = { "out-" + outWithKarigars[it].karigar }) { i ->
-                        OutLoadRow(outWithKarigars[i])
-                    }
-                }
-
                 item(key = "activities-heading") {
-                    SectionHeading(
+                    HubSectionHeading(
                         title = "Activities",
                         hint = "Hold a name above, then drag it onto the work they do.",
                         onAdd = { addActivityOpen = true },
@@ -496,100 +478,8 @@ fun BusinessHubScreen(
 
 // #region 2. The board
 
-/**
- * The empty state, which exists to teach rather than to apologise.
- *
- * It names the exact path to the thing, because the feature has no other entrance: a reader
- * who does not already know about "Send out" cannot find it from here by exploring.
- */
 @Composable
-private fun NothingOutYet() {
-    val scheme = MaterialTheme.colorScheme
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(scheme.surfaceContainerHigh)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            "Nothing is out at the moment.",
-            style = MaterialTheme.typography.titleSmall,
-            color = scheme.onSurface,
-        )
-        Text(
-            "When you send pieces to a karigar for printing, dyeing or any other work, they " +
-                "come off the shelf and appear here - with how many, who has them and how " +
-                "long they have been gone.",
-            style = MaterialTheme.typography.bodySmall,
-            color = scheme.onSurfaceVariant,
-        )
-        Text(
-            "To send some out: open a design, tap a size, then Send out.",
-            style = MaterialTheme.typography.bodySmall,
-            color = scheme.onSurfaceVariant,
-        )
-    }
-}
-
-/**
- * One karigar's outstanding work.
- *
- * Ordered by the longest wait rather than the biggest pile, because fifty pieces sent
- * yesterday are fine and six sent a month ago are a phone call.
- */
-@Composable
-private fun OutLoadRow(load: KarigarLoad) {
-    val scheme = MaterialTheme.colorScheme
-    val late = load.oldestDaysOut >= JOB_OVERDUE_DAYS
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (late) scheme.errorContainer else scheme.surfaceContainerHigh)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        KarigarIcon(
-            modifier = Modifier.size(18.dp),
-            tint = if (late) scheme.onErrorContainer else scheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                load.karigar,
-                style = MaterialTheme.typography.titleSmall,
-                color = if (late) scheme.onErrorContainer else scheme.onSurface,
-            )
-            Text(
-                buildString {
-                    append(if (load.jobs == 1) "1 lot" else "${load.jobs} lots")
-                    append(" - longest ")
-                    append(
-                        when (load.oldestDaysOut) {
-                            0 -> "sent today"
-                            1 -> "1 day"
-                            else -> "${load.oldestDaysOut} days"
-                        }
-                    )
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = if (late) scheme.onErrorContainer else scheme.onSurfaceVariant,
-            )
-        }
-        Text(
-            "${load.pieces}",
-            style = MaterialTheme.typography.headlineSmall,
-            color = if (late) scheme.onErrorContainer else scheme.onSurface,
-        )
-    }
-}
-
-@Composable
-private fun SectionHeading(title: String, hint: String? = null, onAdd: (() -> Unit)? = null) {
+internal fun HubSectionHeading(title: String, hint: String? = null, onAdd: (() -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -626,7 +516,7 @@ private fun KarigarPool(
 ) {
     val scheme = MaterialTheme.colorScheme
     Column {
-        SectionHeading("Karigars", "Tap a name to rename or remove.", onAdd)
+        HubSectionHeading("Karigars", "Tap a name to rename or remove.", onAdd)
         Spacer(Modifier.height(8.dp))
         if (karigars.isEmpty()) {
             Text(
