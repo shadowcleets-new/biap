@@ -4,6 +4,8 @@ package com.sc.biap.ui.design
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sc.biap.data.Batch
+import com.sc.biap.data.attributeVocabulary
+import com.sc.biap.data.AttributeValue
 import com.sc.biap.data.suggestCut
 import com.sc.biap.data.sizeDemand
 import com.sc.biap.data.productionHistory
@@ -102,6 +104,12 @@ class DesignDetailViewModel(
         }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DesignInsights())
+
+    /** What each attribute already holds across the catalogue, to pick instead of retype. */
+    val vocabulary: StateFlow<Map<String, List<AttributeValue>>> = repository.biData
+        .map { attributeVocabulary(it.designs) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     suspend fun suggestBatchNumber(size: String): Int = repository.suggestBatchNumber(designId, size)
 

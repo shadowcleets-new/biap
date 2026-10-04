@@ -33,6 +33,9 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.ui.focus.onFocusChanged
+import com.sc.biap.data.suggestValues
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -144,6 +147,7 @@ fun DesignDetailScreen(
 
     val batchesBySize by viewModel.batchesBySize.collectAsStateWithLifecycle()
     val insights by viewModel.insights.collectAsStateWithLifecycle()
+    val vocabulary by viewModel.vocabulary.collectAsStateWithLifecycle()
     val hubKarigars by viewModel.hubKarigars.collectAsStateWithLifecycle()
     val detailMessage by viewModel.message.collectAsStateWithLifecycle()
 
@@ -485,6 +489,9 @@ fun DesignDetailScreen(
                             design = design,
                             isEditing = true,
                             editCustomFields = editCustomFields,
+                            suggestionsFor = { field, typed ->
+                                suggestValues(vocabulary, field, typed)
+                            },
                             onEditCustomFieldsChange = { editCustomFields = it },
                         )
                     } else {
@@ -594,6 +601,8 @@ private fun SpecificationsCard(
     design: Design,
     isEditing: Boolean,
     editCustomFields: Map<String, String>,
+    /** What this field already holds elsewhere in the catalogue, to pick instead of retype. */
+    suggestionsFor: (field: String, typed: String) -> List<String> = { _, _ -> emptyList() },
     onEditCustomFieldsChange: (Map<String, String>) -> Unit,
 ) {
     // Specifications Card
@@ -670,6 +679,7 @@ private fun SpecificationsCard(
                     filteredSpecs.forEach { (key, value) ->
                         val cleanLabel = if (selectedSpecTab < 3) key.removePrefix(prefix) else key
                         if (isEditing) {
+                            var fieldFocused by remember(key) { mutableStateOf(false) }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.fillMaxWidth().padding(vertical = AtelierSpacing.Micro),
@@ -685,7 +695,9 @@ private fun SpecificationsCard(
                                         }
                                     },
                                     label = { Text(cleanLabel) },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .onFocusChanged { fieldFocused = it.isFocused },
                                     shape = AtelierShapes.CornerMedium
                                 )
                                 val defaultFields = setOf(
@@ -702,6 +714,27 @@ private fun SpecificationsCard(
                                         }
                                     ) {
                                         Icon(Icons.Default.Clear, contentDescription = "Remove")
+                                    }
+                                }
+                            }
+                            val picks = if (fieldFocused) suggestionsFor(key, value) else emptyList()
+                            if (picks.isNotEmpty()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState())
+                                        .padding(bottom = AtelierSpacing.Compact),
+                                    horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Micro),
+                                ) {
+                                    picks.forEach { pick ->
+                                        SuggestionChip(
+                                            onClick = {
+                                                val updated = editCustomFields.toMutableMap()
+                                                updated[key] = pick
+                                                onEditCustomFieldsChange(updated)
+                                            },
+                                            label = { Text(pick) },
+                                        )
                                     }
                                 }
                             }

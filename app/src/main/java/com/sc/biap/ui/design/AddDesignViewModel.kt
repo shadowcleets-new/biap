@@ -1,5 +1,12 @@
 package com.sc.biap.ui.design
 
+import com.sc.biap.data.AttributeValue
+import com.sc.biap.data.attributeVocabulary
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sc.biap.data.DataRepository
@@ -130,6 +137,17 @@ class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
             }
         }
     }
+
+    /**
+     * What has already been typed into each attribute across the catalogue.
+     *
+     * Rebuilt from the designs rather than stored, so a fabric used for the first time today
+     * is offered on every design tomorrow with nothing to maintain.
+     */
+    val vocabulary: StateFlow<Map<String, List<AttributeValue>>> = repository.biData
+        .map { attributeVocabulary(it.designs) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     fun updateCustomFieldValue(key: String, value: String) {
         _uiState.update { current ->

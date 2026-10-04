@@ -53,6 +53,9 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.ui.focus.onFocusChanged
+import com.sc.biap.data.suggestValues
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -143,6 +146,7 @@ fun AddDesignScreen(
     viewModel: AddDesignViewModel = defaultAddDesignViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val vocabulary by viewModel.vocabulary.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -307,6 +311,7 @@ fun AddDesignScreen(
                 AttributesAndCustomFieldsCard(
                     customFields = state.customFields,
                     globalCustomFields = state.globalCustomFields,
+                    suggestionsFor = { field, typed -> suggestValues(vocabulary, field, typed) },
                     onValueChange = viewModel::updateCustomFieldValue,
                     onRemoveField = viewModel::removeCustomField,
                     onAddField = viewModel::addCustomField
@@ -781,6 +786,8 @@ private fun KarigarAssignmentCard(
 private fun AttributesAndCustomFieldsCard(
     customFields: Map<String, String>,
     globalCustomFields: Set<String>,
+    /** What has already been typed into this field elsewhere in the catalogue. */
+    suggestionsFor: (field: String, typed: String) -> List<String>,
     onValueChange: (String, String) -> Unit,
     onRemoveField: (String) -> Unit,
     onAddField: (String, Boolean) -> Unit
@@ -821,6 +828,7 @@ private fun AttributesAndCustomFieldsCard(
                         value = value,
                         isGlobal = globalCustomFields.contains(key),
                         isRemovable = !DefaultAttributeFields.contains(key),
+                        suggestions = suggestionsFor(key, value),
                         onValueChange = { onValueChange(key, it) },
                         onRemove = { onRemoveField(key) }
                     )
@@ -885,28 +893,54 @@ private fun AttributeFieldRow(
     value: String,
     isGlobal: Boolean,
     isRemovable: Boolean,
+    suggestions: List<String>,
     onValueChange: (String) -> Unit,
     onRemove: () -> Unit
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
-    ) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = { if (it.length <= MAX_FIELD_VALUE_LENGTH) onValueChange(it) },
-            label = { Text(if (isGlobal) "$label (Global)" else label) },
-            modifier = Modifier.weight(1f),
-            shape = AtelierShapes.CornerMedium
-        )
+    // Offered only while the field has the cursor. Shown always, they would be five rows of
+    // chips between the owner and the next field; shown on focus, they are there exactly
+    // when a value is being decided.
+    var focused by remember { mutableStateOf(false) }
 
-        if (isRemovable) {
-            IconButton(
-                onClick = onRemove,
-                modifier = Modifier.minimumInteractiveComponentSize()
+    Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Micro)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { if (it.length <= MAX_FIELD_VALUE_LENGTH) onValueChange(it) },
+                label = { Text(if (isGlobal) "$label (Global)" else label) },
+                modifier = Modifier
+                    .weight(1f)
+                    .onFocusChanged { focused = it.isFocused },
+                shape = AtelierShapes.CornerMedium
+            )
+
+            if (isRemovable) {
+                IconButton(
+                    onClick = onRemove,
+                    modifier = Modifier.minimumInteractiveComponentSize()
+                ) {
+                    Icon(Icons.Default.Clear, contentDescription = "Remove")
+                }
+            }
+        }
+
+        if (focused && suggestions.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(AtelierSpacing.Micro),
             ) {
-                Icon(Icons.Default.Clear, contentDescription = "Remove")
+                suggestions.forEach { suggestion ->
+                    SuggestionChip(
+                        onClick = { onValueChange(suggestion) },
+                        label = { Text(suggestion) },
+                    )
+                }
             }
         }
     }
