@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sc.biap.data.DataRepository
 import com.sc.biap.data.Karigar
+import com.sc.biap.data.loadByKarigar
+import com.sc.biap.data.KarigarLoad
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -51,6 +53,18 @@ class BusinessHubViewModel(private val repository: DataRepository) : ViewModel()
         }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BusinessHubUiState())
+
+    /**
+     * What is out of the building, worst-delayed first.
+     *
+     * Separate from [state] because it answers a different question: that one is who does
+     * what, this one is where the goods are. Combining them would make the board redraw
+     * every time a consignment moved.
+     */
+    val outWithKarigars: StateFlow<List<KarigarLoad>> = repository.biData
+        .map { loadByKarigar(it.jobWork, System.currentTimeMillis()) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Drop a karigar onto an activity. Idempotent, so a second drop is not an error. */
     fun assign(karigarId: String, activity: String) {

@@ -76,6 +76,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sc.biap.data.DefaultDataRepository
 import com.sc.biap.data.Karigar
+import com.sc.biap.data.KarigarLoad
+import com.sc.biap.data.JOB_OVERDUE_DAYS
 import com.sc.biap.data.rankMergeTargets
 import com.sc.biap.data.mergeCandidateScore
 import com.sc.biap.data.LIKELY_MERGE_SCORE
@@ -127,6 +129,7 @@ fun BusinessHubScreen(
     viewModel: BusinessHubViewModel = defaultBusinessHubViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val outWithKarigars by viewModel.outWithKarigars.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val scheme = MaterialTheme.colorScheme
     val snackbars = remember { SnackbarHostState() }
@@ -257,6 +260,18 @@ fun BusinessHubScreen(
                         onMerge = { merging = it },
                         onAdd = { addKarigarOpen = true },
                     )
+                }
+
+                if (outWithKarigars.isNotEmpty()) {
+                    item(key = "out-heading") {
+                        SectionHeading(
+                            title = "Out with karigars",
+                            hint = "Pieces that have left the building.",
+                        )
+                    }
+                    items(outWithKarigars.size, key = { "out-" + outWithKarigars[it].karigar }) { i ->
+                        OutLoadRow(outWithKarigars[i])
+                    }
                 }
 
                 item(key = "activities-heading") {
@@ -475,6 +490,60 @@ fun BusinessHubScreen(
 // #endregion
 
 // #region 2. The board
+
+/**
+ * One karigar's outstanding work.
+ *
+ * Ordered by the longest wait rather than the biggest pile, because fifty pieces sent
+ * yesterday are fine and six sent a month ago are a phone call.
+ */
+@Composable
+private fun OutLoadRow(load: KarigarLoad) {
+    val scheme = MaterialTheme.colorScheme
+    val late = load.oldestDaysOut >= JOB_OVERDUE_DAYS
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (late) scheme.errorContainer else scheme.surfaceContainerHigh)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        KarigarIcon(
+            modifier = Modifier.size(18.dp),
+            tint = if (late) scheme.onErrorContainer else scheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                load.karigar,
+                style = MaterialTheme.typography.titleSmall,
+                color = if (late) scheme.onErrorContainer else scheme.onSurface,
+            )
+            Text(
+                buildString {
+                    append(if (load.jobs == 1) "1 lot" else "${load.jobs} lots")
+                    append(" - longest ")
+                    append(
+                        when (load.oldestDaysOut) {
+                            0 -> "sent today"
+                            1 -> "1 day"
+                            else -> "${load.oldestDaysOut} days"
+                        }
+                    )
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (late) scheme.onErrorContainer else scheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            "${load.pieces}",
+            style = MaterialTheme.typography.headlineSmall,
+            color = if (late) scheme.onErrorContainer else scheme.onSurface,
+        )
+    }
+}
 
 @Composable
 private fun SectionHeading(title: String, hint: String? = null, onAdd: (() -> Unit)? = null) {

@@ -148,6 +148,8 @@ fun DesignDetailScreen(
     val batchesBySize by viewModel.batchesBySize.collectAsStateWithLifecycle()
     val insights by viewModel.insights.collectAsStateWithLifecycle()
     val vocabulary by viewModel.vocabulary.collectAsStateWithLifecycle()
+    val jobsBySize by viewModel.jobsBySize.collectAsStateWithLifecycle()
+    val hubActivities by viewModel.hubActivities.collectAsStateWithLifecycle()
     val hubKarigars by viewModel.hubKarigars.collectAsStateWithLifecycle()
     val detailMessage by viewModel.message.collectAsStateWithLifecycle()
 
@@ -226,9 +228,17 @@ fun DesignDetailScreen(
             inventory = live,
             batches = batchesBySize[live.size].orEmpty(),
             suggestedNumber = suggestedBatchNumber,
+            jobs = jobsBySize[live.size].orEmpty(),
+            karigars = hubKarigars.map { it.name },
+            activities = hubActivities,
             onAddBatch = { number, quantity, price, note ->
                 viewModel.addBatch(live.size, number, quantity, price, note)
             },
+            onSendOut = { karigar, activity, quantity, note ->
+                viewModel.sendOut(live.size, karigar, activity, quantity, note)
+            },
+            onReceive = { jobId, quantity -> viewModel.receiveJob(jobId, quantity) },
+            onCloseJob = { viewModel.closeJob(it) },
             onResetSize = { viewModel.resetSize(live.size) },
             onEditSizes = { sheetSize = null; isEditing = true },
             onDismiss = { sheetSize = null },

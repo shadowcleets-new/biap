@@ -42,6 +42,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sc.biap.data.Batch
+import com.sc.biap.data.JOB_OVERDUE_DAYS
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.horizontalScroll
+import com.sc.biap.data.JobWork
 import com.sc.biap.data.SizeInventory
 import com.sc.biap.ui.main.rupees
 import com.sc.biap.util.FileUtils
@@ -81,7 +85,14 @@ fun SizeBatchSheet(
     inventory: SizeInventory,
     batches: List<Batch>,
     suggestedNumber: Int,
+    /** Open consignments of THIS size, so the sheet can say where the missing pieces are. */
+    jobs: List<JobWork> = emptyList(),
+    karigars: List<String> = emptyList(),
+    activities: List<String> = emptyList(),
     onAddBatch: (number: Int, quantity: Int, price: Long, note: String) -> Unit,
+    onSendOut: (karigar: String, activity: String, quantity: Int, note: String) -> Unit = { _, _, _, _ -> },
+    onReceive: (jobId: String, quantity: Int) -> Unit = { _, _ -> },
+    onCloseJob: (jobId: String) -> Unit = {},
     onResetSize: () -> Unit,
     onEditSizes: () -> Unit,
     onDismiss: () -> Unit,
@@ -89,6 +100,8 @@ fun SizeBatchSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scheme = MaterialTheme.colorScheme
     var adding by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
+    var receiving by remember { mutableStateOf<JobWork?>(null) }
     var confirmingReset by remember { mutableStateOf(false) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -127,6 +140,18 @@ fun SizeBatchSheet(
                         color = if (inventory.stock == 0) scheme.error else scheme.onSurface,
                     )
                 }
+                val out = jobs.sumOf { it.outstanding }
+                if (out > 0) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Label("OUT")
+                        Text(
+                            "$out",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = scheme.tertiary,
+                        )
+                    }
+                }
                 Column(horizontalAlignment = Alignment.End) {
                     Label("PRICE")
                     Text(
@@ -137,6 +162,14 @@ fun SizeBatchSheet(
                 }
             }
 
+            if (jobs.isNotEmpty()) {
+                OutWithKarigars(
+                    jobs = jobs,
+                    onReceive = { receiving = it },
+                    onClose = onCloseJob,
+                )
+            }
+
             BatchHistory(batches = batches, stock = inventory.stock)
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -145,10 +178,16 @@ fun SizeBatchSheet(
                     Spacer(Modifier.width(6.dp))
                     Text("Add batch")
                 }
-                OutlinedButton(onClick = onEditSizes, modifier = Modifier.weight(1f)) {
-                    Text("Edit sizes")
+                OutlinedButton(
+                    onClick = { sending = true },
+                    enabled = inventory.stock > 0,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Send out")
                 }
             }
+
+            TextButton(onClick = onEditSizes) { Text("Edit sizes") }
 
             TextButton(
                 onClick = { confirmingReset = true },
@@ -169,6 +208,31 @@ fun SizeBatchSheet(
                 adding = false
             },
             onDismiss = { adding = false },
+        )
+    }
+
+    if (sending) {
+        SendOutDialog(
+            size = inventory.size,
+            inStock = inventory.stock,
+            karigars = karigars,
+            activities = activities,
+            onConfirm = { karigar, activity, quantity, note ->
+                onSendOut(karigar, activity, quantity, note)
+                sending = false
+            },
+            onDismiss = { sending = false },
+        )
+    }
+
+    receiving?.let { job ->
+        ReceiveBackDialog(
+            job = job,
+            onConfirm = { quantity ->
+                onReceive(job.id, quantity)
+                receiving = null
+            },
+            onDismiss = { receiving = null },
         )
     }
 
@@ -385,4 +449,211 @@ fun ResetConfirmation(
     )
 }
 
+// #endregion
+
+// #region 5. Job work
+
+/**
+ * What of this size is out, and with whom.
+ *
+ * Days out is shown on every line, not only the late ones, because the number the owner
+ * wants is not "is this late" but "how long has he had them".
+ */
+@Composable
+private fun OutWithKarigars(
+    jobs: List<JobWork>,
+    onReceive: (JobWork) -> Unit,
+    onClose: (String) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val now = remember { System.currentTimeMillis() }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Label("OUT WITH KARIGARS")
+        jobs.forEach { job ->
+            val days = job.daysOut(now)
+            val late = days >= JOB_OVERDUE_DAYS
+            val ink = if (late) scheme.onErrorContainer else scheme.onSurface
+            val quietInk = if (late) scheme.onErrorContainer else scheme.onSurfaceVariant
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (late) scheme.errorContainer else scheme.surfaceContainerHigh)
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        job.karigar,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ink,
+                    )
+                    Text(
+                        "${job.outstanding} out",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = ink,
+                    )
+                }
+                Text(
+                    buildString {
+                        append(job.activity)
+                        append(" - ")
+                        append(
+                            when (days) {
+                                0 -> "sent today"
+                                1 -> "1 day"
+                                else -> "$days days"
+                            }
+                        )
+                        if (job.receivedQuantity > 0) {
+                            append(" - ${job.receivedQuantity} of ${job.sentQuantity} back")
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = quietInk,
+                )
+                if (job.note.isNotBlank()) {
+                    Text(job.note, style = MaterialTheme.typography.bodySmall, color = quietInk)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = { onReceive(job) }) { Text("Received") }
+                    // Named for what it means rather than for what it does to a row: the
+                    // pieces that never came back stay on the record as missing.
+                    TextButton(onClick = { onClose(job.id) }) {
+                        Text("Finish job", color = scheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Sending pieces out. Names are picked from the Hub, never typed, so they stay one name. */
+@Composable
+private fun SendOutDialog(
+    size: String,
+    inStock: Int,
+    karigars: List<String>,
+    activities: List<String>,
+    onConfirm: (karigar: String, activity: String, quantity: Int, note: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var karigar by remember { mutableStateOf(karigars.firstOrNull().orEmpty()) }
+    var activity by remember { mutableStateOf(activities.firstOrNull().orEmpty()) }
+    // Pre-filled with the whole stock, which is the usual case, and editable because it is
+    // not the only one.
+    var quantity by remember { mutableStateOf(inStock.toString()) }
+    var note by remember { mutableStateOf("") }
+
+    val count = quantity.toIntOrNull() ?: 0
+    val tooMany = count > inStock
+    val valid = count > 0 && !tooMany && karigar.isNotBlank() && activity.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Send size $size out") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    "These come off the shelf and stay yours until they are back.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Label("TO")
+                PickRow(options = karigars, selected = karigar, onSelect = { karigar = it })
+                Label("FOR")
+                PickRow(options = activities, selected = activity, onSelect = { activity = it })
+                OutlinedTextField(
+                    value = quantity,
+                    onValueChange = { if (it.length <= 5 && it.all(Char::isDigit)) quantity = it },
+                    label = { Text("How many") },
+                    supportingText = {
+                        Text(if (tooMany) "Only $inStock in stock." else "$inStock in stock")
+                    },
+                    isError = tooMany,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { if (it.length <= 120) note = it },
+                    label = { Text("Note (optional)") },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(karigar, activity, count, note) }, enabled = valid) {
+                Text("Send out")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Recording a return. Defaults to everything still out, since that is the usual return. */
+@Composable
+private fun ReceiveBackDialog(job: JobWork, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
+    var quantity by remember { mutableStateOf(job.outstanding.toString()) }
+    val count = quantity.toIntOrNull() ?: 0
+    val tooMany = count > job.outstanding
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Back from ${job.karigar}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "${job.outstanding} still out of the ${job.sentQuantity} sent. Put back only " +
+                        "what has actually arrived - the rest stays out until it does.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = quantity,
+                    onValueChange = { if (it.length <= 5 && it.all(Char::isDigit)) quantity = it },
+                    label = { Text("How many came back") },
+                    supportingText = { if (tooMany) Text("Only ${job.outstanding} are out.") },
+                    isError = tooMany,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(count) }, enabled = count > 0 && !tooMany) {
+                Text("Put back in stock")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** A single-choice row of chips. Scrolls, because a workshop has more names than fit. */
+@Composable
+private fun PickRow(options: List<String>, selected: String, onSelect: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        options.forEach { option ->
+            FilterChip(
+                selected = option == selected,
+                onClick = { onSelect(option) },
+                label = { Text(option) },
+            )
+        }
+    }
+}
 // #endregion

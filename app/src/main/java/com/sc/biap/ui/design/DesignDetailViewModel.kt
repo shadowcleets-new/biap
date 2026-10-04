@@ -4,6 +4,8 @@ package com.sc.biap.ui.design
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sc.biap.data.Batch
+import com.sc.biap.data.openJobs
+import com.sc.biap.data.JobWork
 import com.sc.biap.data.attributeVocabulary
 import com.sc.biap.data.AttributeValue
 import com.sc.biap.data.suggestCut
@@ -104,6 +106,39 @@ class DesignDetailViewModel(
         }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DesignInsights())
+
+    /** Open consignments of this design, newest first, grouped by the size they went as. */
+    val jobsBySize: StateFlow<Map<String, List<JobWork>>> = repository.biData
+        .map { data ->
+            openJobs(data.jobWork)
+                .filter { it.designId == designId }
+                .sortedBy { it.sentAt }
+                .groupBy { it.size }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /** The Hub's names and activities, to send out by picking rather than typing. */
+    val hubActivities: StateFlow<List<String>> = repository.biData
+        .map { data -> data.activities.keys.sorted() }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun sendOut(size: String, karigar: String, activity: String, quantity: Int, note: String) {
+        viewModelScope.launch {
+            _message.value = repository.sendOutForJobWork(
+                designId, size, karigar, activity, quantity, note,
+            )
+        }
+    }
+
+    fun receiveJob(jobId: String, quantity: Int) {
+        viewModelScope.launch { _message.value = repository.receiveJobWork(jobId, quantity) }
+    }
+
+    fun closeJob(jobId: String) {
+        viewModelScope.launch { _message.value = repository.closeJobWork(jobId) }
+    }
 
     /** What each attribute already holds across the catalogue, to pick instead of retype. */
     val vocabulary: StateFlow<Map<String, List<AttributeValue>>> = repository.biData
