@@ -23,14 +23,18 @@ plugins {
 
 android {
     namespace = "com.sc.biap"
-    // 37 required by material3 1.5.0-alpha (Expressive). targetSdk stays 36 on
-    // purpose: compileSdk only changes what we can compile against, targetSdk changes
-    // runtime behaviour, and there is no reason to take that risk here.
+    // 37 is required by material3 1.5.0-alpha (Expressive) to compile at all.
+    //
+    // targetSdk follows it at the owner's instruction. Unlike compileSdk, which only sets
+    // what the code may refer to, targetSdk is a declaration to the OS that this app has
+    // been tested against SDK 37 behaviour and wants it applied rather than the
+    // compatibility shims. So it has to be re-verified on a real device after an upgrade,
+    // not just compiled.
     compileSdk = 37
     defaultConfig {
         applicationId = "com.sc.biap"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
     }
