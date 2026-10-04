@@ -164,6 +164,18 @@ interface DataRepository {
      */
     suspend fun mergeKarigar(fromId: String, intoId: String): String?
 
+    /** Send pieces to a karigar. Returns a message when it could not be done. */
+    suspend fun sendOutForJobWork(
+        designId: String, size: String, karigar: String, activity: String,
+        quantity: Int, note: String,
+    ): String?
+
+    /** Record pieces coming back from a karigar. */
+    suspend fun receiveJobWork(jobId: String, quantity: Int): String?
+
+    /** Finish a job, whatever is or is not back. */
+    suspend fun closeJobWork(jobId: String): String?
+
     suspend fun addActivity(name: String): String?
     suspend fun deleteActivity(name: String)
     fun addGlobalCustomField(field: String)
@@ -396,6 +408,11 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                             dao.getAllDeletedOrdersFlow()
                         ) { orders, deletedOrders -> orders to deletedOrders }
 
+                        val jobWorkFlow = combine(
+                            dao.allJobWorkFlow(),
+                            dao.deletedJobWorkFlow()
+                        ) { jobs, deleted -> jobs to deleted }
+
                         val hubFlow = combine(
                             dao.allBatchesFlow(),
                             dao.karigarsFlow(),
@@ -431,6 +448,14 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                                     batches = batchRows.map { it.toDomain() },
                                     karigars = karigarRows.map { it.toDomain() },
                                     activities = activityRows.associate { it.name to it.updatedAt },
+                                )
+                            }
+                            // Job work rides in on a third combine for the same reason again.
+                            .combine(jobWorkFlow) { data, jobs ->
+                                val (jobRows, deletedJobRows) = jobs
+                                data.copy(
+                                    jobWork = jobRows.map { it.toDomain() },
+                                    deletedJobWork = deletedJobRows.associate { it.id to it.deletedAt },
                                 )
                             }
                             .collect { merged ->
@@ -1316,6 +1341,77 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             val dao = awaitDao() ?: return@withContext 1
             dao.suggestBatchNumber(designId, size)
         }
+
+    // #region Job work (v10)
+
+    /**
+     * Send pieces to a karigar.
+     *
+     * The shelf is reduced in the same transaction that writes the job, because the pieces
+     * are no longer on it - and the job is what says where they went. Refusing to send more
+     * than is in stock is the guard that matters: the alternative is negative stock standing
+     * in for somebody's counting mistake.
+     */
+    override suspend fun sendOutForJobWork(
+        designId: String, size: String, karigar: String, activity: String,
+        quantity: Int, note: String,
+    ): String? = withContext(Dispatchers.IO) {
+        if (quantity <= 0) return@withContext "Enter how many pieces are going out."
+        if (karigar.isBlank()) return@withContext "Choose who they are going to."
+        val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+        val row = dao.getDesignById(designId) ?: return@withContext "That design is gone."
+        val inStock = row.inventories.firstOrNull { it.size == size }?.stock ?: 0
+        if (quantity > inStock) return@withContext "Only $inStock in stock for $size."
+
+        val now = System.currentTimeMillis()
+        val job = JobWork(
+            designId = designId, size = size, karigar = karigar.trim(),
+            activity = activity.trim(), sentQuantity = quantity, sentAt = now, note = note.trim(),
+        )
+        try {
+            dao.sendOut(job.toEntity(), now)
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            "Could not send those out."
+        }
+    }
+
+    override suspend fun receiveJobWork(jobId: String, quantity: Int): String? =
+        withContext(Dispatchers.IO) {
+            val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+            val row = dao.jobWorkById(jobId) ?: return@withContext "That job is gone."
+            val now = System.currentTimeMillis()
+            val updated = receive(row.toDomain(), quantity, now)
+                ?: return@withContext "That is more than went out."
+            try {
+                dao.receiveBack(updated.toEntity(), quantity, now)
+                null
+            } catch (e: Exception) {
+                e.printStackTrace()
+                "Could not record that."
+            }
+        }
+
+    /**
+     * Finish a job. Anything never returned stays on the record as a shortfall.
+     *
+     * The missing pieces are NOT put back on the shelf. They did not come back, and writing
+     * them into stock would be the ledger telling the owner a comfortable lie about cloth
+     * that is not there.
+     */
+    override suspend fun closeJobWork(jobId: String): String? = withContext(Dispatchers.IO) {
+        val dao = awaitDao() ?: return@withContext "Still opening your catalogue - try again in a moment."
+        val row = dao.jobWorkById(jobId) ?: return@withContext "That job is gone."
+        try {
+            dao.insertJobWork(close(row.toDomain(), System.currentTimeMillis()).toEntity())
+            null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            "Could not close that."
+        }
+    }
+    // #endregion
 
     override suspend fun addBatch(
         designId: String,

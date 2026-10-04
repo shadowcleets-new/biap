@@ -7,6 +7,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 import com.sc.biap.data.Batch
+import com.sc.biap.data.JobWork
 import com.sc.biap.data.Design
 import com.sc.biap.data.DesignPhoto
 import com.sc.biap.data.Karigar
@@ -145,6 +146,38 @@ data class BatchEntity(
     val note: String = ""
 )
 
+/**
+ * Added in schema v10. Pieces out with a karigar and what has come back.
+ *
+ * Indexed on designId because the design screen asks "what of mine is out" on every open,
+ * and on karigar because the board asks the same question the other way round.
+ */
+@Entity(
+    tableName = "job_work",
+    indices = [Index("designId"), Index("karigar")],
+)
+data class JobWorkEntity(
+    @PrimaryKey val id: String,
+    val designId: String,
+    val size: String,
+    val karigar: String,
+    val activity: String,
+    val sentQuantity: Int,
+    val receivedQuantity: Int,
+    val sentAt: Long,
+    val lastReceivedAt: Long,
+    val closedAt: Long,
+    val note: String = "",
+    val updatedAt: Long,
+)
+
+/** Tombstone, so a job deleted on one device does not come back from another. */
+@Entity(tableName = "deleted_job_work")
+data class DeletedJobWorkEntity(
+    @PrimaryKey val id: String,
+    val deletedAt: Long,
+)
+
 /** Added in schema v9. The workshop's people; `activities` is a JSON list. */
 @Entity(tableName = "karigars")
 data class KarigarEntity(
@@ -276,6 +309,18 @@ fun SizeInventory.toEntity(designId: String): SizeInventoryEntity {
         price = price
     )
 }
+
+fun JobWorkEntity.toDomain(): JobWork = JobWork(
+    id = id, designId = designId, size = size, karigar = karigar, activity = activity,
+    sentQuantity = sentQuantity, receivedQuantity = receivedQuantity, sentAt = sentAt,
+    lastReceivedAt = lastReceivedAt, closedAt = closedAt, note = note, updatedAt = updatedAt,
+)
+
+fun JobWork.toEntity(): JobWorkEntity = JobWorkEntity(
+    id = id, designId = designId, size = size, karigar = karigar, activity = activity,
+    sentQuantity = sentQuantity, receivedQuantity = receivedQuantity, sentAt = sentAt,
+    lastReceivedAt = lastReceivedAt, closedAt = closedAt, note = note, updatedAt = updatedAt,
+)
 
 fun BatchEntity.toDomain(): Batch = Batch(
     id = id,

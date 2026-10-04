@@ -126,6 +126,9 @@ data class Design(
 @Immutable
 data class BusinessIntelligenceData(
     val designs: List<Design> = emptyList(),
+    /** Pieces out with karigars. Defaulted like the rest, so an older payload still loads. */
+    val jobWork: List<JobWork> = emptyList(),
+    val deletedJobWork: Map<String, Long> = emptyMap(),
     val globalCustomFields: Set<String> = emptySet(),
     val globalCustomFieldsMetadata: Map<String, Long> = emptyMap(),
     val deletedDesignIds: Set<String> = emptySet(),

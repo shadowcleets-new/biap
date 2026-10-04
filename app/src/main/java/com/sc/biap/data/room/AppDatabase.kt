@@ -20,9 +20,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         KarigarEntity::class,
         DeletedKarigarEntity::class,
         ActivityEntity::class,
-        DeletedActivityEntity::class
+        DeletedActivityEntity::class,
+        JobWorkEntity::class,
+        DeletedJobWorkEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -174,6 +176,46 @@ abstract class AppDatabase : RoomDatabase() {
          * `batches` cascades from designs and has no tombstone table: nothing deletes a batch
          * on its own, because emptying a size sets `remaining` to 0 and keeps the row.
          */
+        /**
+         * v10: goods out with karigars.
+         *
+         * No backfill, deliberately. Nothing in the old data records that pieces left the
+         * building, and inventing consignments to explain stock that moved for other reasons
+         * would put fiction in a ledger whose whole value is being believed.
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS job_work (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        designId TEXT NOT NULL,
+                        size TEXT NOT NULL,
+                        karigar TEXT NOT NULL,
+                        activity TEXT NOT NULL,
+                        sentQuantity INTEGER NOT NULL,
+                        receivedQuantity INTEGER NOT NULL,
+                        sentAt INTEGER NOT NULL,
+                        lastReceivedAt INTEGER NOT NULL,
+                        closedAt INTEGER NOT NULL,
+                        note TEXT NOT NULL DEFAULT '',
+                        updatedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_job_work_designId ON job_work(designId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_job_work_karigar ON job_work(karigar)")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS deleted_job_work (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        deletedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -238,7 +280,8 @@ abstract class AppDatabase : RoomDatabase() {
         /** Every migration the app knows about. Pass to `addMigrations(*ALL_MIGRATIONS)`. */
         val ALL_MIGRATIONS: Array<Migration> = arrayOf(
             MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
-            MIGRATION_8_9
+            MIGRATION_8_9,
+            MIGRATION_9_10
         )
     }
 }

@@ -543,4 +543,56 @@ interface DesignDao {
 
     @Query("SELECT * FROM deleted_custom_fields")
     suspend fun getAllDeletedCustomFieldsOnce(): List<DeletedCustomFieldEntity>
+    // #region Job work (v10): goods out with karigars
+
+    @Query("SELECT * FROM job_work ORDER BY sentAt DESC")
+    fun allJobWorkFlow(): Flow<List<JobWorkEntity>>
+
+    @Query("SELECT * FROM job_work ORDER BY sentAt DESC")
+    suspend fun allJobWorkOnce(): List<JobWorkEntity>
+
+    @Query("SELECT * FROM job_work WHERE id = :id")
+    suspend fun jobWorkById(id: String): JobWorkEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertJobWork(job: JobWorkEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertJobWorks(jobs: List<JobWorkEntity>)
+
+    @Query("DELETE FROM job_work WHERE id = :id")
+    suspend fun deleteJobWork(id: String)
+
+    @Query("SELECT * FROM deleted_job_work")
+    fun deletedJobWorkFlow(): Flow<List<DeletedJobWorkEntity>>
+
+    @Query("SELECT * FROM deleted_job_work")
+    suspend fun deletedJobWorkOnce(): List<DeletedJobWorkEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDeletedJobWork(deleted: DeletedJobWorkEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDeletedJobWorks(deleted: List<DeletedJobWorkEntity>)
+
+    /**
+     * Send pieces out: the job is written and the shelf is reduced in one transaction.
+     *
+     * Together or not at all. A job written without the stock moving shows pieces in two
+     * places at once; stock moved without a job shows them nowhere.
+     */
+    @Transaction
+    suspend fun sendOut(job: JobWorkEntity, now: Long) {
+        insertJobWork(job)
+        takeFromLedger(job.designId, job.size, job.sentQuantity, now)
+    }
+
+    /** Pieces back on the shelf, and the job updated to say so. */
+    @Transaction
+    suspend fun receiveBack(job: JobWorkEntity, quantity: Int, now: Long) {
+        insertJobWork(job)
+        returnToLedger(job.designId, job.size, quantity, now)
+    }
+    // #endregion
+
 }
