@@ -1,0 +1,105 @@
+# CodeQL — advanced setup.
+#
+# Advanced rather than default so the configuration is a file in this repository that can be
+# read, reviewed and changed, instead of a setting held in a web page nobody opens again.
+#
+# WHY build-mode: none, AND WHEN TO CHANGE IT:
+#   CodeQL analyses Kotlin either by watching a real compile or by reading the source
+#   directly. Watching a compile is more precise - it resolves types through dependencies and
+#   so follows data further - but it needs the whole Android build to succeed on a clean
+#   runner, and this project is on compileSdk 37, AGP 9 and Gradle 9.8. That is a lot of very
+#   new to ask a hosted runner for, and a scan that fails to build produces NO findings at
+#   all, which is worse than a shallower scan that runs every time.
+#
+#   So this reads the source. It still finds the things worth finding in an app like this -
+#   hardcoded credentials, weak or misused cryptography, unsafe deserialisation, injection
+#   into queries and intents - because those are visible in the code itself.
+#
+#   To switch to the deeper analysis later, set build-mode to "manual" for java-kotlin and
+#   uncomment the build steps below. Do it once there is a CI workflow proving the build is
+#   green on a runner; until then this would be the first thing to discover it is not.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Tuesdays, deliberately not Monday: Dependabot opens its pull requests then, and those
+    # already trigger a scan of their own through the pull_request event above.
+    - cron: "0 4 * * 2"
+
+# Least privilege. Only the security events upload needs anything beyond read.
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: none
+          # Scans the workflow files in this directory for the things that go wrong in CI:
+          # a third-party action pinned to a mutable tag, a script interpolating untrusted
+          # input, permissions wider than the job needs.
+          - language: actions
+            build-mode: none
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # security-extended adds the lower-severity and higher-noise rules on top of the
+          # default set. Worth it on a codebase this size, where the extra findings are
+          # still a readable number.
+          queries: security-extended
+
+      # --- The deeper analysis, for when the build is known to be green on a runner. ---
+      #
+      # Set build-mode to "manual" for java-kotlin above and uncomment all of this.
+      #
+      # - name: Set up JDK
+      #   if: matrix.language == 'java-kotlin'
+      #   uses: actions/setup-java@v4
+      #   with:
+      #     distribution: temurin
+      #     # Two of them: Gradle and AGP run on the newer one, while jvmToolchain(17) in
+      #     # app/build.gradle.kts needs a 17 to compile against.
+      #     java-version: |
+      #       17
+      #       21
+      #
+      # - name: Set up Android SDK
+      #   if: matrix.language == 'java-kotlin'
+      #   uses: android-actions/setup-android@v3
+      #
+      # - name: Build
+      #   if: matrix.language == 'java-kotlin'
+      #   run: ./gradlew :app:assembleDebug --no-daemon --no-configuration-cache
+      #   # No configuration cache: it is on in gradle.properties and is a cache of the build
+      #   # configuration itself, which a one-shot runner cannot reuse and CodeQL's extractor
+      #   # has been known to disagree with.
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
