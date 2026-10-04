@@ -42,6 +42,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sc.biap.data.Batch
+import com.sc.biap.security.AppLock
+import com.sc.biap.data.parseSpokenJob
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.filled.Mic
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import android.speech.RecognizerIntent
+import android.content.Intent
 import com.sc.biap.data.JOB_OVERDUE_DAYS
 import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.horizontalScroll
@@ -550,6 +558,17 @@ private fun SendOutDialog(
     // not the only one.
     var quantity by remember { mutableStateOf(inStock.toString()) }
     var note by remember { mutableStateOf("") }
+    var heard by remember { mutableStateOf<String?>(null) }
+
+    // Only what the sentence actually said is filled in. A sentence that names no activity
+    // leaves the activity alone rather than overwriting a correct choice with a guess.
+    val dictate = rememberDictation(languageTag = "hi-IN") { spoken ->
+        heard = spoken
+        val parsed = parseSpokenJob(spoken, karigars, activities)
+        parsed.karigar?.let { karigar = it }
+        parsed.activity?.let { activity = it }
+        parsed.quantity?.let { quantity = it.toString() }
+    }
 
     val count = quantity.toIntOrNull() ?: 0
     val tooMany = count > inStock
@@ -568,6 +587,24 @@ private fun SendOutDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                dictate?.let { speak ->
+                    OutlinedButton(onClick = speak, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.width(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Bol kar bhariye")
+                    }
+                    // Shown back so a misheard sentence is obvious at a glance rather than
+                    // being discovered in the fields one at a time.
+                    heard?.let {
+                        Text(
+                            "Heard: " + it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
                 Label("TO")
                 PickRow(options = karigars, selected = karigar, onSelect = { karigar = it })
                 Label("FOR")
@@ -653,6 +690,62 @@ private fun PickRow(options: List<String>, selected: String, onSelect: (String) 
                 onClick = { onSelect(option) },
                 label = { Text(option) },
             )
+        }
+    }
+}
+// #endregion
+
+// #region 6. Speaking instead of typing
+
+/**
+ * Dictate a sentence and fill in the form from it.
+ *
+ * Uses the phone's own recogniser rather than anything of ours: it is already installed,
+ * already knows the owner's languages, and already shows a listening screen they recognise.
+ *
+ * It FILLS A FORM, it does not act. Whatever it mishears is one tap to correct and nothing
+ * moves until the owner presses Send out. That is the entire reason it is allowed to guess.
+ */
+@Composable
+private fun rememberDictation(
+    languageTag: String,
+    onHeard: (String) -> Unit,
+): (() -> Unit)? {
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val spoken = result.data
+            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            ?.firstOrNull()
+            .orEmpty()
+        if (spoken.isNotBlank()) onHeard(spoken)
+    }
+
+    val intent = remember(languageTag) {
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+            )
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
+            // The phone's own language is offered alongside, because a workshop sentence
+            // mixes them: a Hindi sentence carrying an English word for the work.
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Kehiye")
+        }
+    }
+
+    // No recogniser installed is a real state on a stripped-down phone. Returning null lets
+    // the caller leave the button out rather than show one that does nothing.
+    val available = remember {
+        intent.resolveActivity(context.packageManager) != null
+    }
+    return if (!available) null else {
+        {
+            AppLock.beginTrustedFlow()
+            runCatching { launcher.launch(intent) }
+                .onFailure { AppLock.endTrustedFlow() }
+            Unit
         }
     }
 }
