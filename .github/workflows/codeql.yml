@@ -1,5 +1,10 @@
 # CodeQL — advanced setup.
 #
+# ACTIONS ARE PINNED TO COMMIT SHAs, not to tags. A tag is a label the owner of the action
+# can move, so "@v4" is a promise to run whatever they decide v4 means tomorrow - on a job
+# holding security-events: write. The trailing comment keeps it readable; the SHA is what
+# actually runs. CodeQL raised this against this very file on its first green run.
+#
 # Advanced rather than default so the configuration is a file in this repository that can be
 # read, reviewed and changed, instead of a setting held in a web page nobody opens again.
 #
@@ -57,10 +62,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -71,7 +76,7 @@ jobs:
 
       - name: Set up JDK
         if: matrix.language == 'java-kotlin'
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           # Two of them. Gradle and AGP run on the newer one, while jvmToolchain(17) in
@@ -97,6 +102,6 @@ jobs:
         run: ./gradlew :app:assembleDebug --no-daemon --no-configuration-cache --stacktrace
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           category: "/language:${{ matrix.language }}"
