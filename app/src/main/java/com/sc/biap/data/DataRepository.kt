@@ -353,6 +353,10 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                     driveFileId = null
 
                     val suffix = getDatabaseSuffix(userKey)
+                    // First: a database written under the old MD5 name is carried over, with
+                    // its sync stamp. Must precede the read below, or the stamp is read from
+                    // the new key before the old one has been moved to it.
+                    adoptMd5NamedDatabaseIfPresent(userKey, suffix)
                     // Before the database opens, so the header never flashes NOT SYNCED YET
                     // on the way in.
                     _lastSyncAt.value = readLastSyncAt(suffix)
@@ -511,10 +515,7 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     // keying on it meant every phone/email user fell through to the shared guest DB.
     private fun getDatabaseSuffix(userKey: String?): String {
         return if (!userKey.isNullOrBlank()) {
-            val bytes = userKey.toByteArray()
-            val hash = java.security.MessageDigest.getInstance("MD5").digest(bytes)
-            val hex = hash.joinToString("") { "%02x".format(it) }
-            "_$hex"
+            "_" + nameHash(userKey)
         } else {
             ""
         }
@@ -554,6 +555,76 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         auth.addAuthStateListener(listener)
         awaitClose { auth.removeAuthStateListener(listener) }
     }.distinctUntilChanged()
+
+    /**
+     * The uid, turned into something usable as a filename.
+     *
+     * SHA-256 rather than MD5, which is what this used to be. The hash protects nothing here
+     * - it names a file, and the database behind it is encrypted with a key that has nothing
+     * to do with this - so MD5 was not a weakness so much as a word that makes every scanner
+     * stop. Truncated to sixteen bytes to keep the filename the length it always was.
+     */
+    private fun nameHash(userKey: String): String =
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(userKey.toByteArray())
+            .take(16)
+            .joinToString("") { "%02x".format(it) }
+
+    /**
+     * What this file WAS called, for as long as anyone still has one.
+     *
+     * Kept solely so [adoptMd5NamedDatabaseIfPresent] can find it. Nothing new is ever
+     * written under this name.
+     */
+    @Suppress("DEPRECATION")
+    private fun legacyMd5Suffix(userKey: String?): String {
+        if (userKey.isNullOrBlank()) return ""
+        val hex = java.security.MessageDigest.getInstance("MD5")
+            .digest(userKey.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        return "_$hex"
+    }
+
+    /**
+     * Carry a database written under the old MD5 name over to the new one.
+     *
+     * CHANGING A HASH RENAMES EVERY FILE IT NAMED. Without this, the day this shipped, every
+     * phone in the workshop would have opened an empty catalogue and the real one would have
+     * sat on disk under a name nothing looks for any more. That is a far worse outcome than
+     * the finding it answers.
+     *
+     * Deliberately the same shape as [adoptLegacyGuestDatabaseIfPresent]: it runs only when
+     * the destination does NOT exist, so it can never overwrite a real database, and it
+     * renames rather than deletes, so nothing is destroyed even if the move is wrong.
+     */
+    private fun adoptMd5NamedDatabaseIfPresent(userKey: String?, suffix: String) {
+        if (suffix.isEmpty()) return
+        val old = legacyMd5Suffix(userKey)
+        if (old.isEmpty() || old == suffix) return
+        val from = context.getDatabasePath("bi_database${old}.db")
+        val to = context.getDatabasePath("bi_database${suffix}.db")
+        if (!from.exists() || to.exists()) return
+        try {
+            // The WAL and SHM sidecars move with the main file or SQLite rejects the result.
+            for (ext in listOf("", "-wal", "-shm")) {
+                val f = File(from.parentFile, "${from.name}$ext")
+                if (f.exists()) f.renameTo(File(to.parentFile, "${to.name}$ext"))
+            }
+            // The last-sync stamp is keyed by the same suffix, so it has to come too or the
+            // header reads NOT SYNCED YET on a database that synced an hour ago.
+            val prefs = syncPrefs()
+            val stamp = prefs.getLong(KEY_LAST_SYNC_AT + old, 0L)
+            if (stamp > 0L) {
+                prefs.edit()
+                    .putLong(KEY_LAST_SYNC_AT + suffix, stamp)
+                    .remove(KEY_LAST_SYNC_AT + old)
+                    .commit()
+            }
+            android.util.Log.i("DataRepository", "Renamed MD5-named database to $suffix")
+        } catch (e: Exception) {
+            e.printStackTrace()  // leave the old file untouched on failure
+        }
+    }
 
     /**
      * One-time adoption of the pre-identity database.
