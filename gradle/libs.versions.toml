@@ -18,7 +18,7 @@ junit = "4.13.2"
 # (latest is 2.3.12, built on Kotlin 2.3.20). KSP is a compiler plugin, so running it
 # inside a newer compiler than it was built for breaks Room codegen. 2.3.21 is the top
 # of the line KSP actually supports. Revisit when KSP ships 2.4.x.
-kotlin = "2.3.21"
+kotlin = "2.4.20"
 nav3Core = "1.2.0"
 lifecycleViewmodelNav3 = "2.11.0"
 room = "2.8.5"
