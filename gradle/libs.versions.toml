@@ -7,7 +7,7 @@ androidxComposeBom = "2026.09.00"
 # Explicit override of the BOM: Material 3 Expressive (MaterialExpressiveTheme,
 # LoadingIndicator, ButtonGroup, ButtonDefaults.shapes) is not consumable on 1.4.0 -
 # its opt-in annotation is internal there. Alpha accepted deliberately.
-androidxMaterial3 = "1.5.0-alpha29"
+androidxMaterial3 = "1.5.0-beta02"
 androidxTest = "1.7.0"
 androidxTestExt = "1.3.0"
 androidxTestRunner = "1.7.0"
