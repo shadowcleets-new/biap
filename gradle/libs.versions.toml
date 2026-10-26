@@ -18,7 +18,7 @@ junit = "4.13.2"
 # (latest is 2.3.12, built on Kotlin 2.3.20). KSP is a compiler plugin, so running it
 # inside a newer compiler than it was built for breaks Room codegen. 2.3.21 is the top
 # of the line KSP actually supports. Revisit when KSP ships 2.4.x.
-kotlin = "2.3.21"
+kotlin = "2.4.21"
 nav3Core = "1.2.0"
 lifecycleViewmodelNav3 = "2.11.0"
 room = "2.8.5"
@@ -72,7 +72,7 @@ coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" 
 # local files fine and silently fails on every http(s) URL - which is what blanked the
 # Google profile photo while design photos from Drive kept working.
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
-kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.11.0" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.12.0" }
 androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version = "5.5.0" }
 # Held on the 21.x line deliberately. 22.0.0 DELETES the legacy Google Sign-In API -
