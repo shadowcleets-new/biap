@@ -33,7 +33,7 @@ androidxWork = "2.12.0"
 # compiler-generated $1 inner classes) and both resolve the same Tink 1.8.0, so the
 # on-disk EncryptedSharedPreferences format is unchanged. Existing installs keep reading.
 androidxSecurity = "1.1.0"
-firebase = "34.19.0"
+firebase = "35.1.0"
 androidxDataStore = "1.2.1"
 androidxBiometric = "1.1.0"
 sqlcipher = "4.19.1"
