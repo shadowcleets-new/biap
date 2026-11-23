@@ -3,11 +3,11 @@ androidGradlePlugin = "9.4.1"
 androidxCore = "1.19.1"
 androidxLifecycle = "2.11.0"
 androidxActivity = "1.13.0"
-androidxComposeBom = "2026.09.00"
+androidxComposeBom = "2026.11.01"
 # Explicit override of the BOM: Material 3 Expressive (MaterialExpressiveTheme,
 # LoadingIndicator, ButtonGroup, ButtonDefaults.shapes) is not consumable on 1.4.0 -
 # its opt-in annotation is internal there. Alpha accepted deliberately.
-androidxMaterial3 = "1.5.0-alpha29"
+androidxMaterial3 = "1.6.0-alpha01"
 androidxTest = "1.7.0"
 androidxTestExt = "1.3.0"
 androidxTestRunner = "1.7.0"
