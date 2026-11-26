@@ -180,8 +180,41 @@ object SyncMerger {
             updatedAt == null || deletedAt >= updatedAt
         }
 
+        // 9. Merge job work (LWW with tombstones). Media paths and refs are coalesced when the
+        // winning row does not carry them yet, so a receive/close on another phone never drops a
+        // photo or voice pointer uploaded elsewhere.
+        val mergedDeletedJobWork =
+            (localData.deletedJobWork.keys + remoteData.deletedJobWork.keys).associateWith { id ->
+                maxOf(localData.deletedJobWork[id] ?: 0L, remoteData.deletedJobWork[id] ?: 0L)
+            }
+        val allJobWork = (localData.jobWork + remoteData.jobWork)
+            .groupBy { it.id }
+            .mapValues { (_, rows) ->
+                val winner = rows.maxByOrNull { it.updatedAt }!!
+                winner.copy(
+                    photoPath = winner.photoPath?.takeIf { it.isNotBlank() }
+                        ?: rows.firstNotNullOfOrNull { it.photoPath?.takeIf(String::isNotBlank) },
+                    photoRef = winner.photoRef?.takeIf { it.isNotBlank() }
+                        ?: rows.firstNotNullOfOrNull { it.photoRef?.takeIf(String::isNotBlank) },
+                    voicePath = winner.voicePath?.takeIf { it.isNotBlank() }
+                        ?: rows.firstNotNullOfOrNull { it.voicePath?.takeIf(String::isNotBlank) },
+                    voiceRef = winner.voiceRef?.takeIf { it.isNotBlank() }
+                        ?: rows.firstNotNullOfOrNull { it.voiceRef?.takeIf(String::isNotBlank) },
+                )
+            }
+        val mergedJobWork = allJobWork.values.filter { job ->
+            val deletedAt = mergedDeletedJobWork[job.id] ?: -1L
+            job.updatedAt > deletedAt
+        }
+        val finalDeletedJobWork = mergedDeletedJobWork.filter { (id, deletedAt) ->
+            val job = allJobWork[id]
+            job == null || deletedAt >= job.updatedAt
+        }
+
         return BusinessIntelligenceData(
             designs = mergedDesigns,
+            jobWork = mergedJobWork,
+            deletedJobWork = finalDeletedJobWork,
             globalCustomFields = mergedFields.keys,
             globalCustomFieldsMetadata = mergedFields,
             deletedDesignIds = finalDeleted.keys,

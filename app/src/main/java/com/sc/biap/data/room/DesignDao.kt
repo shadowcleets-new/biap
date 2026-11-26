@@ -181,6 +181,42 @@ interface DesignDao {
     @Query("UPDATE designs SET karigars = :karigars, updatedAt = :now WHERE id = :id")
     suspend fun setDesignKarigars(id: String, karigars: List<String>, now: Long)
 
+    /**
+     * Rewrite only a design's customFields column.
+     *
+     * Deliberately one column rather than re-inserting the whole row, for the same reason
+     * [setDesignKarigars] is: tidying drifted attribute spellings across the catalogue must
+     * not clobber an in-flight photo pointer or archive update.
+     */
+    @Query("UPDATE designs SET customFields = :customFields, updatedAt = :now WHERE id = :id")
+    suspend fun setDesignCustomFields(id: String, customFields: Map<String, String>, now: Long)
+
+    @Transaction
+    suspend fun unifyAttributeValue(
+        field: String,
+        fromValues: Set<String>,
+        toValue: String,
+        now: Long,
+    ): Int {
+        val target = toValue.trim()
+        if (field.isBlank() || target.isEmpty() || fromValues.isEmpty()) return 0
+        val candidates = fromValues.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        if (candidates.isEmpty()) return 0
+        var updated = 0
+        for (row in getAllDesignsOnce()) {
+            if (row.design.archivedAt > 0L) continue
+            val raw = row.design.customFields[field] ?: continue
+            if (raw.trim() in candidates && raw != target) {
+                val nextFields = row.design.customFields.toMutableMap().apply {
+                    put(field, target)
+                }
+                setDesignCustomFields(row.design.id, nextFields, now)
+                updated++
+            }
+        }
+        return updated
+    }
+
     // #region Batches - the ledger beside the stock column
 
     @Query("SELECT * FROM batches WHERE designId = :designId AND size = :size ORDER BY number")
@@ -472,6 +508,33 @@ interface DesignDao {
     @Query("DELETE FROM size_inventories")
     suspend fun deleteAllInventories()
 
+    @Query("DELETE FROM batches")
+    suspend fun deleteAllBatches()
+
+    @Query("DELETE FROM karigars")
+    suspend fun deleteAllKarigars()
+
+    @Query("DELETE FROM deleted_karigars")
+    suspend fun deleteAllDeletedKarigars()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDeletedKarigars(deleted: List<DeletedKarigarEntity>)
+
+    @Query("DELETE FROM activities")
+    suspend fun deleteAllActivities()
+
+    @Query("DELETE FROM deleted_activities")
+    suspend fun deleteAllDeletedActivities()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDeletedActivities(deleted: List<DeletedActivityEntity>)
+
+    @Query("DELETE FROM job_work")
+    suspend fun deleteAllJobWork()
+
+    @Query("DELETE FROM deleted_job_work")
+    suspend fun deleteAllDeletedJobWork()
+
     @Query("DELETE FROM global_custom_fields")
     suspend fun deleteAllGlobalCustomFields()
 
@@ -483,13 +546,20 @@ interface DesignDao {
 
     @Transaction
     suspend fun importData(data: BusinessIntelligenceData) {
-        deleteAllDesigns()
+        deleteAllBatches()
         deleteAllInventories()
+        deleteAllDesigns()
         deleteAllGlobalCustomFields()
         deleteAllDeletedDesigns()
         deleteAllDeletedCustomFields()
         deleteAllOrders()
         deleteAllDeletedOrders()
+        deleteAllKarigars()
+        deleteAllDeletedKarigars()
+        deleteAllActivities()
+        deleteAllDeletedActivities()
+        deleteAllJobWork()
+        deleteAllDeletedJobWork()
 
         // Orders arrive already merged, and the stock they account for arrived with the
         // designs. Deliberately NOT routed through placeOrder: that would deduct the same
@@ -497,11 +567,22 @@ interface DesignDao {
         insertOrders(data.orders.map { it.toEntity() })
         insertDeletedOrders(data.deletedOrders.map { DeletedOrderEntity(it.key, it.value) })
 
-        // Insert designs and their inventories
+        // Insert designs and their inventories BEFORE batches: deleteAllDesigns() cascades to
+        // batches via foreign key, so designs must exist before batches are re-inserted.
         for (design in data.designs) {
             insertDesign(design.toEntity())
             insertInventories(design.sizeInventories.map { it.toEntity(design.id) })
         }
+
+        val designIds = data.designs.asSequence().map { it.id }.toSet()
+        insertBatches(data.batches.filter { it.designId in designIds }.map { it.toEntity() })
+
+        upsertKarigars(data.karigars.map { it.toEntity() })
+        insertDeletedKarigars(data.deletedKarigars.map { DeletedKarigarEntity(it.key, it.value) })
+        upsertActivities(data.activities.map { ActivityEntity(it.key, it.value) })
+        insertDeletedActivities(data.deletedActivities.map { DeletedActivityEntity(it.key, it.value) })
+        insertJobWorks(data.jobWork.map { it.toEntity() })
+        insertDeletedJobWorks(data.deletedJobWork.map { DeletedJobWorkEntity(it.key, it.value) })
 
         // The profile is upserted, never cleared first: a payload from an older build
         // carries null here, and that must leave the existing details alone rather than
@@ -562,6 +643,22 @@ interface DesignDao {
 
     @Query("DELETE FROM job_work WHERE id = :id")
     suspend fun deleteJobWork(id: String)
+
+    /**
+     * Move only the JobWork photo/voice pointer without bumping `updatedAt`.
+     *
+     * SyncMerger coalesces `photoRef`/`voiceRef` across copies, so leaving `updatedAt` untouched
+     * prevents a delayed background upload from overwriting newer status edits or resurrecting
+     * a deleted job.
+     */
+    @Query("UPDATE job_work SET photoRef = :key WHERE id = :id")
+    suspend fun updateJobPhotoRef(id: String, key: String)
+
+    @Query("UPDATE job_work SET voiceRef = :key WHERE id = :id")
+    suspend fun updateJobVoiceRef(id: String, key: String)
+
+    @Query("SELECT photoPath FROM job_work WHERE photoPath IS NOT NULL")
+    suspend fun getAllJobWorkImagePaths(): List<String>
 
     @Query("SELECT * FROM deleted_job_work")
     fun deletedJobWorkFlow(): Flow<List<DeletedJobWorkEntity>>

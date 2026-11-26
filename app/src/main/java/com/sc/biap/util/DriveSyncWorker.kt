@@ -29,7 +29,7 @@ class DriveSyncWorker(
 
         val result = repository.performSyncInternal(token, googleId)
         // Hard retry cap (~10s + 20s + 40s + 80s of backoff already spent).
-        // Type check, not equals: WorkManager Result instances are compared by class.
-        return if (result is Result.Retry && runAttemptCount >= 4) Result.failure() else result
+        // Result.Retry overrides equals() to compare class; avoids RestrictedApi on Result.Retry.
+        return if (result == Result.retry() && runAttemptCount >= 4) Result.failure() else result
     }
 }

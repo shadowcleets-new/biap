@@ -32,8 +32,14 @@ class ImageUploadWorker(
     companion object {
         private const val TAG = "ImageUploadWorker"
         const val KEY_DESIGN_ID = "designId"
+        const val KEY_JOB_ID = "jobId"
+        const val KEY_TARGET_TYPE = "targetType"
         const val KEY_LOCAL_PATH = "localPath"
         const val KEY_STORAGE_KEY = "storageKey"
+
+        const val TARGET_DESIGN = "design"
+        const val TARGET_JOB_PHOTO = "job_photo"
+        const val TARGET_JOB_VOICE = "job_voice"
 
         /**
          * Unique work name per PHOTOGRAPH, so rapid re-edits of one replace rather than
@@ -46,19 +52,32 @@ class ImageUploadWorker(
         fun workName(designId: String, localPath: String) =
             "ImageUpload_${designId}_${localPath.hashCode()}"
 
+        fun jobWorkName(jobId: String, targetType: String, localPath: String) =
+            "ImageUpload_${targetType}_${jobId}_${localPath.hashCode()}"
+
         /** Give up after this many attempts so a permanently bad file cannot retry forever. */
         const val MAX_ATTEMPTS = 4
     }
 
     override suspend fun doWork(): Result {
-        val designId = inputData.getString(KEY_DESIGN_ID) ?: return Result.failure()
+        val targetType = inputData.getString(KEY_TARGET_TYPE) ?: TARGET_DESIGN
+        val targetId = when (targetType) {
+            TARGET_DESIGN -> inputData.getString(KEY_DESIGN_ID)
+            TARGET_JOB_PHOTO, TARGET_JOB_VOICE ->
+                inputData.getString(KEY_JOB_ID) ?: inputData.getString(KEY_DESIGN_ID)
+            else -> return Result.failure()
+        } ?: return Result.failure()
+
         val localPath = inputData.getString(KEY_LOCAL_PATH) ?: return Result.failure()
         val storageKey = inputData.getString(KEY_STORAGE_KEY) ?: return Result.failure()
 
-        val file = File(localPath)
-        if (!file.exists()) {
+        val file = when (targetType) {
+            TARGET_JOB_VOICE -> VoiceNotes.resolve(applicationContext, localPath) ?: File(localPath)
+            else -> FileUtils.resolveImageFile(applicationContext, localPath)
+        }
+        if (file == null || !file.exists()) {
             // The source is gone; retrying cannot help.
-            Log.w(TAG, "give up: local file missing for design=$designId path=$localPath")
+            Log.w(TAG, "give up: local file missing for target=$targetType id=$targetId path=$localPath")
             return Result.failure()
         }
 
@@ -66,7 +85,7 @@ class ImageUploadWorker(
             // Terminal. Previously silent, which is how a photo could stay local forever with
             // nobody aware: the design synced fine, the picture simply never existed remotely.
             // DataRepository.backfillPendingImageUploads retries this on the next launch.
-            Log.e(TAG, "give up after $runAttemptCount attempts: design=$designId key=$storageKey")
+            Log.e(TAG, "give up after $runAttemptCount attempts: target=$targetType id=$targetId key=$storageKey")
             return Result.failure()
         }
 
@@ -79,30 +98,48 @@ class ImageUploadWorker(
         }
 
         // 2. the pointer moves only once the bytes are definitely there
-        val uploadedBy = FirebaseAuth.getInstance().currentUser?.uid
         val repository = DefaultDataRepository.getInstance(applicationContext)
-        val applied = repository.applyUploadedImage(designId, localPath, storageKey, uploadedBy)
-        if (!applied) {
-            // Bytes are safely stored; the design just has not caught up. Retry the move.
-            Log.w(TAG, "uploaded but could not move the pointer for design=$designId; will retry")
-            return Result.retry()
+        when (targetType) {
+            TARGET_DESIGN -> {
+                val uploadedBy = FirebaseAuth.getInstance().currentUser?.uid
+                val applied = repository.applyUploadedImage(targetId, localPath, storageKey, uploadedBy)
+                if (!applied) {
+                    // Bytes are safely stored; the design just has not caught up. Retry the move.
+                    Log.w(TAG, "uploaded but could not move the pointer for design=$targetId; will retry")
+                    return Result.retry()
+                }
+
+                // 3. retention, best-effort - never fails the job.
+                //
+                // Protects EVERY key the design points at, read back after the pointer moved. A
+                // design may hold five photographs whose versions all share one prefix, so a sweep
+                // told to spare only the key just uploaded would delete the other four. An empty set
+                // means the read failed, and pruning on that would be deleting photos on the strength
+                // of a lookup that did not work - so the sweep is skipped entirely.
+                val live = repository.referencedImageKeys(targetId)
+                if (live.isEmpty()) {
+                    Log.w(TAG, "skipping retention for design=$targetId: could not read its live keys")
+                } else {
+                    DriveImageStore.pruneToLatest(applicationContext, targetId, protectKeys = live)
+                }
+            }
+            TARGET_JOB_PHOTO -> {
+                val applied = repository.applyUploadedJobMedia(targetId, isVoice = false, key = storageKey)
+                if (!applied) {
+                    Log.w(TAG, "uploaded but could not move photo pointer for job=$targetId; will retry")
+                    return Result.retry()
+                }
+            }
+            TARGET_JOB_VOICE -> {
+                val applied = repository.applyUploadedJobMedia(targetId, isVoice = true, key = storageKey)
+                if (!applied) {
+                    Log.w(TAG, "uploaded but could not move voice pointer for job=$targetId; will retry")
+                    return Result.retry()
+                }
+            }
         }
 
-        // 3. retention, best-effort - never fails the job.
-        //
-        // Protects EVERY key the design points at, read back after the pointer moved. A
-        // design may hold five photographs whose versions all share one prefix, so a sweep
-        // told to spare only the key just uploaded would delete the other four. An empty set
-        // means the read failed, and pruning on that would be deleting photos on the strength
-        // of a lookup that did not work - so the sweep is skipped entirely.
-        val live = repository.referencedImageKeys(designId)
-        if (live.isEmpty()) {
-            Log.w(TAG, "skipping retention for design=$designId: could not read its live keys")
-        } else {
-            DriveImageStore.pruneToLatest(applicationContext, designId, protectKeys = live)
-        }
-
-        Log.i(TAG, "uploaded design=$designId key=$storageKey")
+        Log.i(TAG, "uploaded target=$targetType id=$targetId key=$storageKey")
         return Result.success()
     }
 }

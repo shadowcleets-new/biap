@@ -65,9 +65,9 @@ object VoiceNotes {
         }
     }
 
-    /** How long a note runs, in seconds, or 0 when it cannot be read. */
-    fun durationSeconds(context: Context, path: String?): Int {
-        val file = resolve(context, path) ?: return 0
+    /** How long a note file runs, in seconds, or 0 when it cannot be read. */
+    fun durationSeconds(file: File?): Int {
+        if (file == null || !file.exists()) return 0
         return runCatching {
             MediaPlayer().use { player ->
                 player.setDataSource(file.absolutePath)
@@ -76,6 +76,10 @@ object VoiceNotes {
             }
         }.getOrDefault(0)
     }
+
+    /** How long a note runs, in seconds, or 0 when it cannot be read. */
+    fun durationSeconds(context: Context, path: String?): Int =
+        durationSeconds(resolve(context, path))
 
     /** Delete a note's file. Failing to is not worth reporting - it is a cache miss at worst. */
     fun delete(context: Context, path: String?) {
