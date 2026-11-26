@@ -11,6 +11,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
@@ -43,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import java.util.Date
@@ -530,6 +532,7 @@ fun DesignDetailScreen(
                             onDismiss = { showSourceSelector = false },
                             onChooseGallery = {
                                 showSourceSelector = false
+                                AppLock.beginTrustedFlow()
                                 imagePickerLauncher.launch(
                                     androidx.activity.result.PickVisualMediaRequest(
                                         ActivityResultContracts.PickVisualMedia.ImageOnly
@@ -1318,9 +1321,23 @@ private fun KarigarEditorDialog(
         onDismissRequest = onDismiss,
         title = { Text("Assign karigars", style = MaterialTheme.typography.titleLargeStrong) },
         text = {
+            val addNew = {
+                val trimmed = newKarigarInput.trim()
+                if (trimmed.isNotBlank() &&
+                    tempKarigars.none { it.equals(trimmed, ignoreCase = true) }
+                ) {
+                    tempKarigars = tempKarigars + trimmed
+                    // Joins the Hub too, so the master list stays master.
+                    onAddToHub(trimmed)
+                    newKarigarInput = ""
+                }
+            }
             Column(
                 verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Cozy),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
                 if (hubKarigars.isEmpty()) {
                     Text(
@@ -1385,22 +1402,12 @@ private fun KarigarEditorDialog(
                     onValueChange = { if (it.length <= 50) newKarigarInput = it },
                     label = { Text("Add someone new") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { addNew() }),
                     shape = AtelierShapes.CornerMedium,
                     modifier = Modifier.fillMaxWidth(),
                     trailingIcon = {
-                        IconButton(
-                            onClick = {
-                                val trimmed = newKarigarInput.trim()
-                                if (trimmed.isNotBlank() &&
-                                    tempKarigars.none { it.equals(trimmed, ignoreCase = true) }
-                                ) {
-                                    tempKarigars = tempKarigars + trimmed
-                                    // Joins the Hub too, so the master list stays master.
-                                    onAddToHub(trimmed)
-                                    newKarigarInput = ""
-                                }
-                            }
-                        ) {
+                        IconButton(onClick = addNew) {
                             Icon(Icons.Default.Add, contentDescription = "Add karigar")
                         }
                     }

@@ -68,6 +68,17 @@ class AttributesTest {
         assertTrue(bad["Top - Work"].isNullOrEmpty())
     }
 
+    @Test
+    fun `attributeDrifts orders fields stably with canonical spelling first`() {
+        val mixed = catalogue + listOf(
+            design("e", "Bottom - Color" to "Red", "Top - Fabric" to "RAYON"),
+            design("f", "Bottom - Color" to "red"),
+        )
+        val drifts = attributeDrifts(mixed)
+        assertEquals(listOf("Bottom - Color", "Top - Fabric"), drifts.map { it.field })
+        assertEquals(listOf("Rayon", "RAYON", "rayon"), drifts[1].orderedSpellings)
+    }
+
     // --- suggesting ---
 
     @Test

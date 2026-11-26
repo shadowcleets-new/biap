@@ -55,6 +55,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.horizontalScroll
 import com.sc.biap.data.JobWork
 import com.sc.biap.data.SizeInventory
+import com.sc.biap.theme.horizontalFadingEdges
 import com.sc.biap.ui.main.rupees
 import com.sc.biap.util.FileUtils
 import java.text.SimpleDateFormat
@@ -704,10 +705,12 @@ private fun ReceiveBackDialog(job: JobWork, onConfirm: (Int) -> Unit, onDismiss:
 /** A single-choice row of chips. Scrolls, because a workshop has more names than fit. */
 @Composable
 private fun PickRow(options: List<String>, selected: String, onSelect: (String) -> Unit) {
+    val scrollState = rememberScrollState()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
+            .horizontalFadingEdges(scrollState)
+            .horizontalScroll(scrollState),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         options.forEach { option ->

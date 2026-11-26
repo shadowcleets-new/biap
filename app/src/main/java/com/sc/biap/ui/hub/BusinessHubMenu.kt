@@ -5,34 +5,50 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sc.biap.data.AttributeDrift
 // #endregion
 
 /**
@@ -62,6 +78,21 @@ fun BusinessHubScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val outWithKarigars by viewModel.outWithKarigars.collectAsStateWithLifecycle()
+    val attributeDrifts by viewModel.attributeDrifts.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    val snackbars = remember { SnackbarHostState() }
+    var tidyingAttributes by remember { mutableStateOf(false) }
+
+    LaunchedEffect(message) {
+        message?.let {
+            snackbars.showSnackbar(it)
+            viewModel.clearMessage()
+        }
+    }
+
+    LaunchedEffect(attributeDrifts.isEmpty()) {
+        if (attributeDrifts.isEmpty()) tidyingAttributes = false
+    }
 
     val people = state.karigars.size
     val activities = state.activities.size
@@ -69,6 +100,7 @@ fun BusinessHubScreen(
 
     Scaffold(
         modifier = modifier,
+        snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             TopAppBar(
                 title = { Text("Business Hub") },
@@ -114,8 +146,110 @@ fun BusinessHubScreen(
                 alert = outWithKarigars.any { it.oldestDaysOut >= com.sc.biap.data.JOB_OVERDUE_DAYS },
                 onClick = onWorkManagement,
             )
+            if (attributeDrifts.isNotEmpty()) {
+                HubMenuRow(
+                    icon = Icons.Default.AutoFixHigh,
+                    title = "Attribute spellings",
+                    body = "Same fabric, work or colour written more than one way.",
+                    status = "${attributeDrifts.size} ${if (attributeDrifts.size == 1) "group needs" else "groups need"} tidying",
+                    onClick = { tidyingAttributes = true },
+                )
+            }
         }
     }
+
+    if (tidyingAttributes && attributeDrifts.isNotEmpty()) {
+        AttributeTidyDialog(
+            drifts = attributeDrifts,
+            onUnify = viewModel::unifyAttribute,
+            onDismiss = { tidyingAttributes = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AttributeTidyDialog(
+    drifts: List<AttributeDrift>,
+    onUnify: (field: String, fromValues: Set<String>, toValue: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Tidy attribute spellings") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    "Pick the spelling to keep for each field. Every active design with one of " +
+                        "the other spellings will update to match.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                )
+                drifts.forEach { drift ->
+                    var selected by remember(drift.field, drift.value.spellings) {
+                        mutableStateOf(drift.value.canonical)
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(scheme.surfaceContainerHigh)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = drift.field,
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = "${drift.value.uses} uses",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                        }
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            drift.orderedSpellings.forEach { spelling ->
+                                FilterChip(
+                                    selected = spelling == selected,
+                                    onClick = { selected = spelling },
+                                    label = { Text(spelling) },
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    onUnify(drift.field, drift.value.spellings, selected)
+                                }
+                            ) {
+                                Text("Use \"$selected\"")
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        },
+    )
 }
 
 // #region Pieces

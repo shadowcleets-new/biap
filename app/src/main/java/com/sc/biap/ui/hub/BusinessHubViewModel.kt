@@ -3,8 +3,10 @@ package com.sc.biap.ui.hub
 // #region Imports
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sc.biap.data.AttributeDrift
 import com.sc.biap.data.DataRepository
 import com.sc.biap.data.Karigar
+import com.sc.biap.data.attributeDrifts
 import com.sc.biap.data.loadByKarigar
 import com.sc.biap.data.KarigarLoad
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +67,25 @@ class BusinessHubViewModel(private val repository: DataRepository) : ViewModel()
         .map { loadByKarigar(it.jobWork, System.currentTimeMillis()) }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Attribute values written more than one way across designs, ready to unify. */
+    val attributeDrifts: StateFlow<List<AttributeDrift>> = repository.biData
+        .map { attributeDrifts(it.designs) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun unifyAttribute(field: String, fromValues: Set<String>, toValue: String) {
+        viewModelScope.launch {
+            val updated = repository.unifyAttributeValue(field, fromValues, toValue)
+            if (updated > 0) {
+                _message.value = if (updated == 1) {
+                    "Updated 1 design to \"$toValue\"."
+                } else {
+                    "Updated $updated designs to \"$toValue\"."
+                }
+            }
+        }
+    }
 
     /** Drop a karigar onto an activity. Idempotent, so a second drop is not an error. */
     fun assign(karigarId: String, activity: String) {

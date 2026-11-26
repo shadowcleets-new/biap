@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -271,19 +272,29 @@ fun MainScreen(
     val piecesWithKarigars by viewModel.piecesWithKarigars.collectAsStateWithLifecycle()
 
     val catalogueStatusLine: (MainScreenUiState, Boolean, Long) -> String = { s, syncing, syncedAt ->
-        val total = (s as? MainScreenUiState.Success)?.totalCount ?: 0
-        val designs = if (total == 1) "1 DESIGN" else "$total DESIGNS"
-        // Said as WITH KARIGARS rather than OUT, because the Orders tab one thumb away
-        // already says OUT and means something else entirely - pieces that left in an
-        // order. Two counts both called "out" on adjacent screens would be worse than
-        // showing neither.
-        val withKarigars =
-            if (piecesWithKarigars > 0) " · $piecesWithKarigars WITH KARIGARS" else ""
-        when {
-            syncing -> "SYNCING…"
-            total == 0 -> "NO DESIGNS YET"
-            else -> "$designs$withKarigars · " +
-                syncStamp(syncedAt, System.currentTimeMillis(), use24Hour)
+        if (syncing) {
+            "SYNCING…"
+        } else {
+            when (s) {
+                MainScreenUiState.Loading -> "LOADING…"
+                is MainScreenUiState.Error -> "COULD NOT LOAD"
+                is MainScreenUiState.Success -> {
+                    val total = s.totalCount
+                    if (total == 0) {
+                        "NO DESIGNS YET"
+                    } else {
+                        val designs = if (total == 1) "1 DESIGN" else "$total DESIGNS"
+                        // Said as WITH KARIGARS rather than OUT, because the Orders tab one thumb away
+                        // already says OUT and means something else entirely - pieces that left in an
+                        // order. Two counts both called "out" on adjacent screens would be worse than
+                        // showing neither.
+                        val withKarigars =
+                            if (piecesWithKarigars > 0) " · $piecesWithKarigars WITH KARIGARS" else ""
+                        "$designs$withKarigars · " +
+                            syncStamp(syncedAt, System.currentTimeMillis(), use24Hour)
+                    }
+                }
+            }
         }
     }
     val orders by viewModel.orders.collectAsStateWithLifecycle()
@@ -435,13 +446,17 @@ fun MainScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             CatalogueHeader(
                 title = tab.title,
                 statusLine = when (tab) {
                     MainTab.INVENTORY -> catalogueStatusLine(state, isSyncing, lastSyncAt)
-                    MainTab.ORDERS -> ordersStatusLine(orders)
+                    MainTab.ORDERS -> if (state is MainScreenUiState.Loading) "LOADING…" else ordersStatusLine(orders)
                 },
+                modifier = Modifier.windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+                ),
                 actions = {
                     if (currentUser != null) {
                         Row(
@@ -593,6 +608,13 @@ fun MainScreen(
                                     )
                                 }
                                 DropdownMenuItem(
+                                    text = { Text("Settings") },
+                                    onClick = {
+                                        showMenu = false
+                                        onItemClick(Settings)
+                                    }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("Sign Out") },
                                     onClick = {
                                         showMenu = false
@@ -629,9 +651,13 @@ fun MainScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         modifier = modifier
     ) { paddingValues ->
+        val layoutDirection = LocalLayoutDirection.current
         when (state) {
             MainScreenUiState.Loading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.padding(paddingValues).fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
                     LoadingIndicator()
                 }
             }
@@ -647,9 +673,13 @@ fun MainScreen(
                     onRefresh = { viewModel.syncWithGoogleDrive() },
                     state = pullState,
                     modifier = Modifier
-                        // Top only. Reserving the bottom too would put the strip straight
-                        // back, which is the thing being removed.
-                        .padding(top = paddingValues.calculateTopPadding())
+                        // Top and horizontal safe areas only. Reserving the bottom too would put
+                        // the opaque strip straight back above the nav bar, undoing 20584ce.
+                        .padding(
+                            top = paddingValues.calculateTopPadding(),
+                            start = paddingValues.calculateStartPadding(layoutDirection),
+                            end = paddingValues.calculateEndPadding(layoutDirection),
+                        )
                         .fillMaxSize(),
                     indicator = {
                         // The Expressive indicator, which morphs through a sequence of shapes,
@@ -669,13 +699,27 @@ fun MainScreen(
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                             )
 
+                            CatalogueMatchCount(
+                                count = data.designs.size,
+                                totalCount = success.totalCount,
+                                query = searchQuery,
+                                filters = success.filters,
+                            )
+
                             if (data.designs.isEmpty()) {
                                 CatalogueEmptyState(
                                     query = searchQuery,
                                     filters = success.filters,
                                     onAddDesign = { onItemClick(AddDesign) },
                                     onClearFilters = { viewModel.clearFilters() },
-                                    modifier = Modifier.weight(1f),
+                                    onClearSearch = { viewModel.updateSearchQuery("") },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(bottom = paddingValues.calculateBottomPadding())
+                                        .consumeWindowInsets(
+                                            PaddingValues(bottom = paddingValues.calculateBottomPadding())
+                                        )
+                                        .imePadding(),
                                 )
                             } else {
                                 CatalogueList(
@@ -715,6 +759,12 @@ fun MainScreen(
                                 // Inventory tab is currently narrowed to.
                                 hasDesigns = designsById.isNotEmpty(),
                                 onNewOrder = { onItemClick(NewOrder()) },
+                                modifier = Modifier
+                                    .padding(bottom = paddingValues.calculateBottomPadding())
+                                    .consumeWindowInsets(
+                                        PaddingValues(bottom = paddingValues.calculateBottomPadding())
+                                    )
+                                    .imePadding(),
                             )
                         } else {
                             OrdersList(
@@ -730,7 +780,10 @@ fun MainScreen(
                 }
             }
             is MainScreenUiState.Error -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.padding(paddingValues).fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
                         "Error loading data: ${(state as MainScreenUiState.Error).throwable.message}",
                         color = MaterialTheme.colorScheme.error
