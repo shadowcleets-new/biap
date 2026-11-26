@@ -11,7 +11,6 @@ import com.sc.biap.util.FileUtils
 import com.sc.biap.util.DriveImageStore
 import com.sc.biap.util.ImageUploadWorker
 import com.sc.biap.util.OrphanImageCleanupWorker
-import com.sc.biap.util.VoiceNotes
 import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
@@ -77,10 +76,6 @@ sealed interface SyncStatus {
 interface DataRepository {
     /** Queue a design photo for background upload. Returns the storage key it will land on. */
     fun enqueueImageUpload(designId: String, localPath: String): String
-
-    /** Queue a JobWork photo or voice note for background upload. Returns the storage key it will land on. */
-    fun enqueueJobMediaUpload(jobId: String, localPath: String, isVoice: Boolean): String
-
     /**
      * Move ONE photograph's pointer after its bytes are confirmed uploaded.
      *
@@ -94,23 +89,9 @@ interface DataRepository {
         uploadedBy: String?,
     ): Boolean
 
-    /** Point a JobWork row's photoRef or voiceRef at its confirmed Drive key. */
-    suspend fun applyUploadedJobMedia(
-        jobId: String,
-        isVoice: Boolean,
-        key: String,
-    ): Boolean
-
     /** Every storage key this design points at, so retention can spare all of them. */
     suspend fun referencedImageKeys(designId: String): Set<String>
     val biData: StateFlow<BusinessIntelligenceData>
-
-    /**
-     * True once the active identity's Room database has opened and emitted its first snapshot.
-     * Resets to false whenever the active identity changes until the new database emits.
-     */
-    val isDatabaseReady: StateFlow<Boolean>
-
     fun addOrUpdateDesign(design: Design)
 
     /** Hide a design from the working catalogue, or bring it back. */
@@ -226,12 +207,6 @@ interface DataRepository {
     fun addGlobalCustomField(field: String)
     fun removeGlobalCustomField(field: String)
 
-    /**
-     * Normalize drifted spellings of one attribute value across all designs in one transaction.
-     * Returns the number of designs updated.
-     */
-    suspend fun unifyAttributeValue(field: String, fromValues: Set<String>, toValue: String): Int
-
     // Google Auth & Drive Sync
     val authManager: AuthManager
     val isSyncing: StateFlow<Boolean>
@@ -307,9 +282,6 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     private val _biData = MutableStateFlow(BusinessIntelligenceData())
     override val biData: StateFlow<BusinessIntelligenceData> = _biData.asStateFlow()
 
-    private val _isDatabaseReady = MutableStateFlow(false)
-    override val isDatabaseReady: StateFlow<Boolean> = _isDatabaseReady.asStateFlow()
-
     override val authManager = AuthManager(context)
     // Also used by DriveImageStore: photos travel over the same transport as the data.
     val driveSyncManager = GoogleDriveSyncManager()
@@ -373,8 +345,6 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         repositoryScope.launch {
             signedInUserKeyFlow().collect { userKey ->
                 dbLock.withLock {
-                    _isDatabaseReady.value = false
-                    _biData.value = BusinessIntelligenceData()
                     // Close previous database connections and cancel current collections
                     dbCollectionJob?.cancelAndJoin()
                     currentDb?.close()
@@ -383,10 +353,6 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                     driveFileId = null
 
                     val suffix = getDatabaseSuffix(userKey)
-                    // First: a database written under the old MD5 name is carried over, with
-                    // its sync stamp. Must precede the read below, or the stamp is read from
-                    // the new key before the old one has been moved to it.
-                    adoptMd5NamedDatabaseIfPresent(userKey, suffix)
                     // Before the database opens, so the header never flashes NOT SYNCED YET
                     // on the way in.
                     _lastSyncAt.value = readLastSyncAt(suffix)
@@ -520,7 +486,6 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                             }
                             .collect { merged ->
                                 _biData.value = merged
-                                _isDatabaseReady.value = true
                             }
                     }
                 }
@@ -546,7 +511,10 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     // keying on it meant every phone/email user fell through to the shared guest DB.
     private fun getDatabaseSuffix(userKey: String?): String {
         return if (!userKey.isNullOrBlank()) {
-            "_" + nameHash(userKey)
+            val bytes = userKey.toByteArray()
+            val hash = java.security.MessageDigest.getInstance("MD5").digest(bytes)
+            val hex = hash.joinToString("") { "%02x".format(it) }
+            "_$hex"
         } else {
             ""
         }
@@ -586,51 +554,6 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         auth.addAuthStateListener(listener)
         awaitClose { auth.removeAuthStateListener(listener) }
     }.distinctUntilChanged()
-
-    /**
-     * The uid, turned into something usable as a filename.
-     *
-     * SHA-256 rather than MD5, which is what this used to be. The hash protects nothing here
-     * - it names a file, and the database behind it is encrypted with a key that has nothing
-     * to do with this - so MD5 was not a weakness so much as a word that makes every scanner
-     * stop. Truncated to sixteen bytes to keep the filename the length it always was.
-     */
-    private fun nameHash(userKey: String): String = sha256NameHash(userKey)
-
-    /**
-     * Carry a database written under the old MD5 name over to the new one.
-     *
-     * CHANGING A HASH RENAMES EVERY FILE IT NAMED. Without this, the day this shipped, every
-     * phone in the workshop would have opened an empty catalogue and the real one would have
-     * sat on disk under a name nothing looks for any more. That is a far worse outcome than
-     * the finding it answers.
-     *
-     * Deliberately the same shape as [adoptLegacyGuestDatabaseIfPresent]: it runs only when
-     * the destination does NOT exist, so it can never overwrite a real database, and it
-     * renames rather than deletes, so nothing is destroyed even if the move is wrong. Also
-     * carries `.db.bak` when present and missing at the destination.
-     */
-    private fun adoptMd5NamedDatabaseIfPresent(userKey: String?, suffix: String) {
-        if (suffix.isEmpty()) return
-        val old = legacyMd5DatabaseSuffix(userKey)
-        if (old.isEmpty() || old == suffix) return
-        val from = context.getDatabasePath("bi_database${old}.db")
-        val to = context.getDatabasePath("bi_database${suffix}.db")
-        try {
-            if (adoptDatabaseFilesWithSuffix(
-                    fromDb = from,
-                    toDb = to,
-                    prefs = syncPrefs(),
-                    oldPrefKey = KEY_LAST_SYNC_AT + old,
-                    newPrefKey = KEY_LAST_SYNC_AT + suffix,
-                )
-            ) {
-                android.util.Log.i("DataRepository", "Renamed MD5-named database to $suffix")
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()  // leave the old file untouched on failure
-        }
-    }
 
     /**
      * One-time adoption of the pre-identity database.
@@ -744,25 +667,42 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
      * BUG-01 fix: sync snapshots are read from the database, never from the UI StateFlow
      * (which can be empty right after an account switch and would nuke the merge).
      */
-    private suspend fun snapshotFromDao(dao: DesignDao): BusinessIntelligenceData =
-        buildSnapshotFromDao(dao)
+    private suspend fun snapshotFromDao(dao: DesignDao): BusinessIntelligenceData {
+        val designs = dao.getAllDesignsOnce()
+        val globals = dao.getAllGlobalCustomFields()
+        val deletedDesigns = dao.getAllDeletedDesignsOnce()
+        val deletedFields = dao.getAllDeletedCustomFieldsOnce()
+        val profile = dao.getProfileOnce()?.toDomain()
+        val orders = dao.getAllOrdersOnce()
+        val deletedOrders = dao.getAllDeletedOrdersOnce()
+        return BusinessIntelligenceData(
+            designs = designs.map { it.toDomain() },
+            globalCustomFields = globals.map { it.field }.toSet(),
+            globalCustomFieldsMetadata = globals.associate { it.field to it.updatedAt },
+            deletedDesignIds = deletedDesigns.map { it.designId }.toSet(),
+            deletedDesigns = deletedDesigns.associate { it.designId to it.deletedAt },
+            deletedCustomFields = deletedFields.associate { it.field to it.deletedAt },
+            orders = orders.map { it.toDomain() },
+            deletedOrders = deletedOrders.associate { it.orderId to it.deletedAt },
+            profile = profile
+        )
+    }
 
     /**
-     * Re-enqueue uploads for photos and voice notes that exist on this device but never
-     * reached Storage.
+     * Re-enqueue uploads for photos that exist on this device but never reached Storage.
      *
-     * An upload used to be enqueued in exactly ONE place: the instant a design or job was
-     * saved. If that upload failed - no network, an unregistered App Check debug token, rules
-     * still propagating - the worker gave up after its attempt cap and NOTHING ever tried
-     * again. `imageRef` / `photoRef` / `voiceRef` stayed null forever, so the media existed
-     * only as a local file. Reinstalling the app then lost it, even though the record itself
-     * synced back intact.
+     * An upload used to be enqueued in exactly ONE place: the instant a design was saved. If
+     * that upload failed - no network, an unregistered App Check debug token, rules still
+     * propagating - the worker gave up after its attempt cap and NOTHING ever tried again.
+     * imageRef stayed null forever, so the photo existed only as a local file. Reinstalling
+     * the app then lost it, even though the design record itself synced back intact: sizes,
+     * stock and prices returned, the photograph did not.
      *
      * Running this every time a database is opened turns a permanent silent loss into a
      * retry on the next launch.
      *
      * Deliberately conservative: it only enqueues when the local file is actually present,
-     * so it can never fabricate an upload for media this device does not have.
+     * so it can never fabricate an upload for a photo this device does not have.
      */
     private suspend fun backfillPendingImageUploads(dao: DesignDao) {
         try {
@@ -778,38 +718,13 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                     if (file != null && file.exists()) designId to file.absolutePath else null
                 }
 
-            if (pending.isNotEmpty()) {
-                android.util.Log.i(
-                    "DataRepository",
-                    "Image backfill: re-queueing ${pending.size} photo(s) that never reached Storage"
-                )
-                pending.forEach { (designId, path) -> enqueueImageUpload(designId, path) }
-            }
+            if (pending.isEmpty()) return
 
-            // Re-enqueue JobWork fault/sample photos and spoken notes whose remote ref is missing.
-            var jobMediaQueued = 0
-            for (job in dao.allJobWorkOnce().map { it.toDomain() }) {
-                if (job.photoRef.isNullOrBlank() && !job.photoPath.isNullOrBlank()) {
-                    val file = FileUtils.resolveImageFile(context, job.photoPath)
-                    if (file != null && file.exists()) {
-                        enqueueJobMediaUpload(job.id, file.absolutePath, isVoice = false)
-                        jobMediaQueued++
-                    }
-                }
-                if (job.voiceRef.isNullOrBlank() && !job.voicePath.isNullOrBlank()) {
-                    val file = VoiceNotes.resolve(context, job.voicePath)
-                    if (file != null && file.exists()) {
-                        enqueueJobMediaUpload(job.id, file.absolutePath, isVoice = true)
-                        jobMediaQueued++
-                    }
-                }
-            }
-            if (jobMediaQueued > 0) {
-                android.util.Log.i(
-                    "DataRepository",
-                    "JobWork backfill: re-queueing $jobMediaQueued media file(s) that never reached Drive"
-                )
-            }
+            android.util.Log.i(
+                "DataRepository",
+                "Image backfill: re-queueing ${pending.size} photo(s) that never reached Storage"
+            )
+            pending.forEach { (designId, path) -> enqueueImageUpload(designId, path) }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -1199,50 +1114,14 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     override fun enqueueImageUpload(designId: String, localPath: String): String {
         val key = DriveImageStore.newVersionKey(designId)
-        val resolvedPath = FileUtils.resolveImageFile(context, localPath)?.absolutePath ?: localPath
-        enqueueUploadRequest(
-            workName = ImageUploadWorker.workName(designId, resolvedPath),
-            inputData = workDataOf(
-                ImageUploadWorker.KEY_TARGET_TYPE to ImageUploadWorker.TARGET_DESIGN,
-                ImageUploadWorker.KEY_DESIGN_ID to designId,
-                ImageUploadWorker.KEY_LOCAL_PATH to resolvedPath,
-                ImageUploadWorker.KEY_STORAGE_KEY to key,
-            ),
-        )
-        return key
-    }
-
-    override fun enqueueJobMediaUpload(jobId: String, localPath: String, isVoice: Boolean): String {
-        val key = if (isVoice) {
-            DriveImageStore.newVoiceKey(jobId)
-        } else {
-            DriveImageStore.newJobPhotoKey(jobId)
-        }
-        val targetType = if (isVoice) {
-            ImageUploadWorker.TARGET_JOB_VOICE
-        } else {
-            ImageUploadWorker.TARGET_JOB_PHOTO
-        }
-        val resolvedPath = if (isVoice) {
-            VoiceNotes.resolve(context, localPath)?.absolutePath ?: localPath
-        } else {
-            FileUtils.resolveImageFile(context, localPath)?.absolutePath ?: localPath
-        }
-        enqueueUploadRequest(
-            workName = ImageUploadWorker.jobWorkName(jobId, targetType, resolvedPath),
-            inputData = workDataOf(
-                ImageUploadWorker.KEY_TARGET_TYPE to targetType,
-                ImageUploadWorker.KEY_JOB_ID to jobId,
-                ImageUploadWorker.KEY_LOCAL_PATH to resolvedPath,
-                ImageUploadWorker.KEY_STORAGE_KEY to key,
-            ),
-        )
-        return key
-    }
-
-    private fun enqueueUploadRequest(workName: String, inputData: androidx.work.Data) {
         val request = OneTimeWorkRequestBuilder<ImageUploadWorker>()
-            .setInputData(inputData)
+            .setInputData(
+                workDataOf(
+                    ImageUploadWorker.KEY_DESIGN_ID to designId,
+                    ImageUploadWorker.KEY_LOCAL_PATH to localPath,
+                    ImageUploadWorker.KEY_STORAGE_KEY to key,
+                )
+            )
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(
                 BackoffPolicy.EXPONENTIAL,
@@ -1250,11 +1129,16 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
                 TimeUnit.MILLISECONDS
             )
             .build()
+        // REPLACE, and keyed by the LOCAL PATH as well as the design: a rapid re-shoot of one
+        // photo still supersedes its own pending upload, but five photos on one design no
+        // longer evict each other. Keyed by design alone, adding five at once would have left
+        // exactly one uploaded.
         WorkManager.getInstance(context).enqueueUniqueWork(
-            workName,
+            ImageUploadWorker.workName(designId, localPath),
             ExistingWorkPolicy.REPLACE,
             request
         )
+        return key
     }
 
     /**
@@ -1276,25 +1160,37 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     ): Boolean = withContext(Dispatchers.IO) {
         return@withContext try {
             val dao = awaitDao() ?: return@withContext false
-            val applied = applyUploadedImageToDao(dao, designId, localPath, key, uploadedBy)
-            if (applied) triggerLocalBackup()
-            applied
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
-    }
+            val design = dao.getDesignById(designId)?.toDomain() ?: return@withContext true
+            val now = System.currentTimeMillis()
 
-    override suspend fun applyUploadedJobMedia(
-        jobId: String,
-        isVoice: Boolean,
-        key: String,
-    ): Boolean = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val dao = awaitDao() ?: return@withContext false
-            val applied = applyUploadedJobMediaToDao(dao, jobId, isVoice, key)
-            if (applied) triggerLocalBackup()
-            applied
+            when {
+                design.imagePath == localPath -> {
+                    // Targeted column update: whatever the user edited while the upload was
+                    // in flight stays exactly as they left it.
+                    dao.updateImagePointer(designId, key, now, uploadedBy)
+                }
+
+                design.extraImages.any { it.localPath == localPath } -> {
+                    val moved = design.extraImages.map { photo ->
+                        if (photo.localPath == localPath) {
+                            photo.copy(ref = key, uploadedBy = uploadedBy)
+                        } else {
+                            photo
+                        }
+                    }
+                    dao.updateExtraImages(designId, moved, now)
+                }
+
+                else -> {
+                    android.util.Log.i(
+                        "DataRepository",
+                        "uploaded $key but $localPath is no longer on design $designId - leaving it unreferenced"
+                    )
+                    return@withContext true
+                }
+            }
+            triggerLocalBackup()
+            true
         } catch (e: Exception) {
             e.printStackTrace()
             false
@@ -1563,20 +1459,19 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
         val now = System.currentTimeMillis()
         val id = java.util.UUID.randomUUID().toString()
-        // Save with null remote refs first; ImageUploadWorker populates photoRef/voiceRef only
-        // after encrypted bytes are confirmed on Drive.
+        // Uploaded through the same worker the design photos use. A note that only exists on
+        // the phone that recorded it is no use to the person who has to act on it, and this
+        // is going to the whole workshop.
         val job = JobWork(
             id = id, kind = WorkKind.SAMPLE, designName = name, karigar = karigar.trim(),
             activity = activity.trim(), sentQuantity = 1, sentAt = now, note = note.trim(),
             photoPath = photoPath,
-            photoRef = null,
+            photoRef = photoPath?.let { enqueueImageUpload(id, it) },
             voicePath = voicePath,
-            voiceRef = null,
+            voiceRef = voicePath?.let { enqueueImageUpload(id, it) },
         )
         try {
             dao.insertJobWork(job.toEntity())
-            triggerLocalBackup()
-            enqueueJobMediaIfPresent(id, photoPath, voicePath)
             null
         } catch (e: Exception) {
             e.printStackTrace()
@@ -1609,33 +1504,16 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             karigar = karigar.trim(), activity = "Alteration", sentQuantity = quantity,
             sentAt = now, note = note.trim(),
             photoPath = photoPath,
-            photoRef = null,
+            photoRef = photoPath?.let { enqueueImageUpload(id, it) },
             voicePath = voicePath,
-            voiceRef = null,
+            voiceRef = voicePath?.let { enqueueImageUpload(id, it) },
         )
         try {
             dao.sendOutWork(job.toEntity(), now, takeFromStock = true)
-            triggerLocalBackup()
-            enqueueJobMediaIfPresent(id, photoPath, voicePath)
             null
         } catch (e: Exception) {
             e.printStackTrace()
             "Could not record that alteration."
-        }
-    }
-
-    private fun enqueueJobMediaIfPresent(jobId: String, photoPath: String?, voicePath: String?) {
-        if (!photoPath.isNullOrBlank()) {
-            val photoFile = FileUtils.resolveImageFile(context, photoPath)
-            if (photoFile != null && photoFile.exists()) {
-                enqueueJobMediaUpload(jobId, photoFile.absolutePath, isVoice = false)
-            }
-        }
-        if (!voicePath.isNullOrBlank()) {
-            val voiceFile = VoiceNotes.resolve(context, voicePath)
-            if (voiceFile != null && voiceFile.exists()) {
-                enqueueJobMediaUpload(jobId, voiceFile.absolutePath, isVoice = true)
-            }
         }
     }
 
@@ -1721,24 +1599,20 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             try {
                 dao.insertJobWork(decideSample(job, approved, now).toEntity())
                 if (approved) {
-                    val designId = java.util.UUID.randomUUID().toString()
-                    val designEntity = approvedDesignFromSample(
-                        job = job,
-                        designId = designId,
-                        now = now,
-                        imageUpdatedBy = currentUserKey(),
-                    )
                     // No sizes and no stock, which is honest: nothing has been made yet.
                     // The owner prices it and sets its sizes when the first run is ordered.
-                    dao.insertDesign(designEntity)
-                    if (designEntity.imageRef == null && !designEntity.imagePath.isNullOrBlank()) {
-                        val file = FileUtils.resolveImageFile(context, designEntity.imagePath)
-                        if (file != null && file.exists()) {
-                            enqueueImageUpload(designId, file.absolutePath)
-                        }
-                    }
+                    dao.insertDesign(
+                        DesignEntity(
+                            id = java.util.UUID.randomUUID().toString(),
+                            name = job.designName.ifBlank { "New design" },
+                            category = "Salwar Kameez",
+                            imagePath = job.photoPath,
+                            customFields = emptyMap(),
+                            karigars = listOf(job.karigar),
+                            updatedAt = now,
+                        )
+                    )
                 }
-                triggerLocalBackup()
                 null
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -2029,22 +1903,6 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         }
     }
 
-    override suspend fun unifyAttributeValue(
-        field: String,
-        fromValues: Set<String>,
-        toValue: String,
-    ): Int = withContext(Dispatchers.IO) {
-        val dao = awaitDao() ?: return@withContext 0
-        try {
-            val count = dao.unifyAttributeValue(field, fromValues, toValue, System.currentTimeMillis())
-            if (count > 0) triggerLocalBackup()
-            count
-        } catch (e: Exception) {
-            e.printStackTrace()
-            0
-        }
-    }
-
     override suspend fun hasGuestData(): Boolean = withContext(Dispatchers.IO) {
         // Only meaningful while signed in: in guest mode "bi_database.db" IS the active DB.
         if (currentUserKey() == null) return@withContext false
@@ -2145,165 +2003,4 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             guestDb?.close()
         }
     }
-}
-
-/** SHA-256 truncated to 16 bytes (32 hex chars) used to name per-identity database files. */
-internal fun sha256NameHash(userKey: String): String =
-    java.security.MessageDigest.getInstance("SHA-256")
-        .digest(userKey.toByteArray())
-        .take(16)
-        .joinToString("") { "%02x".format(it) }
-
-internal fun sha256DatabaseSuffix(userKey: String?): String =
-    if (userKey.isNullOrBlank()) "" else "_" + sha256NameHash(userKey)
-
-/** Legacy MD5 suffix kept solely so [adoptDatabaseFilesWithSuffix] can locate pre-SHA256 files. */
-@Suppress("DEPRECATION")
-internal fun legacyMd5DatabaseSuffix(userKey: String?): String {
-    if (userKey.isNullOrBlank()) return ""
-    val hex = java.security.MessageDigest.getInstance("MD5")
-        .digest(userKey.toByteArray())
-        .joinToString("") { "%02x".format(it) }
-    return "_$hex"
-}
-
-/**
- * Carry an MD5-named database and its `-wal`, `-shm`, `.bak` sidecars (plus last-sync stamp)
- * to the SHA-256 filename without overwriting an existing destination `.db` or `.bak`.
- */
-internal fun adoptDatabaseFilesWithSuffix(
-    fromDb: File,
-    toDb: File,
-    prefs: android.content.SharedPreferences,
-    oldPrefKey: String,
-    newPrefKey: String,
-): Boolean {
-    var changed = false
-    if (fromDb.exists() && !toDb.exists()) {
-        for (ext in listOf("", "-wal", "-shm", ".bak")) {
-            val src = File(fromDb.parentFile, "${fromDb.name}$ext")
-            val dst = File(toDb.parentFile, "${toDb.name}$ext")
-            if (src.exists() && !dst.exists() && src.renameTo(dst)) {
-                changed = true
-            }
-        }
-        val stamp = prefs.getLong(oldPrefKey, 0L)
-        if (stamp > 0L) {
-            prefs.edit()
-                .putLong(newPrefKey, stamp)
-                .remove(oldPrefKey)
-                .commit()
-            changed = true
-        }
-    } else {
-        // Handle a `.db.bak` left behind if the main `.db` was migrated before `.bak` carry-over existed.
-        val fromBak = File(fromDb.parentFile, "${fromDb.name}.bak")
-        val toBak = File(toDb.parentFile, "${toDb.name}.bak")
-        if (fromBak.exists() && !toBak.exists() && fromBak.renameTo(toBak)) {
-            changed = true
-        }
-    }
-    return changed
-}
-
-/** Reads the complete v11 dataset snapshot directly from Room for Drive sync. */
-internal suspend fun buildSnapshotFromDao(dao: DesignDao): BusinessIntelligenceData {
-    val designs = dao.getAllDesignsOnce()
-    val globals = dao.getAllGlobalCustomFields()
-    val deletedDesigns = dao.getAllDeletedDesignsOnce()
-    val deletedFields = dao.getAllDeletedCustomFieldsOnce()
-    val profile = dao.getProfileOnce()?.toDomain()
-    val orders = dao.getAllOrdersOnce()
-    val deletedOrders = dao.getAllDeletedOrdersOnce()
-    val batches = dao.allBatchesOnce()
-    val karigars = dao.karigarsOnce()
-    val deletedKarigars = dao.deletedKarigarsOnce()
-    val activities = dao.activitiesOnce()
-    val deletedActivities = dao.deletedActivitiesOnce()
-    val jobWork = dao.allJobWorkOnce()
-    val deletedJobWork = dao.deletedJobWorkOnce()
-    return BusinessIntelligenceData(
-        designs = designs.map { it.toDomain() },
-        jobWork = jobWork.map { it.toDomain() },
-        deletedJobWork = deletedJobWork.associate { it.id to it.deletedAt },
-        globalCustomFields = globals.map { it.field }.toSet(),
-        globalCustomFieldsMetadata = globals.associate { it.field to it.updatedAt },
-        deletedDesignIds = deletedDesigns.map { it.designId }.toSet(),
-        deletedDesigns = deletedDesigns.associate { it.designId to it.deletedAt },
-        deletedCustomFields = deletedFields.associate { it.field to it.deletedAt },
-        orders = orders.map { it.toDomain() },
-        deletedOrders = deletedOrders.associate { it.orderId to it.deletedAt },
-        profile = profile,
-        batches = batches.map { it.toDomain() },
-        karigars = karigars.map { it.toDomain() },
-        deletedKarigars = deletedKarigars.associate { it.karigarId to it.deletedAt },
-        activities = activities.associate { it.name to it.updatedAt },
-        deletedActivities = deletedActivities.associate { it.name to it.deletedAt },
-    )
-}
-
-internal suspend fun applyUploadedImageToDao(
-    dao: DesignDao,
-    designId: String,
-    localPath: String,
-    key: String,
-    uploadedBy: String?,
-    now: Long = System.currentTimeMillis(),
-): Boolean {
-    val design = dao.getDesignById(designId)?.toDomain() ?: return true
-    when {
-        FileUtils.sameStoredPath(design.imagePath, localPath) -> {
-            dao.updateImagePointer(designId, key, now, uploadedBy)
-        }
-
-        design.extraImages.any { FileUtils.sameStoredPath(it.localPath, localPath) } -> {
-            val moved = design.extraImages.map { photo ->
-                if (FileUtils.sameStoredPath(photo.localPath, localPath)) {
-                    photo.copy(ref = key, uploadedBy = uploadedBy)
-                } else {
-                    photo
-                }
-            }
-            dao.updateExtraImages(designId, moved, now)
-        }
-
-        else -> return true
-    }
-    return true
-}
-
-internal suspend fun applyUploadedJobMediaToDao(
-    dao: DesignDao,
-    jobId: String,
-    isVoice: Boolean,
-    key: String,
-): Boolean {
-    dao.jobWorkById(jobId) ?: return true
-    if (isVoice) {
-        dao.updateJobVoiceRef(jobId, key)
-    } else {
-        dao.updateJobPhotoRef(jobId, key)
-    }
-    return true
-}
-
-internal fun approvedDesignFromSample(
-    job: JobWork,
-    designId: String,
-    now: Long,
-    imageUpdatedBy: String?,
-): DesignEntity {
-    val remoteRef = job.photoRef?.takeIf { it.isNotBlank() }
-    return DesignEntity(
-        id = designId,
-        name = job.designName.ifBlank { "New design" },
-        category = "Salwar Kameez",
-        imagePath = job.photoPath,
-        imageRef = remoteRef,
-        imageUpdatedAt = if (remoteRef != null) now else 0L,
-        imageUpdatedBy = if (remoteRef != null) imageUpdatedBy else null,
-        customFields = emptyMap(),
-        karigars = listOf(job.karigar),
-        updatedAt = now,
-    )
 }

@@ -1,7 +1,5 @@
 package com.sc.biap.data
 
-import java.text.Normalizer
-
 /**
  * @file VoiceCommand.kt
  * @description Understanding a spoken sentence well enough to fill in a send-out form.
@@ -46,84 +44,49 @@ data class SpokenJob(
  *
  * Transliteration is not standardised, so each number carries its common spellings rather
  * than one correct one. Hindi and Gujarati overlap heavily and share this table.
+ *
+ * ponytail: round numbers and one to twenty, not every number to a hundred. A workshop sends
+ * ten, twenty, a dozen - not thirty-seven. Extend the table when a real sentence needs it.
  */
-private val WORD_NUMBERS: Map<String, Int> = buildMap {
+private val NUMBER_WORDS: Map<String, Int> = buildMap {
     fun put(value: Int, vararg words: String) = words.forEach { put(it, value) }
-    put(1, "ek", "एक", "એક")
+    put(1, "ek", "एक")
     put(2, "do", "be", "दो", "બે")
     put(3, "teen", "tran", "तीन", "ત્રણ")
     put(4, "char", "chaar", "चार", "ચાર")
     put(5, "panch", "paanch", "पांच", "पाँच", "પાંચ")
-    put(6, "chhe", "che", "chha", "छह", "छे", "छ", "છ")
+    put(6, "chhe", "che", "chha", "छह", "छे", "છ")
     put(7, "saat", "सात", "સાત")
     put(8, "aath", "आठ", "આઠ")
     put(9, "nau", "nav", "नौ", "નવ")
     put(10, "das", "dus", "दस", "દસ")
-    put(11, "gyarah", "agiyar", "agiyaras", "ग्यारह", "અગિયાર")
-    put(12, "barah", "bar", "baar", "बारह", "બાર")
-    put(13, "terah", "ter", "तेरह", "તેર")
-    put(14, "chaudah", "chaud", "चौदह", "ચૌદ")
-    put(15, "pandrah", "pandar", "पंद्रह", "पन्द्रह", "પંદર")
-    put(16, "solah", "sol", "सोलह", "સોળ")
-    put(17, "satrah", "सत्रह", "સત્તર")
-    put(18, "atharah", "athar", "adhaar", "अठारह", "અઢાર")
-    put(19, "unnees", "unnis", "ognis", "oganees", "उन्नीस", "ઓગણીસ")
-    put(20, "bees", "vees", "bis", "vis", "बीस", "વીસ")
-    put(24, "chaubees", "chaubis", "chovis", "चौबीस", "ચોવીસ")
-    put(25, "pachees", "pachis", "pachhis", "पच्चीस", "પચ્ચીસ")
-    put(30, "tees", "trees", "tris", "तीस", "ત્રીસ")
-    put(35, "paintees", "paitis", "पैंतीस", "પાંત્રીસ")
-    put(36, "chhattees", "chhattis", "छत्तीस", "છત્રીસ")
-    put(40, "chalees", "chalis", "चालीस", "ચાલીસ")
-    put(45, "paintalees", "paintalis", "पैंतालीस", "પિસ્તાળીસ")
-    put(48, "adtalees", "artalis", "अड़तालीस", "અડતાળીસ")
-    put(50, "pachaas", "pachas", "पचास", "પચાસ")
-    put(55, "pachpan", "पचपन", "પંચાવન")
-    put(60, "saath", "sath", "saith", "साठ", "સાઠ")
-    put(65, "painsath", "पैंसठ", "પાંસઠ")
-    put(70, "sattar", "sitter", "sittar", "सत्तर", "સિત્તેર")
-    put(75, "pachhattar", "pachattar", "पचहत्तर", "પંચોતેર")
-    put(80, "assi", "ensi", "ainsi", "अस्सी", "એંસી")
-    put(85, "pachasi", "पचासी", "પંચાસી")
-    put(90, "nabbe", "nevu", "नब्बे", "નેવું")
-    put(95, "pachanave", "पचानवे", "પંચાણું")
-}
-
-/** Scale words that multiply a preceding number (or fraction) and may carry a smaller tail. */
-private val SCALES: Map<String, Int> = buildMap {
-    fun put(value: Int, vararg words: String) = words.forEach { put(it, value) }
+    put(11, "gyarah", "agiyar", "ग्यारह")
     // A dozen is how cloth is actually counted in the trade, so it earns its place here.
-    put(12, "darjan", "dozen", "dazan", "दर्जन", "ડઝન")
+    put(12, "barah", "bar", "darjan", "dozen", "बारह", "दर्जन")
+    put(13, "terah", "तेरह")
+    put(14, "chaudah", "चौदह")
+    put(15, "pandrah", "pandar", "पंद्रह")
+    put(16, "solah", "सोलह")
+    put(17, "satrah", "सत्रह")
+    put(18, "atharah", "अठारह")
+    put(19, "unnees", "उन्नीस")
+    put(20, "bees", "vees", "bis", "बीस", "વીસ")
+    put(25, "pachees", "pachis", "पच्चीस")
+    put(30, "tees", "trees", "तीस", "ત્રીસ")
+    put(40, "chalees", "chalis", "चालीस", "ચાલીસ")
+    put(50, "pachaas", "pachas", "पचास", "પચાસ")
+    put(60, "saath", "sath", "साठ")
+    put(70, "sattar", "सत्तर")
+    put(80, "assi", "अस्सी")
+    put(90, "nabbe", "नब्बे")
     put(100, "sau", "so", "सौ", "સો")
-    put(1000, "hazaar", "hajar", "hajaar", "हजार", "हज़ार", "હજાર")
 }
 
-/**
- * Gujarati "so" (100) collides with the English filler "so" ("so Atul ko 35 piece").
- * Bare "so" is only allowed to begin a compound when followed by a word number < 100
- * ("so vees" = 120), never when followed by an unrelated word or digit ("so 35").
- */
-private val AMBIGUOUS_SO = setOf("so")
-
-/** Fixed fractional quantities expressed in quarter units (6 = 1.5, 10 = 2.5). */
-private val FRACTION_FIXED_QUARTERS: Map<String, Int> = buildMap {
-    fun put(quarters: Int, vararg words: String) = words.forEach { put(it, quarters) }
-    put(6, "dedh", "derh", "dodh", "डेढ़", "डेढ", "દોઢ")
-    put(10, "dhai", "adhai", "adhi", "ढाई", "अढ़ाई", "अढाई", "અઢી")
-}
-
-/** Quarter-unit offsets applied to the following base ("sawa" = +1/4, "saadhe" = +1/2, "paune" = -1/4). */
-private val FRACTION_PREFIX_DELTA_QUARTERS: Map<String, Int> = buildMap {
-    fun put(delta: Int, vararg words: String) = words.forEach { put(it, delta) }
-    put(1, "sawa", "sava", "सवा", "સવા")
-    put(2, "saadhe", "sadhe", "sada", "saada", "साढ़े", "साढे", "સાડા")
-    put(-1, "paune", "pauna", "pone", "pona", "pono", "पौने", "पौना", "પોણા", "પોણે", "પોણો")
-}
+/** Counted in dozens, so the number in front of these multiplies rather than stands alone. */
+private val DOZEN_WORDS = setOf("darjan", "dozen", "दर्जन")
 
 /** Words that are never a quantity, however much they look like one in a sentence. */
 private val NOT_A_QUANTITY = setOf("piece", "pieces", "nag", "kapda", "piece's")
-
-private const val MAX_QUANTITY = 100_000
 // #endregion
 
 // #region 3. Parsing
@@ -134,9 +97,8 @@ private const val MAX_QUANTITY = 100_000
  * "Deen Mohd ko bees piece printing ke liye diye" gives Deen Mohd., 20, Printing.
  *
  * Longest name first, so "Mohd. Yusuf" is not mistaken for a shorter name sitting inside it.
- * Compound expressions ("dhai sau", "ek sau bees", "do darjan") beat standalone digits, and
- * digits beat standalone words, because a dictation engine that returned a digit was more
- * certain than one that returned a word.
+ * Digits beat words, because a dictation engine that returned a digit was more certain than
+ * one that returned a word.
  */
 fun parseSpokenJob(
     spoken: String,
@@ -161,188 +123,31 @@ fun parseSpokenJob(
             said.contains(key) || key.split(" ").any { it.length > 3 && said.contains(it) }
         }
 
-    return SpokenJob(karigar = karigar, activity = activity, quantity = readQuantity(spoken))
+    return SpokenJob(karigar = karigar, activity = activity, quantity = readQuantity(said))
 }
 
-/**
- * Split spoken text into lowercase NFC-normalized words while preserving Unicode combining
- * marks (`\p{M}`) so Devanagari and Gujarati matras (e.g. "डेढ़", "ढाई", "પોણા") stay intact.
- */
-private fun voiceWords(spoken: String): List<String> =
-    Normalizer.normalize(spoken, Normalizer.Form.NFC)
-        .trim()
-        .lowercase()
-        .replace(Regex("""(?<=\d),(?=\d)"""), "")
-        .split(Regex("""[^\p{L}\p{M}\p{N}]+"""))
-        .filter { it.isNotEmpty() }
+/** The number in a sentence, as a digit if there is one and as a word otherwise. */
+private fun readQuantity(said: String): Int? {
+    val words = said.split(" ").filter { it.isNotEmpty() }
 
-/** Read the quantity in a sentence: compounds first, then standalone digits, then single words. */
-private fun readQuantity(spoken: String): Int? {
-    val words = voiceWords(spoken)
-    if (words.isEmpty()) return null
-
-    // Track spans invalidated by a standalone fraction with no scale (e.g. "paune do" without
-    // "sau"/"darjan") so the trailing number is not misread as a bare whole quantity.
-    val suppressed = BooleanArray(words.size)
-
-    var i = 0
-    while (i < words.size) {
-        val parsed = parseCompoundAt(words, i)
-        if (parsed != null) {
-            val (value, consumed) = parsed
-            if (value != null && value in 1..MAX_QUANTITY) return value
-            for (k in i until (i + consumed).coerceAtMost(words.size)) {
-                suppressed[k] = true
-            }
-            i += consumed
-        } else {
-            i++
-        }
+    // A dozen is counted in dozens: "ek darjan" is twelve, not one, and "do darjan" is
+    // twenty-four. Read before anything else, because the number in front of it belongs to
+    // it rather than being the answer.
+    val dozenAt = words.indexOfFirst { it in DOZEN_WORDS }
+    if (dozenAt >= 0) {
+        val before = words.getOrNull(dozenAt - 1)
+        val many = before?.toIntOrNull() ?: before?.let { NUMBER_WORDS[it] } ?: 1
+        return (many * 12).takeIf { it in 1..100_000 }
     }
 
-    words.indices.firstNotNullOfOrNull { idx ->
-        if (suppressed[idx]) null
-        else words[idx].toIntOrNull()?.takeIf { it in 1..MAX_QUANTITY }
+    words.firstNotNullOfOrNull { word ->
+        word.toIntOrNull()?.takeIf { it in 1..100_000 }
     }?.let { return it }
 
-    return words.indices.firstNotNullOfOrNull { idx ->
-        if (suppressed[idx]) null
-        else {
-            val word = words[idx]
-            if (word in NOT_A_QUANTITY) null else WORD_NUMBERS[word] ?: SCALES[word]
-        }
-    }?.takeIf { it in 1..MAX_QUANTITY }
-}
-
-private fun countToken(word: String): Int? {
-    if (word in NOT_A_QUANTITY) return null
-    return word.toIntOrNull()?.takeIf { it in 1..MAX_QUANTITY } ?: WORD_NUMBERS[word]
-}
-
-/**
- * Try to parse a fraction or multi-word scale expression starting at [start].
- *
- * Returns `Pair(valueOrNull, wordsConsumed)` when [start] starts a compound/fraction phrase,
- * or `null` when [words][start] is not a compound/fraction starter.
- */
-private fun parseCompoundAt(words: List<String>, start: Int): Pair<Int?, Int>? {
-    val w0 = words[start]
-
-    // 1. Fixed fractions: "dedh sau" = 150, "dhai sau" = 250, "dedh darjan" = 18, "dhai 100" = 250.
-    FRACTION_FIXED_QUARTERS[w0]?.let { quarters ->
-        val w1 = words.getOrNull(start + 1)
-        val scale = w1?.let { SCALES[it] }
-        if (scale != null) {
-            val value = (quarters * scale) / 4
-            return value to 2
-        }
-        val roundDigit = w1?.toIntOrNull()?.takeIf { it == 100 || it == 1000 }
-        if (roundDigit != null) {
-            return ((quarters * roundDigit) / 4) to 2
-        }
-        return null to 1
+    // ponytail: "dhai sau" and other compounds are read as their larger part, which is wrong
+    // in a way the owner sees in the box before anything moves. Fix when one is dictated.
+    return words.firstNotNullOfOrNull { word ->
+        if (word in NOT_A_QUANTITY) null else NUMBER_WORDS[word]
     }
-
-    // 2. Prefix fractions: "sawa sau" (125), "pauna sau" (75), "paune do sau" (175), "saadhe teen sau" (350).
-    FRACTION_PREFIX_DELTA_QUARTERS[w0]?.let { delta ->
-        val w1 = words.getOrNull(start + 1) ?: return null to 1
-        val directScale = SCALES[w1]
-        if (directScale != null) {
-            val quarters = 4 + delta
-            return ((quarters * directScale) / 4) to 2
-        }
-        val count = countToken(w1)
-        if (count != null) {
-            val w2 = words.getOrNull(start + 2)
-            val nextScale = w2?.let { SCALES[it] }
-            if (nextScale != null) {
-                val quarters = 4 * count + delta
-                val value = if (quarters > 0) (quarters * nextScale) / 4 else null
-                return value to 3
-            }
-            // Dictation engines often convert "paune do sau" -> "paune 200" or "sawa sau" -> "sawa 100".
-            if (w1.toIntOrNull() == count && count >= 100 && count % 100 == 0) {
-                val step = if (count % 1000 == 0) 1000 else 100
-                val value = count + (delta * step) / 4
-                return value.takeIf { it > 0 } to 2
-            }
-            return null to 2
-        }
-        return null to 1
-    }
-
-    // 3. Explicit "<count> <scale> ..." ("ek sau bees", "do darjan", "3 darjan", "ek hazaar do sau pachaas").
-    val leadCount = countToken(w0)
-    val w1 = words.getOrNull(start + 1)
-    if (leadCount != null && w1 != null && w1 in SCALES) {
-        return parseScaleFrom(words, count = leadCount, scaleIdx = start + 1, startIdx = start)
-    }
-
-    // 4. Bare scale starting a compound ("darjan", "sau bees", "so vees", "hazaar do sau").
-    if (w0 in SCALES) {
-        val scale = SCALES.getValue(w0)
-        if (scale == 12) return 12 to 1
-        if (w0 in AMBIGUOUS_SO) {
-            // Only treat bare "so" as 100 here when followed by a word number < 100 (e.g. "so vees").
-            val nextWord = words.getOrNull(start + 1) ?: return null
-            val nextVal = if (nextWord in NOT_A_QUANTITY) null else WORD_NUMBERS[nextWord]
-            if (nextVal != null && nextVal in 1..99) {
-                return (100 + nextVal) to 2
-            }
-            return null
-        }
-        if (scale == 100) {
-            val nextVal = words.getOrNull(start + 1)?.let { countToken(it) }
-            if (nextVal != null && nextVal in 1..99) {
-                return (100 + nextVal) to 2
-            }
-            return null
-        }
-        if (scale == 1000) {
-            return parseScaleFrom(words, count = 1, scaleIdx = start, startIdx = start)
-        }
-    }
-
-    return null
-}
-
-private fun parseScaleFrom(
-    words: List<String>,
-    count: Int,
-    scaleIdx: Int,
-    startIdx: Int,
-): Pair<Int?, Int> {
-    val scale = SCALES.getValue(words[scaleIdx])
-    if (scale == 12) {
-        return (count * 12) to (scaleIdx - startIdx + 1)
-    }
-    if (scale == 100) {
-        var total = count * 100
-        var pos = scaleIdx + 1
-        val tail = words.getOrNull(pos)?.let { countToken(it) }
-        if (tail != null && tail in 1..99) {
-            total += tail
-            pos++
-        }
-        return total to (pos - startIdx)
-    }
-    // scale == 1000
-    var total = count * 1000
-    var pos = scaleIdx + 1
-    if (pos < words.size) {
-        val sub = parseCompoundAt(words, pos)
-        val subVal = sub?.first
-        if (subVal != null && subVal in 1..999) {
-            total += subVal
-            pos += sub.second
-        } else {
-            val tail = countToken(words[pos])
-            if (tail != null && tail in 1..999) {
-                total += tail
-                pos++
-            }
-        }
-    }
-    return total to (pos - startIdx)
 }
 // #endregion

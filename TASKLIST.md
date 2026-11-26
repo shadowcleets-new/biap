@@ -1,89 +1,133 @@
 # 📋 Consolidated Technical Task List: biap Atelier ERP
 
-This document tracks the implementation status of features, optimizations, architectural work, security improvements, and roadmap items for **biap** (`com.sc.biap`).
+This document contains a highly granular, checklist-style breakdown of all feature tasks, optimizations, architectural refactoring, security improvements, and roadmap items for the **biap** mobile application.
 
 ---
 
 ## 1. UI/UX & Aesthetics
 
-### Spacing, Tokens & Redesigned Operations Layout
-- [x] Define centralized semantic spacing/shape tokens (`AtelierSpacing` in `theme/Spacing.kt`, `AtelierShapes` in `theme/Theme.kt`).
-- [x] Refactor hardcoded paddings/margins across `MainScreen.kt`, `DesignDetailScreen.kt`, and `AddDesignScreen.kt`.
-- [x] Redesign main portfolio from photo grid to operations row index (`CatalogueList.kt`, `CatalogueRow.kt`) showing sorted size matrices, stock tags, and floating transparent bottom navigation (`MainScreen.kt`, `OrdersList.kt`).
-- [x] Rebuild `DesignDetailScreen.kt` & `DetailPieces.kt` with `DesignPhotoPager` (`DesignPhotos.kt`), full `SizeMatrix`, `SizeBatchSheet`, and unmistakable `ReadingTopBar` / `EditingTopBar`.
+### Spacing & Layout Tokens (Phase 2)
+- [x] Define a centralized semantic spacing scale `AtelierSpacing` in `Spacing.kt` under package `com.example.biap.theme`.
+- [x] Refactor hardcoded paddings and spacing in the main portfolio screen `MainScreen.kt`.
+- [x] Refactor hardcoded paddings and layout margins in details screen `DesignDetailScreen.kt`.
+- [x] Refactor hardcoded paddings and layout margins in add screen `AddDesignScreen.kt`.
+- [x] Verify layouts compile and align perfectly with Contemporary Heritage color styling.
 
-### Touch Target Accessibility & Scrolling Polish
-- [x] Apply `Modifier.minimumInteractiveComponentSize()` to interactive chips, icon buttons, and dialog buttons in `AddDesignScreen.kt`, `DesignDetailScreen.kt`, and `MainScreen.kt`.
-- [x] Create reusable `Modifier.horizontalFadingEdges` in `theme/FadingEdges.kt` and apply across horizontally scrolling chip rows (`AddDesignScreen.kt`, `DesignDetailScreen.kt`, `CatalogueList.kt`, `WorkManagementScreen.kt`, `WorkDialogs.kt`, `SizeBatchSheet.kt`).
+### Responsive Viewports (Phase 2)
+- [x] Retrieve screen metrics dynamically using `LocalConfiguration.current.screenWidthDp`.
+- [x] Set main portfolio screen grid columns:
+  - [x] 2 columns on phones (<600dp).
+  - [x] 3 columns on foldables (600dp - 840dp).
+  - [x] 4 columns on tablets (>=840dp).
+- [x] Implement a dual-pane layout for `DesignDetailScreen` on tablets (width >= 840dp):
+  - [x] Left pane (40% width): Sticky design image box with pan/zoom.
+  - [x] Right pane (60% weight): Scrollable specifications/cards list.
+  - [x] Clean modularization: Extract cards into private composables (`BasicDetailsSection`, `InventoryPricingSection`, `KarigarsSection`, `SpecificationsSection`) to prevent duplication.
 
-### Search Bar & Dynamic Filtering
-- [x] Add visible "Clear Search" icon button to `CatalogueSearchField` (`CatalogueList.kt`) wired to `MainScreenViewModel.updateSearchQuery("")`.
-- [x] Display search/filter match counter (`CatalogueMatchCount` in `CatalogueList.kt`) and add `"Clear search"` / `"Clear filters"` CTAs in scrollable `CatalogueEmptyState`.
-- [x] Add category and stock-state filter chips (`CatalogueFilterRow` — `"Needs attention"`, dynamic categories, `"Archived · N"`) wired to `MainScreenViewModel`.
+### Touch Target Accessibility Compliance (Phase 2)
+- [x] Pad custom size chips and toggles inside `AddDesignScreen` using `Modifier.minimumInteractiveComponentSize()`.
+- [x] Pad custom size chips and selection chips inside `DesignDetailScreen` using `Modifier.minimumInteractiveComponentSize()`.
+- [x] Pad all icon buttons (edit, add, back, Done/save) to at least 48x48dp interactive areas.
+- [x] Pad dialog confirmation/dismiss buttons to at least 48x48dp interactive areas.
+- [x] Verify visual dimensions are unaffected while touch target compliance is fully enforced.
 
-### Accessibility & Input Polish
-- [x] Add explicit text labels for stock warning states (`MatrixRow` `"Out of stock"` / `"RUNNING LOW"` / `"HEALTHY"`, `AttentionTag`, `AttentionBand`, `WorkSummary`).
-- [x] Intercept keyboard `ImeAction.Done` on Karigar inputs (`AddDesignScreen.kt` and `KarigarEditorDialog` in `DesignDetailScreen.kt`).
-- [x] Prevent cold-start `"NO DESIGNS YET"` / `NotFound` flash via `DataRepository.isDatabaseReady`, `MainScreenViewModel`, `DesignDetailViewModel`, and `"LOADING…"` header status.
-- [x] Verify `targetSdk 37` edge-to-edge inset handling (`Navigation.kt` inset delegation on `Main`, `MainScreen.kt` `WindowInsets` + `.imePadding()` on empty states).
-- [x] Expose `Settings` in both the Drive-connected (`AccountMenu.kt`) and signed-out-of-Drive (`MainScreen.kt`) account menus.
+### Horizontal Scroll Fading Edges
+- [x] Create a custom reusable Compose modifier to render fading edge gradients (`drawWithContent` with DST_IN PorterDuff blends).
+- [x] Apply fading edge modifiers to size chips row in details view.
+- [x] Apply fading edge modifiers to size chips row in add view.
+- [x] Apply fading edge modifiers to Assigned Karigars chip row.
+
+### Search Bar Polish
+- [ ] Add a visible "Clear Search" icon button to `SearchBarField` when there is active text.
+- [ ] Bind clear button to reset the query string in `MainScreenViewModel`.
+- [ ] Implement search counter text showing search query matches (e.g. `"14 matches found"`).
+
+### Dynamic Filtering
+- [ ] Add filter chips at the top of the main screen (under search bar) for quick category sorting (e.g. 'All', 'Kameez', 'Lehenga', 'Sherwani').
+- [ ] Hook category filter chips to filter the grid contents.
+
+### Accessibility Enhancements
+- [ ] Add explicit text descriptions for stock warning indicators (e.g., "Low Stock: 3 items remaining" instead of only orange color).
+- [ ] Intercept keyboard 'Done' actions on Karigar text input fields to add them directly.
 
 ---
 
 ## 2. Data Model & Local Storage
 
-### SQLite Room Database (Schema v11) & Encrypted Persistence
-- [x] Configure Room (`2.8.5`) with KSP (`2.3.12`) in `gradle/libs.versions.toml` and `app/build.gradle.kts`.
-- [x] Implement schema v11 (15 entities) with incremental migrations `v3 -> v11` (`AppDatabase.kt`, `Entities.kt`, `Converters.kt`), `DesignDao`, and SQLCipher encryption (`DatabaseKey.kt`).
-- [x] Implement per-identity SHA-256 database naming (`bi_database_<sha256_16B>.db`) with safe `.db`, `-wal`, `-shm`, `.db.bak`, and `biap_sync` stamp adoption from legacy MD5/guest databases (`DataRepository.kt`).
-- [x] Implement Last-Write-Wins (LWW) conflict resolution with deletion tombstones across designs, custom fields, profile, orders, batches, karigars, activities, and job work (`SyncMerger.kt`), plus FK-safe transactional `DesignDao.importData`.
-- [x] Implement `.bak` auto-backups, `.corrupt_*` recovery, and `OrphanImageCleanupWorker` covering `designs.imagePath`, `extraImages`, `job_work.photoPath`, and `user_profile.photoRef`.
+### SQLite Room Database Migration (Phase 1)
+- [x] Configure Room compiler and dependencies inside `gradle/libs.versions.toml` and `app/build.gradle.kts`.
+- [x] Create schema database entities:
+  - [x] `DesignEntity` (stores core design properties).
+  - [x] `SizeInventoryEntity` (stores sizes, stock, prices).
+  - [x] `GlobalCustomFieldEntity` (stores global fields config).
+  - [x] `DeletedDesignEntity` (stores tombstone tracking).
+- [x] Implement converter classes for list and map serialization (custom fields).
+- [x] Implement DAO interfaces `DesignDao` handling transactional logic.
+- [x] Implement Last-Write-Wins (LWW) conflict resolution logic using `updatedAt` metadata.
+- [x] Refactor `DefaultDataRepository` to query dynamic user-sandboxed database names (`bi_database_*.db`).
 
-### Image Handling
-- ~~Implement destructive JPEG compression / downscaling (1920x1080) on saved photos before writing to `filesDir`.~~ — **Intentionally rejected by owner** (originals stay uncompressed per `docs/superpowers/specs/2026-08-08-multi-image-gallery-design.md`; `AsyncImage` downscales on decode for thumbnails/lists).
+### Image Compression & Scaling
+- [ ] Implement image compression using `BitmapFactory` and `compress(CompressFormat.JPEG, 85, ...)` before writing files to `filesDir`.
+- [ ] Downscale max image resolutions to 1920x1080 (or similar) to prevent storage bloat.
 
 ### Multi-Piece Configuration Flexibility
-- [ ] Add top tab-toggles in `AddDesignScreen` and `DesignDetailScreen` edit mode to toggle off unused garment pieces (`Top`, `Bottom`, `Dupatta`) for 1-piece/2-piece designs and omit disabled fields prior to save (note: read mode `groupAttributes` already hides blank attributes).
+- [ ] Add top tab-toggles in `AddDesignScreen` and `DesignDetailScreen` to toggle off unused items (e.g., toggle off 'Dupatta' or 'Bottom' for 1-piece kameez).
+- [ ] Filter out disabled piece specifications from customFields maps prior to database writes.
 
 ---
 
-## 3. Synchronisation, Security & Workshop Operations
+## 3. Synchronisation & Security
 
-### Background Sync & Security
-- [x] Implement `DriveSyncWorker` (`CoroutineWorker`) with WorkManager `NetworkType.CONNECTED` constraint, exponential backoff, and retry cap (`DataRepository.kt`, `DriveSyncWorker.kt`).
-- [x] Replace plaintext/account-seeded sync keys with Keystore/`EncryptedSharedPreferences` (`AES256_GCM` `MasterKey`), random 256-bit AES keys (`EncryptionUtils.kt`, `DatabaseKey.kt`), and PBKDF2-HMAC-SHA256 passphrase key wrapping (`SyncPassphrase.kt`, `PassphraseStore.kt`, `sync_key.enc`).
-- [x] Implement persisted `"SYNCED AT ..."` / `"SYNCED YESTERDAY AT ..."` / `"SYNCED N DAYS AGO"` header status (`SyncStamp.kt`, `biap_sync` prefs) and snackbar `"Retry"` actions (`MainScreen.kt`).
-- [x] Implement encrypted Drive media pipeline (`DriveImageStore`, `ImageUploadWorker`) for design photos (up to 5 per design, 5-version retention) and JobWork photo/AAC voice-note attachments (`MediaAttachments.kt`, `VoiceNotes.kt`).
+### Background Synchronization via WorkManager
+- [ ] Create `DriveSyncWorker` class extending `CoroutineWorker`.
+- [ ] Configure `WorkManager` triggers (requires active network, unmetered constraint, and backoff policy).
+- [ ] Register sync queue tasks inside `DataRepository` to trigger workers.
 
-### Workshop Intelligence, Orders, JobWork & Hub
-- [x] Implement Orders tab (`OrdersList.kt`, `NewOrderScreen.kt`) with transactional stock movement and historical order editing (`Order.kt`).
-- [x] Implement per-size Batch ledger (`Batch.kt`, `SizeBatchSheet.kt`) and stock reset at size/design scopes.
-- [x] Implement Business Hub (`BusinessHubMenu.kt`, `BusinessHubScreen.kt`), drag-drop karigar-activity assignment, one-time karigar linking, ranked karigar merge (`Karigar.kt`), and `AttributeDrift` spelling tidy-up (`Attributes.kt`, `AttributeTidyDialog`).
-- [x] Implement Ledger Demand & Next-Cut advice (`Demand.kt`, `LedgerSaysCard`).
-- [x] Implement 4-kind JobWork tracking (`SAMPLE`, `PRODUCTION`, `ALTERATION`, `OUTWORK` in `JobWork.kt`, `WorkManagementScreen.kt`, `WorkDialogs.kt`) and Hindi/Gujarati voice command parsing (`VoiceCommand.kt`).
+### Keystore Encryption Integration
+- [ ] Replace standard Google Account ID key seeds with Keystore-backed AES key generation.
+- [ ] Securely store dynamic salts inside `EncryptedSharedPreferences`.
+- [ ] Update sync payload encryption/decryption utilities to use the new cipher.
+
+### Sync UI Improvements
+- [ ] Implement and display a "Last synced: [Timestamp]" subtitle on the portfolio top bar.
+- [ ] Wire retry action button on the error snackbar notification for REST API upload/download failures.
 
 ---
 
 ## 4. Architecture & Modularization
 
-### Multi-Module Refactoring & Dependency Injection
-- [ ] Refactor `:app` into dedicated library/feature modules (`:core:database`, `:core:sync`, `:core:auth`, `:feature:portfolio`, `:feature:detail`, etc.).
-- [ ] Introduce Dependency Injection (Hilt or Koin) to replace `DefaultDataRepository.getInstance(context)` singletons.
+### Multi-Module Refactoring
+- [ ] Refactor the monolithic `:app` module.
+- [ ] Extract library classes and declare new modules:
+  - [ ] `:core:database` (handles Room, Entities, DAOs).
+  - [ ] `:core:sync` (handles WorkManager, Google Drive API interactions).
+  - [ ] `:core:auth` (handles Google Sign-In and profiles).
+  - [ ] `:feature:portfolio` (main portfolio screen grid feature).
+  - [ ] `:feature:detail` (add design and detail screen features).
+
+### Dependency Injection
+- [ ] Configure Hilt/Koin dependencies in build scripts.
+- [ ] Create module containers defining singleton bindings for `Database`, `AuthManager`, and `Repository`.
+- [ ] Inject repository instances into ViewModels via constructor injection.
 
 ---
 
-## 5. Testing, CI & Device Verification
+## 5. Testing & Build Stability
 
-### Test Suites & CI
-- [x] Unit test suite expanded to **229 tests across 24 suites**: LWW merge & tombstones (`OrderMergeTest`, `ProfileMergeTest`, `SyncMergerArchiveTest`, `SyncMergerImageTest`, `JobWorkSyncMergeTest`), persistence/FK cascade & adoption (`SyncV9ToV11PersistenceTest`, `DatabaseAdoptionTest`), retention/cleanup (`DriveImageStoreRetentionTest`, `OrphanImageCleanupTest`), security (`SyncPassphraseTest`, `AccessLevelTest`), domain logic (`BatchLedgerTest`, `DemandTest`, `DesignPhotosTest`, `JobWorkTest`, `KarigarAssignmentTest`, `KarigarLinkTest`, `OrderEditTest`, `OrderedSizeLabelTest`, `AttributesTest`, `VoiceCommandTest`), and UI/VM helpers (`RupeeFormatTest`, `SyncStampTest`, `ColdStartLoadingTest`).
-- [x] Configure GitHub Actions `codeql.yml` (Kotlin build analysis + actions scan) and `dependabot.yml`.
-- [ ] Add instrumented tests (`app/src/androidTest/`) for real SQLCipher Room migrations (`v3 -> v11`), WAL recovery, and `ComposeTestRule` UI checks.
-- [ ] Run hardware verification on physical Pixel 9 once connected: live 25-design MD5 -> SHA-256 DB open (`03b1581`), real-mic voice-note record/playback (`380a908`), and full-screen `targetSdk 37` visual inset audit (`2fe0a72`).
+### Test Suites Expansion
+- [ ] Create mock instances for `GoogleDriveSyncController` and `EncryptionProvider`.
+- [ ] Create unit tests for repository LWW synchronization and database import checkpoints.
+- [ ] Create instrumented integration tests for Room database recovery, WAL checkpoints, and backup restoration.
+- [ ] Add `ComposeTestRule` UI tests to verify dual-pane layouts on large devices and accessibility contrast limits.
 
 ---
 
 ## 6. Product Strategy & Roadmap
 
-### Remaining ERP Features
-- [ ] Implement client measurement cards (client profile entities + bespoke measurement lookup in order/job workflows).
-- [ ] Add explicit tailor workload capacity limits/warnings inside design karigar pickers (building on `loadByKarigar` in `JobWork.kt`).
+### Client Measurement Cards
+- [ ] Add database tables and entities for client profile entries (Name, phone, specific garment measurements).
+- [ ] Implement client lookup cards inside ordering workflows.
+
+### Tailor Workload Tracker
+- [ ] Add tracking of karigar schedules (orders assigned, deadlines).
+- [ ] Display availability warnings in karigar select lists when workloads exceed tailors' capacity.

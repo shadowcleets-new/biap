@@ -55,9 +55,10 @@ import com.sc.biap.data.WorkKind
 import com.sc.biap.data.WorkLot
 import com.sc.biap.data.label
 import com.sc.biap.data.overdueDays
-import com.sc.biap.theme.horizontalFadingEdges
+import coil3.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import com.sc.biap.ui.components.VoiceNotePlayer
-import com.sc.biap.ui.components.WorkPhotoThumbnail
+import java.io.File
 import com.sc.biap.ui.main.DesignThumbnail
 // #endregion
 
@@ -262,12 +263,10 @@ private fun KindFilters(
     counts: Map<WorkKind, Int>,
     onSelect: (WorkKind?) -> Unit,
 ) {
-    val scrollState = rememberScrollState()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalFadingEdges(scrollState)
-            .horizontalScroll(scrollState),
+            .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         FilterChip(
@@ -346,14 +345,16 @@ private fun WorkLotCard(
             // The lot's OWN photo wins over the design's. On an alteration it shows the
             // fault, which is the thing being decided about; the catalogue photo shows the
             // garment as it is supposed to look, which is not the question.
-            val ownPhotoPath = lot.photoPath
-            val ownPhotoRef = lot.rows.firstNotNullOfOrNull { it.photoRef }
+            val ownPhoto = lot.photoPath
             when {
-                !ownPhotoPath.isNullOrBlank() || !ownPhotoRef.isNullOrBlank() -> {
-                    WorkPhotoThumbnail(
-                        photoPath = ownPhotoPath,
-                        photoRef = ownPhotoRef,
+                ownPhoto != null -> {
+                    AsyncImage(
+                        model = File(ownPhoto),
                         contentDescription = "Photo of the work",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(12.dp)),
                     )
                     Spacer(Modifier.width(12.dp))
                 }
@@ -394,11 +395,7 @@ private fun WorkLotCard(
             Text(lot.note, style = MaterialTheme.typography.bodySmall, color = quiet)
         }
 
-        val ownVoicePath = lot.voicePath
-        val ownVoiceRef = lot.rows.firstNotNullOfOrNull { it.voiceRef }
-        if (!ownVoicePath.isNullOrBlank() || !ownVoiceRef.isNullOrBlank()) {
-            VoiceNotePlayer(voicePath = ownVoicePath, voiceRef = ownVoiceRef)
-        }
+        lot.voicePath?.let { VoiceNotePlayer(it) }
 
         if (late) {
             Text(
@@ -440,11 +437,14 @@ private fun SampleDecisionCard(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!sample.photoPath.isNullOrBlank() || !sample.photoRef.isNullOrBlank()) {
-                WorkPhotoThumbnail(
-                    photoPath = sample.photoPath,
-                    photoRef = sample.photoRef,
+            sample.photoPath?.let {
+                AsyncImage(
+                    model = File(it),
                     contentDescription = "Photo of the sample",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(12.dp)),
                 )
                 Spacer(Modifier.width(12.dp))
             }
@@ -461,9 +461,7 @@ private fun SampleDecisionCard(
                 )
             }
         }
-        if (!sample.voicePath.isNullOrBlank() || !sample.voiceRef.isNullOrBlank()) {
-            VoiceNotePlayer(voicePath = sample.voicePath, voiceRef = sample.voiceRef)
-        }
+        sample.voicePath?.let { VoiceNotePlayer(it) }
         Text(
             "Approving adds it to your catalogue so you can show it and order a run.",
             style = MaterialTheme.typography.bodySmall,

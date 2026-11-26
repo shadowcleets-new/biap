@@ -142,9 +142,7 @@ fun MainNavigation() {
         entry<Main> {
           MainScreen(
             onItemClick = { navKey -> backStack.add(navKey) },
-            // MainScreen manages its own insets so the list can scroll behind the floating
-            // bottom navigation bar while the header and horizontal cutouts stay safe.
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.safeDrawingPadding()
           )
         }
         entry<AddDesign> {

@@ -31,11 +31,9 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
 
   val uiState: StateFlow<MainScreenUiState> = combine(
     dataRepository.biData,
-    dataRepository.isDatabaseReady,
     _searchQuery,
     _filters
-  ) { data, ready, query, filters ->
-    if (!ready) return@combine MainScreenUiState.Loading
+  ) { data, query, filters ->
     val searched: MainScreenUiState = if (query.isBlank()) {
       Success(data)
     } else {

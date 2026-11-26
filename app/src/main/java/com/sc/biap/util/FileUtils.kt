@@ -63,21 +63,6 @@ object FileUtils {
     }
 
     /**
-     * True when [a] and [b] refer to the same stored file (accounting for relative filenames
-     * saved in Room vs resolved absolute paths passed to upload workers).
-     */
-    fun sameStoredPath(a: String?, b: String?): Boolean {
-        if (a.isNullOrBlank() || b.isNullOrBlank()) return false
-        if (a == b) return true
-        val fileA = File(a)
-        val fileB = File(b)
-        val absA = fileA.isAbsolute || a.startsWith("/")
-        val absB = fileB.isAbsolute || b.startsWith("/")
-        if (absA && absB) return false
-        return fileA.name == fileB.name
-    }
-
-    /**
      * Copies a Uri content to local app filesDir asynchronously on IO dispatcher,
      * closing the input stream to prevent file descriptor leaks.
      */

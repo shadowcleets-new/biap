@@ -23,13 +23,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,7 +37,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -48,19 +45,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.sc.biap.security.AppLock
-import com.sc.biap.ui.DesignImageState
-import com.sc.biap.ui.rememberDesignImage
-import com.sc.biap.util.DriveImageStore
 import com.sc.biap.util.FileUtils
 import com.sc.biap.util.VoiceNotes
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 
 // #endregion
@@ -112,30 +103,18 @@ fun MediaAttachments(
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (photoPath != null) {
-            val resolvedPhoto = remember(photoPath) {
-                FileUtils.resolveExistingImageFile(context, photoPath)
-            }
             Box(
                 modifier = Modifier
                     .size(120.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .background(scheme.surfaceContainerHigh),
-                contentAlignment = Alignment.Center,
             ) {
-                if (resolvedPhoto != null) {
-                    AsyncImage(
-                        model = resolvedPhoto,
-                        contentDescription = "Attached photo",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                    )
-                } else {
-                    Icon(
-                        Icons.Default.PhotoCamera,
-                        contentDescription = "Photo missing",
-                        tint = scheme.onSurfaceVariant,
-                    )
-                }
+                AsyncImage(
+                    model = File(photoPath),
+                    contentDescription = "Attached photo",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -342,139 +321,27 @@ private fun VoiceNoteControl(
 }
 // #endregion
 
-/**
- * A work photo thumbnail that checks the local file via [FileUtils.resolveExistingImageFile]
- * first and falls back to downloading/decrypting [photoRef] from Drive via [DriveImageStore].
- */
+/** A note attached to something already saved: play it, nothing more. */
 @Composable
-fun WorkPhotoThumbnail(
-    photoPath: String?,
-    photoRef: String?,
-    contentDescription: String,
-    modifier: Modifier = Modifier,
-    size: Dp = 56.dp,
-) {
-    val scheme = MaterialTheme.colorScheme
-    val image = rememberDesignImage(photoPath, photoRef)
-    Box(
-        modifier = modifier
-            .size(size)
-            .clip(RoundedCornerShape(12.dp))
-            .background(scheme.surfaceContainerHighest),
-        contentAlignment = Alignment.Center,
-    ) {
-        when (val state = image.state) {
-            is DesignImageState.Ready -> AsyncImage(
-                model = state.model,
-                contentDescription = contentDescription,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-
-            DesignImageState.Loading -> CircularProgressIndicator(
-                modifier = Modifier.size(18.dp),
-                strokeWidth = 2.dp,
-            )
-
-            DesignImageState.Unavailable -> Icon(
-                Icons.Default.CloudOff,
-                contentDescription = "Photo unavailable - tap to retry",
-                tint = scheme.onSurfaceVariant,
-                modifier = Modifier
-                    .size(22.dp)
-                    .clickable { image.retry() },
-            )
-
-            DesignImageState.Absent -> Icon(
-                Icons.Default.PhotoCamera,
-                contentDescription = "Photo not synced yet",
-                tint = scheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp),
-            )
-        }
-    }
-}
-
-/**
- * A note attached to something already saved: play it locally if present, or fetch [voiceRef]
- * from Drive via [DriveImageStore.ensureVoiceLocal] when missing on this device.
- */
-@Composable
-fun VoiceNotePlayer(
-    voicePath: String?,
-    modifier: Modifier = Modifier,
-    voiceRef: String? = null,
-) {
+fun VoiceNotePlayer(voicePath: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val localFile = remember(voicePath) { VoiceNotes.resolve(context, voicePath) }
-    val remoteKey = voiceRef?.takeIf { it.isNotBlank() }
+    var player by remember { mutableStateOf<MediaPlayer?>(null) }
+    var playing by remember { mutableStateOf(false) }
+    val length = remember(voicePath) { VoiceNotes.durationSeconds(context, voicePath) }
 
-    var resolvedFile by remember(voicePath, voiceRef) { mutableStateOf(localFile) }
-    var downloading by remember(voicePath, voiceRef) { mutableStateOf(false) }
-    var failed by remember(voicePath, voiceRef) { mutableStateOf(false) }
-    var attempts by remember(voicePath, voiceRef) { mutableIntStateOf(0) }
-
-    var player by remember(voicePath, voiceRef) { mutableStateOf<MediaPlayer?>(null) }
-    var playing by remember(voicePath, voiceRef) { mutableStateOf(false) }
-
-    LaunchedEffect(voicePath, voiceRef, localFile, attempts) {
-        if (localFile != null) {
-            resolvedFile = localFile
-            downloading = false
-            failed = false
-            return@LaunchedEffect
-        }
-        if (remoteKey == null) return@LaunchedEffect
-        downloading = true
-        failed = false
-        val fetched = DriveImageStore.ensureVoiceLocal(context, voicePath, remoteKey)
-        downloading = false
-        if (fetched != null) {
-            resolvedFile = fetched
-        } else {
-            failed = true
-        }
+    DisposableEffect(Unit) {
+        onDispose { runCatching { player?.release() } }
     }
 
-    val length by produceState(initialValue = 0, key1 = resolvedFile) {
-        val file = resolvedFile
-        value = if (file != null) {
-            withContext(Dispatchers.IO) { VoiceNotes.durationSeconds(file) }
-        } else {
-            0
-        }
-    }
-
-    DisposableEffect(voicePath, voiceRef) {
-        onDispose {
-            runCatching { player?.release() }
-            player = null
-            playing = false
-        }
-    }
-
-    val isLoading = downloading || (resolvedFile == null && remoteKey != null && !failed)
-
-    when {
-        isLoading -> AssistChip(
-            modifier = modifier,
-            enabled = false,
-            onClick = {},
-            label = { Text("Loading note…") },
-            leadingIcon = {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-            },
-        )
-
-        resolvedFile != null -> AssistChip(
-            modifier = modifier,
-            onClick = {
-                val file = resolvedFile ?: return@AssistChip
-                if (playing) {
-                    runCatching { player?.stop(); player?.release() }
-                    player = null
-                    playing = false
-                } else {
+    AssistChip(
+        modifier = modifier,
+        onClick = {
+            if (playing) {
+                runCatching { player?.stop(); player?.release() }
+                player = null
+                playing = false
+            } else {
+                VoiceNotes.resolve(context, voicePath)?.let { file ->
                     runCatching {
                         MediaPlayer().apply {
                             setDataSource(file.absolutePath)
@@ -488,37 +355,15 @@ fun VoiceNotePlayer(
                         }
                     }.onSuccess { player = it; playing = true }
                 }
-            },
-            label = { Text(if (playing) "Stop" else if (length > 0) "Play note  ${length}s" else "Play note") },
-            leadingIcon = {
-                Icon(
-                    if (playing) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    Modifier.size(18.dp),
-                )
-            },
-        )
-
-        failed -> AssistChip(
-            modifier = modifier,
-            onClick = {
-                failed = false
-                attempts++
-            },
-            label = { Text("Note unavailable · Retry") },
-            leadingIcon = {
-                Icon(Icons.Default.CloudOff, contentDescription = null, Modifier.size(18.dp))
-            },
-        )
-
-        !voicePath.isNullOrBlank() -> AssistChip(
-            modifier = modifier,
-            enabled = false,
-            onClick = {},
-            label = { Text("Voice note not synced") },
-            leadingIcon = {
-                Icon(Icons.Default.CloudOff, contentDescription = null, Modifier.size(18.dp))
-            },
-        )
-    }
+            }
+        },
+        label = { Text(if (playing) "Stop" else if (length > 0) "Play note  ${length}s" else "Play note") },
+        leadingIcon = {
+            Icon(
+                if (playing) Icons.Default.Stop else Icons.Default.PlayArrow,
+                contentDescription = null,
+                Modifier.size(18.dp),
+            )
+        },
+    )
 }

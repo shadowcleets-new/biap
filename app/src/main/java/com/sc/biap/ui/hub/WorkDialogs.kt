@@ -51,7 +51,6 @@ import com.sc.biap.data.Design
 import com.sc.biap.data.WorkKind
 import com.sc.biap.data.WorkLot
 import com.sc.biap.data.label
-import com.sc.biap.theme.horizontalFadingEdges
 import com.sc.biap.ui.components.MediaAttachments
 import com.sc.biap.ui.main.DesignThumbnail
 // #endregion
@@ -484,12 +483,10 @@ private fun Label(text: String) {
 /** Picked, never typed, so names stay the one name the Hub made them. */
 @Composable
 private fun NamePicker(options: List<String>, selected: String, onSelect: (String) -> Unit) {
-    val scrollState = rememberScrollState()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalFadingEdges(scrollState)
-            .horizontalScroll(scrollState),
+            .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         options.forEach { option ->

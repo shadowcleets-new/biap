@@ -19,9 +19,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudOff
@@ -34,11 +33,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -55,7 +52,6 @@ import coil3.compose.AsyncImage
 import com.sc.biap.data.CatalogueSummary
 import com.sc.biap.data.Design
 import com.sc.biap.data.SizeInventory
-import com.sc.biap.theme.horizontalFadingEdges
 import com.sc.biap.ui.BiapMark
 import com.sc.biap.ui.DesignImageState
 import com.sc.biap.ui.rememberDesignImage
@@ -171,7 +167,7 @@ fun CatalogueSearchField(
             .height(56.dp)
             .clip(RoundedCornerShape(28.dp))
             .background(scheme.surfaceContainerHigh)
-            .padding(start = 20.dp, end = if (query.isNotEmpty()) 4.dp else 20.dp),
+            .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -198,47 +194,14 @@ fun CatalogueSearchField(
             )
         }
         if (query.isNotEmpty()) {
-            IconButton(onClick = { onQueryChange("") }) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = "Clear search",
-                    tint = scheme.onSurfaceVariant,
-                )
-            }
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Clear search",
+                tint = scheme.onSurfaceVariant,
+                modifier = Modifier.clickable { onQueryChange("") },
+            )
         }
     }
-}
-
-/** Quiet match count shown underneath the search field while searching or filtering. */
-@Composable
-fun CatalogueMatchCount(
-    count: Int,
-    totalCount: Int,
-    query: String,
-    filters: CatalogueFilters,
-    modifier: Modifier = Modifier,
-) {
-    if (count <= 0) return
-    val searching = query.isNotBlank()
-    if (!searching && !filters.isAny) return
-
-    val label = when {
-        searching && filters.isAny ->
-            "$count ${if (count == 1) "match" else "matches"} found · filtered"
-        searching ->
-            "$count ${if (count == 1) "match" else "matches"} found"
-        filters.showArchived ->
-            "$count archived"
-        else ->
-            "Showing $count of $totalCount"
-    }
-
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(horizontal = 24.dp, vertical = 2.dp),
-    )
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -328,12 +291,10 @@ fun CatalogueFilterRow(
     onSelectCategory: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val scrollState = rememberScrollState()
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .horizontalFadingEdges(scrollState)
-            .horizontalScroll(scrollState),
+            .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         CatalogueChip(
@@ -498,17 +459,15 @@ fun CatalogueEmptyState(
     onAddDesign: () -> Unit,
     onClearFilters: () -> Unit,
     modifier: Modifier = Modifier,
-    onClearSearch: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
-    val searching = query.isNotBlank()
+    val searching = query.isNotEmpty()
     val filtered = filters.isAny
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp, vertical = 16.dp),
+            .padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -564,26 +523,13 @@ fun CatalogueEmptyState(
         Spacer(Modifier.height(28.dp))
 
         when {
-            searching -> {
-                Button(
-                    onClick = onClearSearch,
-                    shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(percent = 50)),
-                    modifier = Modifier.height(56.dp),
-                ) { Text("Clear search") }
-
-                if (filtered) {
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = onClearFilters) { Text("Clear filters") }
-                }
-            }
-
-            filtered -> Button(
+            filtered && !searching -> Button(
                 onClick = onClearFilters,
                 shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(percent = 50)),
                 modifier = Modifier.height(56.dp),
             ) { Text("Clear filters") }
 
-            else -> Button(
+            !searching -> Button(
                 onClick = onAddDesign,
                 shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(percent = 50)),
                 modifier = Modifier.height(64.dp),

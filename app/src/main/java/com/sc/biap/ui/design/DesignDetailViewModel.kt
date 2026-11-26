@@ -25,7 +25,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -52,15 +51,14 @@ class DesignDetailViewModel(
 
     init {
         viewModelScope.launch {
-            combine(repository.biData, repository.isDatabaseReady) { biData, ready ->
-                if (!ready) {
-                    DesignDetailUiState.Loading
+            repository.biData.collect { biData ->
+                val design = biData.designs.find { it.id == designId }
+                if (design != null) {
+                    _uiState.value = DesignDetailUiState.Success(design)
                 } else {
-                    val design = biData.designs.find { it.id == designId }
-                    if (design != null) DesignDetailUiState.Success(design)
-                    else DesignDetailUiState.NotFound
+                    _uiState.value = DesignDetailUiState.NotFound
                 }
-            }.collect { _uiState.value = it }
+            }
         }
     }
 

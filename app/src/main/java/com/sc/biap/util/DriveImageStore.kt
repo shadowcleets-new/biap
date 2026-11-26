@@ -47,8 +47,6 @@ object DriveImageStore {
 
     private const val TAG = "DriveImageStore"
     private const val PREFIX = "img_"
-    private const val JOB_PHOTO_PREFIX = "img_job_"
-    private const val VOICE_PREFIX = "vn_"
     private const val SUFFIX = ".enc"
 
     /** Superseded versions kept per design before the oldest are removed. */
@@ -56,9 +54,6 @@ object DriveImageStore {
 
     /** Decrypted photos fetched from Drive, kept so each one is downloaded once per device. */
     private const val CACHE_DIR = "cloud_images"
-
-    /** Decrypted voice notes fetched from Drive, kept so each one is downloaded once per device. */
-    private const val VOICE_CACHE_DIR = "cloud_voice"
 
     /**
      * A fresh, never-reused name for a new version of a design's photo.
@@ -72,32 +67,11 @@ object DriveImageStore {
     }
 
     /**
-     * A fresh, never-reused name for a JobWork photo. Keeps the `img_` prefix so
-     * [isDriveKey], [ensureLocal], and approved-sample promotion treat it identically to
-     * design photos, without colliding with a design's own retention prefix.
-     */
-    fun newJobPhotoKey(jobId: String): String {
-        val stamp = System.currentTimeMillis()
-        val nonce = UUID.randomUUID().toString().take(8)
-        return "$JOB_PHOTO_PREFIX${jobId}_${stamp}_$nonce$SUFFIX"
-    }
-
-    /** A fresh, never-reused name for a JobWork spoken note. */
-    fun newVoiceKey(jobId: String): String {
-        val stamp = System.currentTimeMillis()
-        val nonce = UUID.randomUUID().toString().take(8)
-        return "$VOICE_PREFIX${jobId}_${stamp}_$nonce$SUFFIX"
-    }
-
-    fun isVoiceKey(key: String): Boolean = key.startsWith(VOICE_PREFIX) && key.endsWith(SUFFIX)
-
-    /**
      * True for keys this store owns. Photos uploaded by the previous Firebase Storage
      * implementation used paths like "designs/<id>/<file>.jpg"; those objects are not in
      * Drive, so they are recognised and reported rather than being fetched and failing oddly.
      */
-    fun isDriveKey(key: String): Boolean =
-        (key.startsWith(PREFIX) || key.startsWith(VOICE_PREFIX)) && key.endsWith(SUFFIX)
+    fun isDriveKey(key: String): Boolean = key.startsWith(PREFIX) && key.endsWith(SUFFIX)
 
     /**
      * Encrypt [localFile] and upload it under [key]. Returns true on success.
@@ -257,46 +231,9 @@ object DriveImageStore {
             .dropLast(keep)
     }
 
-    /**
-     * Resolves a photo from [localPath] when present on disk, or downloads and decrypts
-     * [remoteRef] from Drive if available.
-     */
-    suspend fun ensurePhotoLocal(
-        context: Context,
-        localPath: String?,
-        remoteRef: String?,
-    ): File? = withContext(Dispatchers.IO) {
-        FileUtils.resolveExistingImageFile(context, localPath)?.let { return@withContext it }
-        val key = remoteRef?.takeIf { it.isNotBlank() } ?: return@withContext null
-        ensureLocal(context, key)
-    }
-
-    /**
-     * Resolves a voice note from [localPath] when present on disk, or downloads and decrypts
-     * [remoteRef] from Drive if available.
-     */
-    suspend fun ensureVoiceLocal(
-        context: Context,
-        localPath: String?,
-        remoteRef: String?,
-    ): File? = withContext(Dispatchers.IO) {
-        VoiceNotes.resolve(context, localPath)?.let { return@withContext it }
-        val key = remoteRef?.takeIf { it.isNotBlank() } ?: return@withContext null
-        ensureLocal(context, key)
-    }
-
-    internal fun cacheLocation(key: String): Pair<String, String> =
-        if (isVoiceKey(key)) {
-            VOICE_CACHE_DIR to (key.removeSuffix(SUFFIX) + ".m4a")
-        } else {
-            CACHE_DIR to (key.removeSuffix(SUFFIX) + ".jpg")
-        }
-
-    /** Where a fetched photo or voice note is kept once decrypted. */
-    fun cachedFile(context: Context, key: String): File {
-        val (dir, name) = cacheLocation(key)
-        return File(File(context.filesDir, dir), name)
-    }
+    /** Where a fetched photo is kept once decrypted. */
+    fun cachedFile(context: Context, key: String): File =
+        File(File(context.filesDir, CACHE_DIR), key.removeSuffix(SUFFIX) + ".jpg")
 
     private fun driveManager(context: Context): GoogleDriveSyncManager =
         DefaultDataRepository.getInstance(context).driveSyncManager

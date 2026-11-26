@@ -42,30 +42,41 @@ class OrphanImageCleanupWorker(
                         // without this the worker simply cannot open them.
                         .openHelperFactory(SupportOpenHelperFactory(DatabaseKey.getOrCreate(context)))
                         .build()
-                    // Cover photos, extra photos, JobWork fault/sample photos, and local
-                    // profile avatars. Missing any of those would sweep live images off disk.
+                    // Cover photos AND the extras. This worker deletes files off disk, so a
+                    // list that stopped at the cover would have swept away every additional
+                    // photograph on every design the first time it ran.
                     val dao = db.designDao()
                     val converters = com.sc.biap.data.room.Converters()
                     val paths = dao.getAllImagePaths() +
                         dao.getAllExtraImagesRaw()
                             .flatMap { converters.toDesignPhotos(it) }
-                            .mapNotNull { it.localPath } +
-                        dao.getAllJobWorkImagePaths() +
-                        listOfNotNull(
-                            dao.getProfileOnce()?.photoRef?.takeIf { !it.startsWith("http") }
-                        )
-                    activeImagePaths.addAll(collectActiveImageRefs(paths))
+                            .mapNotNull { it.localPath }
+                    for (path in paths) {
+                        activeImagePaths.add(path)
+                        val file = File(path)
+                        activeImagePaths.add(file.name)
+                    }
                     db.close()
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
 
-            // 3. Scan local filesDir for orphaned "img_*.jpg" files and delete them
+            // 3. Scan local filesDir for design photographs matching "img_*.jpg"
+            val filesDir = context.filesDir
+            val images = filesDir.listFiles { file ->
+                file.name.startsWith("img_") && file.name.endsWith(".jpg")
+            } ?: emptyArray()
+
+            // 4. Delete files that are not referenced in any database
             var deletedCount = 0
-            for (imageFile in findOrphanedImageFiles(context.filesDir, activeImagePaths)) {
-                if (imageFile.delete()) {
-                    deletedCount++
+            for (imageFile in images) {
+                val relativeName = imageFile.name
+                val absolutePath = imageFile.absolutePath
+                if (relativeName !in activeImagePaths && absolutePath !in activeImagePaths) {
+                    if (imageFile.delete()) {
+                        deletedCount++
+                    }
                 }
             }
 
@@ -74,24 +85,5 @@ class OrphanImageCleanupWorker(
             e.printStackTrace()
             Result.failure()
         }
-    }
-}
-
-internal fun collectActiveImageRefs(paths: Iterable<String>): Set<String> {
-    val active = mutableSetOf<String>()
-    for (path in paths) {
-        if (path.isBlank()) continue
-        active.add(path)
-        active.add(File(path).name)
-    }
-    return active
-}
-
-internal fun findOrphanedImageFiles(filesDir: File, activeImagePaths: Set<String>): List<File> {
-    val images = filesDir.listFiles { file ->
-        file.name.startsWith("img_") && file.name.endsWith(".jpg")
-    } ?: return emptyList()
-    return images.filter { imageFile ->
-        imageFile.name !in activeImagePaths && imageFile.absolutePath !in activeImagePaths
     }
 }
