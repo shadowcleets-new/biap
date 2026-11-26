@@ -13,6 +13,132 @@ Each entry is written twice over:
 The entries dated 13-15 August 2026 were reconstructed on 30 September 2026 from
 the commit record; they were not written at the time.
 
+## [2026-11-26 15:15:00] - Swarm Session `090b60b9` - v9-v11 Drive sync, JobWork media, cold-start fix & UI polish
+
+> **In plain English:** Finished wiring the newer workshop features into cloud backup so
+> batches, karigars, activities, jobs, and sample or alteration photos and voice notes
+> sync cleanly between phones instead of staying only on the device that created them.
+> Stopped the catalogue from flashing "No designs yet" for a few seconds when the app first
+> opens, added Hindi and Gujarati compound numbers (like "dhai sau" or "sawa sau") to voice
+> entry, added a one-tap tidy-up for fabric and colour spelling variations in the Business
+> Hub, added a match counter and a clear button when searching, and made Settings reachable
+> even when Google Drive is not connected.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Post-September features (`batches`, `karigars`, `activities`, `job_work`, and JobWork photo/voice attachments) were missing from `snapshotFromDao`, `SyncMerger.merge`, `DesignDao.importData`, and the Drive media upload/download/cleanup workers. Meanwhile, `MainScreen` and `DesignDetailScreen` flashed empty/`NotFound` while SQLCipher opened Room, `VoiceCommand` misread Hindi/Gujarati compound quantities, `Attributes.inconsistentValues` had no UI, the signed-out-of-Drive menu lacked `Settings`, and `Navigation.kt` padded `MainScreen` above the bottom navigation bar against `20584ce`.
+- **Specialist Personas Invoked:** Multi-agent swarm (`audit-docs`, `sync-pipeline`, `ui-features`, `verifier`).
+- **The Strategy:** Keep originals uncompressed per `2026-08-08-multi-image-gallery-design.md`, separate DB readiness (`isDatabaseReady`) from `_biData`, preserve LWW conflict safety across JobWork status updates vs delayed media uploads, and gate every fix with JVM unit tests plus full debug/release/lint builds.
+
+### 2. Surgical Technical Modifications
+- **v9–v11 Drive Sync & FK-Safe Import (`data/DataRepository.kt`, `data/SyncMerger.kt`, `data/room/DesignDao.kt`):**
+  - `buildSnapshotFromDao` (`snapshotFromDao`) now includes `batches`, `karigars`, `deletedKarigars`, `activities`, `deletedActivities`, `jobWork`, and `deletedJobWork`.
+  - `SyncMerger.merge` adds LWW merge with `deletedJobWork` tombstones and coalesces `photoPath`/`photoRef`/`voicePath`/`voiceRef` from losing rows so remote status updates never drop uploaded media pointers.
+  - `DesignDao.importData` clears and re-imports all v9–v11 tables in one `@Transaction`, re-inserting `batches` (filtered to live `designIds`) *after* `designs` and `size_inventories` so `ON DELETE CASCADE` never wipes them.
+- **JobWork Media Pipeline & Cleanup (`data/DataRepository.kt`, `data/room/DesignDao.kt`, `util/DriveImageStore.kt`, `util/ImageUploadWorker.kt`, `util/OrphanImageCleanupWorker.kt`, `util/VoiceNotes.kt`, `util/FileUtils.kt`, `ui/components/MediaAttachments.kt`, `ui/hub/WorkManagementScreen.kt`):**
+  - Extended `ImageUploadWorker` (`TARGET_DESIGN`, `TARGET_JOB_PHOTO`, `TARGET_JOB_VOICE`) and `DriveImageStore` (`newJobPhotoKey`, `newVoiceKey`, `isVoiceKey`, `ensurePhotoLocal`, `ensureVoiceLocal`, `cacheLocation` with `cloud_voice/*.m4a`) to upload, encrypt, cache, and fetch JobWork photos and AAC voice notes.
+  - `startSample` and `startAlteration` persist null remote refs initially, enqueue resolved local paths via `enqueueJobMediaIfPresent`/`enqueueJobMediaUpload`, backfill pending uploads in `backfillPendingImageUploads`, and update pointers via `applyUploadedJobMedia` / `DesignDao.updateJobPhotoRef` & `updateJobVoiceRef` (without bumping `job_work.updatedAt`).
+  - `approvedDesignFromSample` (`decideSample`) carries `photoRef`, `imageUpdatedAt`, and `imageUpdatedBy` onto approved designs and falls back to enqueueing upload when `photoRef` is absent.
+  - Added `FileUtils.sameStoredPath` for relative-vs-absolute upload path matching (`applyUploadedImageToDao`), `VoiceNotes.durationSeconds(file: File?)`, `OrphanImageCleanupWorker` protection for `job_work.photoPath` (plus `user_profile.photoRef`), `WorkPhotoThumbnail`, and remote-fetching `VoiceNotePlayer(voicePath, modifier, voiceRef)` with loading/retry states.
+- **DB Adoption, Cold-Start Readiness & Lint Fix (`data/DataRepository.kt`, `ui/main/MainScreenViewModel.kt`, `ui/design/DesignDetailViewModel.kt`, `ui/main/MainScreen.kt`, `util/DriveSyncWorker.kt`):**
+  - Extracted `sha256NameHash`, `sha256DatabaseSuffix`, `legacyMd5DatabaseSuffix`, and `adoptDatabaseFilesWithSuffix` so MD5 -> SHA-256 adoption carries over `.db.bak` when absent at destination.
+  - Added `DataRepository.isDatabaseReady: StateFlow<Boolean>` (reset on account switches, set `true` on first Room collect) and `"LOADING…"` status lines in `MainScreen.kt` so empty/`NotFound` states never flash on cold start.
+  - Fixed `[RestrictedApi]` in `DriveSyncWorker.kt` (`result == Result.retry()`).
+- **Voice Numbers, Attribute Tidy-Up & SDK 37 UI Polish (`data/VoiceCommand.kt`, `data/Attributes.kt`, `ui/hub/BusinessHubViewModel.kt`, `ui/hub/BusinessHubMenu.kt`, `Navigation.kt`, `ui/main/CatalogueList.kt`, `ui/main/MainScreen.kt`, `ui/design/DesignDetailScreen.kt`, `ui/design/SizeBatchSheet.kt`, `ui/hub/WorkDialogs.kt`):**
+  - Added Hindi/Gujarati compound quantity parsing (`dedh`, `dodh`, `dhai`, `adhi`, `sawa`, `saadhe`, `sada`, `pauna`/`paune`/`pona`, `sau`/`so`, `hazaar`, `darjan`), NFC/combining-mark normalization, and English `"so"` + digit guards.
+  - Added `AttributeDrift` / `attributeDrifts` + `BusinessHubViewModel.unifyAttribute` + `DesignDao.unifyAttributeValue` (active designs only, skipping `archivedAt > 0L`) + conditional `AttributeTidyDialog` in `BusinessHubMenu.kt`.
+  - Delegated `MainScreen` window insets from `Navigation.kt` so lists scroll under the floating nav bar while headers, cutouts, and IME-padded empty states stay unobstructed under `targetSdk 37`; added `CatalogueMatchCount`, scrollable `CatalogueEmptyState` with `"Clear search"` / `"Clear filters"`, signed-out `"Settings"` menu item, `AppLock.beginTrustedFlow()` + `ImeAction.Done` in `DesignDetailScreen.kt`, and `horizontalFadingEdges` across chip rows.
+- **New/Expanded Tests:** Added `DatabaseAdoptionTest` (5), `JobWorkSyncMergeTest` (7), `SyncV9ToV11PersistenceTest` (5), `OrphanImageCleanupTest` (3), `ColdStartLoadingTest` (2); expanded `VoiceCommandTest` (to 20) and `AttributesTest` (to 13).
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:**
+  - `.\gradlew.bat :app:testDebugUnitTest --rerun-tasks --console=plain` -> **229/229 tests pass across 24 suites** (0 failures, 0 errors, 0 skipped).
+  - `.\gradlew.bat :app:assembleDebug` -> **PASS** (`app-debug.apk`).
+  - `.\gradlew.bat :app:assembleRelease` -> **PASS** (`app-release.apk`, R8 + resource shrink + `lintVitalRelease` clean, release-signed via local keystore config).
+  - `.\gradlew.bat :app:lintDebug` -> 0 errors in project sources (only developer-local `local.properties:15` `[PropertyEscape]`).
+- **NOT verified on physical hardware:** No Android device was attached during this session, so live 25-design MD5 -> SHA-256 DB rename (`03b1581`), real-microphone voice-note recording/playback (`380a908`), and the full-screen `targetSdk 37` visual inset pass (`2fe0a72`) remain unverified on a phone.
+- **Next Sprint Phase:** Commit & push `main`, refresh `C:\Users\acer\biap-rollback`, and run the on-device smoke pass when the Pixel 9 is connected.
+
+---
+
+## [2026-10-04 23:29:46] - Commits `b4e20df..03b1581` - SHA-256 database naming & CI automation
+
+> **In plain English:** Renamed the local encrypted database files using a stronger
+> fingerprint (SHA-256 instead of MD5) with an automatic carry-over so existing phones
+> keep all their designs, and set up automated GitHub security and dependency checks.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** CodeQL flagged `MessageDigest.getInstance("MD5")` used purely to hash Firebase UIDs into filenames; meanwhile the repository lacked CI security scanning and automated dependency update PRs.
+- **The Strategy:** Switch `nameHash` to truncated 16-byte SHA-256 while preserving safe, non-destructive sidecar adoption (`-wal`, `-shm`) and `biap_sync` stamp migration; keep `03b1581` unpushed until verified on device.
+
+### 2. Surgical Technical Modifications
+- **Modified Files:**
+  - `data/DataRepository.kt` (`03b1581`) — SHA-256 `nameHash` + `legacyMd5Suffix` + `adoptMd5NamedDatabaseIfPresent`.
+  - `baselineprofile/build.gradle.kts` (`b4e20df`) — restored `minSdk = 28` (keeping `targetSdk = 37`) + tracked `.idea/` settings.
+  - `.github/dependabot.yml` (`668785a`) — grouped Gradle/Compose/Firebase/Kotlin+KSP updates, explicitly ignoring `play-services-auth` 22.x.
+  - `.github/workflows/codeql.yml` (`7aa5b4f`, `34541d5`, `acb1775`, `d189db8`) — manual `:app:assembleDebug` extraction with JDK 17 + 21, `actions` scan, and commit-SHA-pinned workflow actions.
+- **Irreversible Actions:** Changing the hash renames active per-user database files once `03b1581` runs; rolling back to a pre-`03b1581` APK afterwards requires restoring or renaming back to the MD5 filename.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** CodeQL workflow green in GitHub Actions up to `d189db8`. `03b1581` held locally ahead of `origin/main` pending device verification.
+
+---
+
+## [2026-10-04 13:32:09] - Commits `235102b..380a908` - JobWork ledger (v10–v11), voice dictation, SDK 37 & Hub split
+
+> **In plain English:** Built a complete tracker for pieces out with karigars across four
+> kinds of work: new samples, fresh production runs, alterations, and outwork. You can
+> attach a photo and tap-to-record a short voice note on samples and alterations, speak a
+> send-out in Hindi or Gujarati instead of typing it, see the total pieces out right on
+> the main header, and browse the catalogue all the way under a transparent bottom bar.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Pieces leaving the workshop for printing, dyeing, sampling, or alteration had no ledger; "Send out" blocked commissioning empty sizes; the single Business Hub screen mixed daily job tracking with static karigar/activity setup; and the opaque bottom bar ate screen space.
+- **The Strategy:** Model all four work types in one `job_work` table (`v10` -> `v11`), fix `sendOut` to move both the `size_inventories.stock` column and `batches` ledger atomically, split Business Hub into two entry doors, use on-device Android speech recognition to fill forms safely without auto-submitting, and follow `compileSdk = 37` with `targetSdk = 37`.
+
+### 2. Surgical Technical Modifications
+- **New Files:** `data/JobWork.kt`, `data/VoiceCommand.kt`, `ui/hub/BusinessHubMenu.kt`, `ui/hub/WorkManagementScreen.kt`, `ui/hub/WorkDialogs.kt`, `ui/components/MediaAttachments.kt`, `util/VoiceNotes.kt`, `JobWorkTest.kt`, `VoiceCommandTest.kt`.
+- **Modified Files:** `data/room/AppDatabase.kt` (**MIGRATION_9_10**, **MIGRATION_10_11**), `data/room/Entities.kt`, `data/room/DesignDao.kt`, `data/DataRepository.kt`, `data/Design.kt`, `Navigation.kt`, `NavigationKeys.kt`, `app/build.gradle.kts` (`targetSdk 36 -> 37`), `app/src/main/AndroidManifest.xml` (`RECORD_AUDIO`), `ui/main/MainScreen.kt`, `ui/main/MainScreenViewModel.kt`, `ui/main/CatalogueList.kt`, `ui/orders/OrdersList.kt`, `ui/design/SizeBatchSheet.kt`, `ui/design/DesignDetailScreen.kt`, `ui/design/DesignDetailViewModel.kt`, `ui/hub/BusinessHubScreen.kt`, `ui/hub/BusinessHubViewModel.kt`.
+- **Payload/Schema Changes:** **Schema v9 -> v10** (`job_work`, `deleted_job_work`) and **v10 -> v11** (9 additive columns on `job_work`: `kind`, `lotId`, `designName`, `batchNumber`, `outcome`, `photoPath`, `photoRef`, `voicePath`, `voiceRef`).
+- **Irreversible Actions:** Schema bumps to v10 and v11 — builds older than v11 cannot open a v11 database.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** Unit tests grew from 162 -> 176 (`235102b`) -> 190 (`bc2e0c5`) -> 201 (`31841e6`, `380a908`); release build passed on `2fe0a72`; Pixel 9 verified v10->v11 migration on 25 designs, Hub routing, floating nav bar scrolling, and Sample/Alteration form rendering. Mic voice-note playback (`380a908`) and full-screen SDK 37 inset review (`2fe0a72`) remained unverified on device.
+
+---
+
+## [2026-10-04 08:33:31] - Commits `8f02eab`, `2d27271` - Ledger demand advice & attribute autocomplete
+
+> **In plain English:** The design page now reads back past batches and orders to tell
+> you how fast a design sells and suggest how many of each size to cut next, and typing
+> fabric, work, or colour suggests the spellings already used in your catalogue.
+
+### 2. Surgical Technical Modifications
+- **New Files:** `data/Demand.kt`, `data/Attributes.kt`, `DemandTest.kt`, `AttributesTest.kt`.
+- **Modified Files:** `ui/design/DesignDetailScreen.kt`, `ui/design/DesignDetailViewModel.kt`, `ui/design/AddDesignScreen.kt`, `ui/design/AddDesignViewModel.kt`.
+- **Detail:** `Demand.kt` computes run count, sell pace, and largest-remainder cut splits; `Attributes.kt` folds case/punctuation to pick majority canonical spellings on focus and added `inconsistentValues()` as groundwork for spelling tidy-up.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** 151 tests passing (`8f02eab`), then 162 tests passing (`2d27271`).
+
+---
+
+## [2026-10-01 19:03:51] - Commits `55a71b8..af5bf39` - Business Hub completion, icons, drag-scroll & karigar linking
+
+> **In plain English:** Fixed the Business Hub missing from the main account menu, made
+> dragged names sit cleanly under your finger and auto-scroll the board when held near an
+> edge, added custom workshop icons, and automatically linked typed karigar names on
+> existing designs to the master Hub list with smart merge suggestions.
+
+### 2. Surgical Technical Modifications
+- **New Files:** `ui/hub/HubIcons.kt`, `app/src/main/res/drawable/ic_activity_*.xml` (5), `ic_karigar_person.xml`, `KarigarLinkTest.kt`.
+- **Modified Files:** `ui/main/AccountMenu.kt`, `ui/main/MainScreen.kt`, `ui/hub/BusinessHubScreen.kt`, `ui/hub/BusinessHubViewModel.kt`, `data/Karigar.kt`, `data/DataRepository.kt`, `data/room/DesignDao.kt`, `ui/design/DesignDetailScreen.kt`.
+- **Detail:** Added one-time `linkDesignKarigarsToHub`, transactional `mergeKarigar`, and `rankMergeTargets` / `mergeCandidateScore`; verified on Pixel 9 (`9fcdd20`: 11 Hub karigars clean after merging 3 variants).
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** 129 tests passing (`9fcdd20`) -> 135 tests passing (`af5bf39`).
+
+---
+
 ## [2026-09-30 16:18:09] - Session `28194b79` (Opus 5) - batches, reset stock, Business Hub
 
 > **In plain English:** Three things. You can now empty a size back to zero - or a whole

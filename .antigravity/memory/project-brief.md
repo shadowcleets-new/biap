@@ -1,47 +1,37 @@
-# Project Brief: biap (Business Intelligence App)
+# Project Brief: biap (Atelier Operations & Inventory ERP)
 
 ## 1. Executive Summary
-biap is a native Android Business Intelligence application designed to provide rich data visualizations, reports, and analytical insights. All features are baked on-demand as directed by the user.
+`biap` (`com.sc.biap`) is a native Android operations and inventory application for an Indian D2C ethnic wear atelier (Salwar Kameez & Kurtis). It manages the design catalogue, per-size stock and batch history, pricing in paise, artisan (`Karigar`) assignment and job work, orders, and encrypted offline-first synchronization.
 
 ## 2. Architectural Overview
-- **Platform:** Native Android (Kotlin)
-- **UI Framework:** Jetpack Compose
-- **Build System:** Gradle (Kotlin DSL, AGP 9.2.1, Gradle Wrapper 9.4.1)
-- **Minimum SDK:** Android 24+
-- **Target SDK:** Android 36
+- **Platform:** Native Android (Kotlin `2.3.21`, KSP `2.3.12`)
+- **UI Framework:** Jetpack Compose (BOM `2026.09.00`), Material 3 Expressive (`1.5.0-alpha29`), Navigation 3 (`1.2.0`)
+- **Build System:** Gradle `9.8.0`, AGP `9.4.1` (`:app`, `:baselineprofile`)
+- **Minimum SDK:** Android 24+ (`:baselineprofile` `minSdk 28`)
+- **Compile / Target SDK:** Android 37 (`compileSdk = 37`, `targetSdk = 37`)
 
 ## 3. Database Schema & Data Models
-- **SizeInventory:** `size: String`, `stock: Int`, `price: Long` (cents)
-- **Design:** `id: String`, `name: String`, `category: String`, `imagePath: String?`, `sizeInventories: List<SizeInventory>`, `customFields: Map<String, String>`
-- **BusinessIntelligenceData:** `designs: List<Design>`, `globalCustomFields: Set<String>`
+Room `2.8.5` at **schema v11** (15 entities) encrypted with SQLCipher `4.19.1` (`DatabaseKey` in Keystore-backed `EncryptedSharedPreferences`), named per Firebase `uid` using truncated SHA-256 (`bi_database_<sha256_16B>.db`):
+- **Core Entities:** `DesignEntity` (incl. `imageRef`, `archivedAt`, `extraImages` up to 5 photos), `SizeInventoryEntity` (`stock`, `price: Long` paise), `GlobalCustomFieldEntity`, `UserProfileEntity`
+- **Operations & Workshop:** `OrderEntity` (`OrderLine` list), `BatchEntity` (FK cascade from `designs`), `KarigarEntity`, `ActivityEntity`, `JobWorkEntity` (`WorkKind`: `SAMPLE`, `PRODUCTION`, `ALTERATION`, `OUTWORK`; `photoPath`/`photoRef`, `voicePath`/`voiceRef`)
+- **Sync Tombstones:** `DeletedDesignEntity`, `DeletedCustomFieldEntity`, `DeletedOrderEntity`, `DeletedKarigarEntity`, `DeletedActivityEntity`, `DeletedJobWorkEntity`
+- **Domain & Analytics Helpers:** `Demand` (pace & next-cut recommendations), `Attributes` (catalogue vocabulary & `AttributeDrift`), `VoiceCommand` (Hindi/Gujarati spoken send-out parser incl. compound quantities), `SyncMerger` (LWW + tombstones + independent media/archive clocks)
 
 ## 4. Active Endpoints & Integrations
-- Local JSON storage: saved at `context.filesDir/bi_data.json`
+- **Local Storage:** Per-identity SQLCipher Room DB (`AppDatabase` v11) with `.bak` / `.corrupt_*` recovery and `OrphanImageCleanupWorker`; `filesDir` images (`img_*.jpg`, `cloud_images/`) and `32 kbps` mono AAC voice notes (`voice_notes/`, `cloud_voice/`).
+- **Cloud Backup & Media:** Google Drive `appDataFolder` via `GoogleDriveSyncManager` & `DriveImageStore` — AES-256-GCM encrypted `bi_data.json.enc`, PBKDF2-HMAC-SHA256 wrapped sync key `sync_key.enc`, and versioned encrypted media `img_*.enc`, `img_job_*.enc`, `vn_*.enc`. (Firebase Storage removed.)
+- **Auth & Access Control:** Firebase Auth (Email/Password, Phone OTP, Google Sign-In via `play-services-auth 21.6.0`), Firestore (`invites`, `/users/{uid}`), Firebase App Check (`PlayIntegrity` / `Debug`), and `BiometricGate` / `AppLock`.
+- **Background Work & CI:** WorkManager `2.12.0` (`DriveSyncWorker`, `ImageUploadWorker`, `OrphanImageCleanupWorker`), GitHub Actions (`codeql.yml`, `dependabot.yml`).
 
 ## 5. Development Backlog
-- [x] Create native Android project structure using Compose template.
-- [x] Configure persistent memory bank and project files in dedicated directory.
-- [x] Rename project to 'biap' (refactor packaging, directories, and configuration).
-- [x] Implement design upload, size-specific pricing and stock tracking.
-- [x] Implement structured 3-piece custom and global attributes (Top, Bottom, Dupatta, General).
-- [x] Configure PickVisualMedia API for safe, zero-permission gallery photo selection.
-- [x] Establish PerformanceManager and rememberPerformanceProfile system for battery/hardware-aware animation throttling.
-- [x] Introduce defensive input text boundaries, length restrictions, and character digit sanitization.
-- [x] Add Karigars (artisans/tailors) assignment field on creation and dynamic re-assignment on details view.
-- [x] Implement complete inline edit mode in DesignDetailScreen supporting size configurations, image editing, name, category, custom attributes, and Karigars.
-- [x] Integrate Google Sign-in authentication and background database encryption and synchronization with Google Drive's appDataFolder.
-- [x] Create high-definition brand logo and splash screen background, and implement an animated Contemporary Heritage splash screen mocked in Google Stitch.
-- [x] Deactivate dynamic colors in Theme.kt to protect brand integrity.
-- [x] Implement curated Heritage Warm Palette (Canvas Cream, Muted Bronze, Warm Charcoal, Ivory, Obsidian) in Light/Dark color schemes.
-- [x] Refactor shape system (unify CornerLarge to 16.dp, CornerMedium to 12.dp, CornerSmall to 8.dp).
-- [x] Map typography to Serifs (Noto Serif/Playfair Display for headlines) and Sans-Serifs for details.
-- [x] Implement Compose BackHandler inside Add/Edit screens to trigger warning alert dialog on unsaved changes.
-- [x] Add validation warning prompt on adding custom sizes if a duplicate size already exists.
-- [x] Add snackbar visual indicators for sync completion or sync failure (with a retry option).
-- [x] Adjust target contrast ratios on outlines/placeholders and wrap chips in Modifier.minimumInteractiveComponentSize() for touch targets.
-- [x] Clean up Detail view-mode specs to hide empty/unspecified custom fields.
-- [x] Implement robust database backup (.bak) / corrupt recovery (.corrupt) cycle and relative image file resolution (portable paths) for absolute data persistence across app updates.
-- [x] Migrate monolithic file-based JSON storage (bi_data.json) to relational SQLite caching using Room Database.
-- [x] Integrate entity-level updatedAt metadata tracking and deletedDesigns tombstones to enable LWW sync conflict resolution.
-- [x] Perfect custom sizing & pricing flow (logical sorting, data-loss recovery cache, duplicate validation, float-to-cents parsing buffer, and unit tests).
-
+- [x] Native Android Compose + Material 3 Expressive architecture (`com.sc.biap`, Navigation 3, `PerformanceProfile`).
+- [x] Encrypted Room DB (Schema v3 -> v11, SQLCipher `4.19.1`, `DatabaseKey`, SHA-256 per-UID DBs + MD5/guest `.bak` carry-over).
+- [x] Google Drive encrypted backup (`SyncPassphrase` PBKDF2 wrapping, `DriveSyncWorker`, `SyncMerger` across v9–v11 tables, `SyncStamp`).
+- [x] Multi-photo gallery (`MAX_PHOTOS = 5`), encrypted Drive photo/voice sync (`DriveImageStore`, `ImageUploadWorker`), and orphan cleanup.
+- [x] Operations UI: Catalogue rows with size matrix, Orders tab with editable orders, Batch ledger & stock resets, Demand/cut insights, and Business Hub (drag-drop assignments, merge picker, `AttributeDrift` tidy-up).
+- [x] JobWork ledger (`SAMPLE`, `PRODUCTION`, `ALTERATION`, `OUTWORK`), photo/voice attachments, and Hindi/Gujarati compound-number voice command parsing.
+- [x] Cold-start `isDatabaseReady` loading gate, search match counter/clear CTAs, `targetSdk 37` inset handling, and 229 passing JVM unit tests (24 suites).
+- [ ] Multi-piece outfit tab toggles (`Top`, `Bottom`, `Dupatta`) in `AddDesignScreen` / edit mode.
+- [ ] Multi-module refactoring (`:core:*`, `:feature:*`) and Dependency Injection (Hilt/Koin).
+- [ ] Instrumented Room migration/WAL/`ComposeTestRule` test suite (`app/src/androidTest/`) and client measurement cards.
+- [ ] Physical-device smoke verification (live 25-design MD5 -> SHA-256 DB open, mic voice-note playback, `targetSdk 37` visual inset audit).
