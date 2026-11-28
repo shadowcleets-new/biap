@@ -694,8 +694,7 @@ fun MainScreen(
                     when (tab) {
                         MainTab.INVENTORY -> Column(modifier = Modifier.fillMaxSize()) {
                             CatalogueSearchField(
-                                query = searchQuery,
-                                onQueryChange = { viewModel.updateSearchQuery(it) },
+                                state = viewModel.searchField,
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                             )
 

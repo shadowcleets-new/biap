@@ -8,6 +8,9 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import androidx.lifecycle.ViewModel
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.viewModelScope
 import com.sc.biap.data.DataRepository
 import com.sc.biap.data.Design
@@ -49,9 +52,21 @@ class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddDesignUiState())
     val uiState: StateFlow<AddDesignUiState> = _uiState.asStateFlow()
+
+    /** The name and category fields' own text; [uiState] mirrors them. */
+    val nameField = TextFieldState()
+    val categoryField = TextFieldState(DEFAULT_CATEGORY)
     private val sizeCache = mutableMapOf<String, SizeInventory>()
 
     init {
+        viewModelScope.launch {
+            snapshotFlow { nameField.text.toString() }
+                .collect { name -> _uiState.update { it.copy(name = name) } }
+        }
+        viewModelScope.launch {
+            snapshotFlow { categoryField.text.toString() }
+                .collect { category -> _uiState.update { it.copy(category = category) } }
+        }
         viewModelScope.launch {
             repository.biData.collect { biData ->
                 _uiState.update { current ->
@@ -71,11 +86,11 @@ class AddDesignViewModel(private val repository: DataRepository) : ViewModel() {
     }
 
     fun onNameChange(name: String) {
-        _uiState.update { it.copy(name = name) }
+        nameField.setTextAndPlaceCursorAtEnd(name)
     }
 
     fun onCategoryChange(category: String) {
-        _uiState.update { it.copy(category = category) }
+        categoryField.setTextAndPlaceCursorAtEnd(category)
     }
 
     /** Append a photograph. Silently ignored once [Design.MAX_PHOTOS] are held. */

@@ -26,7 +26,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.KeyboardActionHandler
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -264,12 +267,12 @@ fun FieldWell(
 @Composable
 fun WellTextField(
     label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
+    state: TextFieldState,
     placeholder: String,
     modifier: Modifier = Modifier,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    onKeyboardAction: KeyboardActionHandler? = null,
+    inputTransformation: InputTransformation? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -278,7 +281,7 @@ fun WellTextField(
     FieldWell(label = label, focused = focused, modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                if (value.isEmpty()) {
+                if (state.text.isEmpty()) {
                     Text(
                         text = placeholder,
                         // Same size and weight as a real value, only dimmer. Shrinking the
@@ -290,14 +293,14 @@ fun WellTextField(
                     )
                 }
                 BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    singleLine = true,
+                    state = state,
+                    lineLimits = TextFieldLineLimits.SingleLine,
                     textStyle = MaterialTheme.typography.titleMediumEmphasized
                         .copy(color = scheme.onSurface),
                     cursorBrush = SolidColor(scheme.primary),
                     keyboardOptions = keyboardOptions,
-                    keyboardActions = keyboardActions,
+                    onKeyboardAction = onKeyboardAction,
+                    inputTransformation = inputTransformation,
                     modifier = Modifier
                         .fillMaxWidth()
                         .onFocusChanged { focused = it.isFocused },

@@ -202,8 +202,7 @@ fun NewOrderScreen(
             }
 
             CatalogueSearchField(
-                query = query,
-                onQueryChange = { viewModel.updateQuery(it) },
+                state = viewModel.queryField,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
 

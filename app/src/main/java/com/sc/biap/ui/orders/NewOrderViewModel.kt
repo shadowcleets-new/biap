@@ -1,6 +1,9 @@
 package com.sc.biap.ui.orders
 
 import androidx.lifecycle.ViewModel
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.viewModelScope
 import com.sc.biap.data.DataRepository
 import com.sc.biap.data.Design
@@ -64,6 +67,8 @@ class NewOrderViewModel(
 
     val isEditing: Boolean = orderId != null
 
+    /** The search field's own text. The field edits it; [query] follows it. */
+    val queryField = TextFieldState()
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
@@ -103,6 +108,9 @@ class NewOrderViewModel(
     // Declared after every StateFlow it touches: an init block runs in declaration order, and
     // reaching a property above its own initialiser is a null dereference waiting to happen.
     init {
+        viewModelScope.launch {
+            snapshotFlow { queryField.text.toString() }.collect { _query.value = it }
+        }
         if (orderId != null) {
             viewModelScope.launch {
                 val order = dataRepository.orderById(orderId)
@@ -175,7 +183,7 @@ class NewOrderViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OrderDraft())
 
     fun updateQuery(value: String) {
-        _query.value = value
+        queryField.setTextAndPlaceCursorAtEnd(value)
     }
 
     // #endregion

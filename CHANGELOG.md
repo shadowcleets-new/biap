@@ -13,6 +13,30 @@ Each entry is written twice over:
 The entries dated 13-15 August 2026 were reconstructed on 30 September 2026 from
 the commit record; they were not written at the time.
 
+## [2026-11-28 21:20:03] - Session `b2843762` - Text fields moved to TextFieldState (issue #14)
+
+> **In plain English:** Every typing box in the app (sign-in, phone and code, search, design
+> name, karigar, stock, price, passphrases) now uses the current Android text-input system.
+> They should look and behave the same; password boxes stay fully hidden. The rules about what
+> may be typed (digits only, price format, length limits) now live inside each box.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Compose 1.13 deprecates value-based `BasicTextField` and `PasswordVisualTransformation`.
+- **Specialist Personas Invoked:** Compose UI engineer, security reviewer (password fields).
+- **The Strategy:** State-based fields owned by whoever owns the text. Rejecting `onValueChange` filters became `InputTransformation`s, because a value-based bridge would show rejected characters or drop fast keystrokes.
+
+### 2. Surgical Technical Modifications
+- **New:** `ui/components/InputFilters.kt` (pure `digitsUpTo`, `digitsTruncated`, `dialCode`, `price` rules + `filterInput` adapter); `test/.../InputFiltersTest.kt` (5 tests).
+- **Components:** `AuthField`, `WellTextField`, `CatalogueSearchField` take `TextFieldState`; `AuthField(secure = true)` uses `BasicSecureTextField` with `TextObfuscationMode.Hidden`; `WellTextField` `keyboardActions` -> `onKeyboardAction`.
+- **ViewModels:** `MainScreenViewModel.searchField`, `NewOrderViewModel.queryField`, `AddDesignViewModel.nameField` / `categoryField` own the text; existing `StateFlow`s and `uiState` follow via `snapshotFlow`. `updateSearchQuery`, `updateQuery`, `onNameChange`, `onCategoryChange` now write the field.
+- **Screens:** `MainActivity` (email, password, dial code, phone, OTP; OTP decorator keeps the real field composed at alpha 0 under the six cells), `AddDesignScreen`, `DesignDetailScreen` (name/category; stock and price rows keep one field per size and ignore their own late echoes), `SyncPassphraseDialog` and `PassphraseDialogs` -> `OutlinedSecureTextField`.
+- **Irreversible Actions:** None. **Payload/Schema Changes:** None.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** `testDebugUnitTest` 234 tests, 0 failures; `assembleRelease` (R8) passes; no `BasicTextField` / `VisualTransformation` deprecation warnings remain. `lintDebug`: only error is in the untracked local `local.properties` (PropertyEscape), not in source.
+- **Resulting App State:** Not device-tested. Check: OTP autofill + typing, phone/dial code, price decimals, stock reset from a batch reflecting in the row, search clear buttons, passphrase dialogs.
+- **Next Sprint Phase:** Device test (#13); AutoMirrored icons (#16).
+
 ## [2026-11-28 20:53:49] - Session `b2843762` - GitHub repository hardening & single-branch sync
 
 > **In plain English:** Undid an accidental change on GitHub that had deleted a large part of

@@ -13,6 +13,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.maxLength
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import com.sc.biap.ui.components.InputFilters
+import com.sc.biap.ui.components.filterInput
+import kotlinx.coroutines.flow.drop
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
@@ -121,8 +129,8 @@ fun DesignDetailScreen(
     var isEditing by remember { mutableStateOf(false) }
 
     // Edit states
-    var editName by remember { mutableStateOf("") }
-    var editCategory by remember { mutableStateOf("") }
+    val editName = rememberTextFieldState()
+    val editCategory = rememberTextFieldState()
     // The whole set of photographs being edited, cover first. Was a single path; a design
     // may now hold up to Design.MAX_PHOTOS.
     var editPhotos by remember { mutableStateOf<List<DesignPhoto>>(emptyList()) }
@@ -303,8 +311,8 @@ fun DesignDetailScreen(
             LaunchedEffect(isEditing) {
                 if (isEditing) {
                     editBaseUpdatedAt = design.updatedAt
-                    editName = design.name
-                    editCategory = design.category
+                    editName.setTextAndPlaceCursorAtEnd(design.name)
+                    editCategory.setTextAndPlaceCursorAtEnd(design.category)
                     editPhotos = design.photos
                     editSizes = design.sizeInventories
                     editCustomFields = design.customFields
@@ -318,8 +326,8 @@ fun DesignDetailScreen(
                     onOverwrite = {
                         showConflictDialog = false
                         val updated = design.copy(
-                            name = editName.trim(),
-                            category = editCategory.trim(),
+                            name = editName.text.toString().trim(),
+                            category = editCategory.text.toString().trim(),
                             sizeInventories = editSizes,
                             customFields = editCustomFields.filterKeys { it.isNotBlank() },
                             karigars = editKarigars
@@ -339,16 +347,16 @@ fun DesignDetailScreen(
                         // with primaryContainer, back becomes discard, and Save is the only
                         // saturated thing on the screen.
                         EditingTopBar(
-                            canSave = editName.isNotBlank(),
+                            canSave = editName.text.isNotBlank(),
                             onDiscard = { isEditing = false },
                             onSave = {
-                                if (editName.isNotBlank()) {
+                                if (editName.text.isNotBlank()) {
                                     if (design.updatedAt != editBaseUpdatedAt) {
                                         showConflictDialog = true
                                     } else {
                                         val updated = design.copy(
-                                            name = editName.trim(),
-                                            category = editCategory.trim(),
+                                            name = editName.text.toString().trim(),
+                                            category = editCategory.text.toString().trim(),
                                             sizeInventories = editSizes,
                                             customFields = editCustomFields.filterKeys { it.isNotBlank() },
                                             karigars = editKarigars
@@ -412,8 +420,6 @@ fun DesignDetailScreen(
                         isEditing = isEditing,
                         editName = editName,
                         editCategory = editCategory,
-                        onNameChange = { editName = it },
-                        onCategoryChange = { editCategory = it },
                     )
 
                     // Inventory & Pricing
@@ -946,16 +952,51 @@ private fun SizeStockPriceEditorCard(
                 )
             } else {
                 editSizes.sortedBy { SizeUtils.getSizeSortWeight(it.size) }.forEach { inv ->
-                    var stockText by remember(inv) { mutableStateOf(inv.stock.toString()) }
-                    var priceText by remember { 
-                        val initialText = if (inv.price == 0L) "" else (inv.price / 100.0).toString()
-                        mutableStateOf(initialText) 
+                    // One field per size, kept across edits so typing never resets the cursor.
+                    val stockField = remember(inv.size) { TextFieldState(inv.stock.toString()) }
+                    val priceField = remember(inv.size) { TextFieldState(priceFieldText(inv.price)) }
+                    // What this row last wrote. An incoming value equal to it is our own edit
+                    // coming back a frame late, and must not overwrite newer typing.
+                    val pushed = remember(inv.size) { longArrayOf(inv.stock.toLong(), inv.price) }
+                    val sizesNow by rememberUpdatedState(editSizes)
+                    val onSizesNow by rememberUpdatedState(onEditSizesChange)
+                    fun pushEdit(change: (SizeInventory) -> SizeInventory) {
+                        val updated = sizesNow.toMutableList()
+                        val idx = updated.indexOfFirst { it.size == inv.size }
+                        if (idx >= 0) {
+                            updated[idx] = change(updated[idx])
+                            onSizesNow(updated)
+                        }
                     }
 
+                    // Outside changes (a reset, a batch) flow into the fields.
+                    LaunchedEffect(inv.stock) {
+                        if (inv.stock.toLong() != pushed[0] &&
+                            (stockField.text.toString().toIntOrNull() ?: 0) != inv.stock
+                        ) {
+                            stockField.setTextAndPlaceCursorAtEnd(inv.stock.toString())
+                        }
+                    }
                     LaunchedEffect(inv.price) {
-                        val parsedCents = FileUtils.parsePriceToCents(priceText)
-                        if (parsedCents != inv.price) {
-                            priceText = if (inv.price == 0L) "" else (inv.price / 100.0).toString()
+                        if (inv.price != pushed[1] &&
+                            FileUtils.parsePriceToCents(priceField.text.toString()) != inv.price
+                        ) {
+                            priceField.setTextAndPlaceCursorAtEnd(priceFieldText(inv.price))
+                        }
+                    }
+                    // Typing flows out to the sizes being edited.
+                    LaunchedEffect(stockField) {
+                        snapshotFlow { stockField.text.toString() }.drop(1).collect { text ->
+                            val stock = text.toIntOrNull() ?: 0
+                            pushed[0] = stock.toLong()
+                            pushEdit { it.copy(stock = stock) }
+                        }
+                    }
+                    LaunchedEffect(priceField) {
+                        snapshotFlow { priceField.text.toString() }.drop(1).collect { text ->
+                            val cents = FileUtils.parsePriceToCents(text)
+                            pushed[1] = cents
+                            pushEdit { it.copy(price = cents) }
                         }
                     }
 
@@ -973,27 +1014,16 @@ private fun SizeStockPriceEditorCard(
 
                         WellTextField(
                             label = "Stock",
-                            value = stockText,
+                            state = stockField,
                             placeholder = "0",
-                            onValueChange = { newValue ->
-                                val digits = newValue.filter { it.isDigit() }
-                                if (digits.length <= 6) {
-                                    stockText = digits
-                                    val updated = editSizes.toMutableList()
-                                    val idx = updated.indexOfFirst { it.size == inv.size }
-                                    if (idx >= 0) {
-                                        updated[idx] = inv.copy(stock = digits.toIntOrNull() ?: 0)
-                                        onEditSizesChange(updated)
-                                    }
-                                }
-                            },
+                            inputTransformation = filterInput { InputFilters.digitsUpTo(it, 6) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f),
                         )
 
                         WellTextField(
                             label = "Price",
-                            value = priceText,
+                            state = priceField,
                             // Never "0". An unpriced size is a size nobody has decided on,
                             // and a zero in the field would read as a decision.
                             placeholder = "Set",
@@ -1001,23 +1031,7 @@ private fun SizeStockPriceEditorCard(
                             // Fixed rather than weighted, so the rupee column stays put while
                             // the stock beside it grows a digit.
                             modifier = Modifier.width(PriceWellWidth),
-                            onValueChange = { newValue ->
-                                val dotCount = newValue.count { it == '.' }
-                                val sanitized = newValue.filter { it.isDigit() || it == '.' }
-                                if (dotCount <= 1 && sanitized.length <= 9) {
-                                    val dotIndex = sanitized.indexOf('.')
-                                    if (dotIndex == -1 || sanitized.length - dotIndex - 1 <= 2) {
-                                        priceText = sanitized
-                                        val parsedCents = FileUtils.parsePriceToCents(sanitized)
-                                        val updated = editSizes.toMutableList()
-                                        val idx = updated.indexOfFirst { it.size == inv.size }
-                                        if (idx >= 0) {
-                                            updated[idx] = inv.copy(price = parsedCents)
-                                            onEditSizesChange(updated)
-                                        }
-                                    }
-                                }
-                            },
+                            inputTransformation = filterInput(InputFilters::price),
                         )
                     }
                 }
@@ -1534,10 +1548,8 @@ Card(
 private fun TitleCategoryCard(
     design: Design,
     isEditing: Boolean,
-    editName: String,
-    editCategory: String,
-    onNameChange: (String) -> Unit,
-    onCategoryChange: (String) -> Unit,
+    editName: TextFieldState,
+    editCategory: TextFieldState,
 ) {
 // Product Title & Category Card
 if (isEditing) {
@@ -1547,14 +1559,14 @@ if (isEditing) {
     Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)) {
         WellTextField(
             label = "Design name / code",
-            value = editName,
-            onValueChange = { if (it.length <= 80) onNameChange(it) },
+            state = editName,
+            inputTransformation = InputTransformation.maxLength(80),
             placeholder = "e.g. Green Panel - Style 2",
         )
         WellTextField(
             label = "Category",
-            value = editCategory,
-            onValueChange = { if (it.length <= 80) onCategoryChange(it) },
+            state = editCategory,
+            inputTransformation = InputTransformation.maxLength(80),
             placeholder = "e.g. Salwar Kameez",
         )
     }
@@ -1905,3 +1917,7 @@ private fun formatPace(v: Double): String =
     if (v >= 10 || v == v.toInt().toDouble()) v.toInt().toString()
     else String.format(Locale.getDefault(), "%.1f", v)
 // #endregion
+
+/** How a stored price shows in its field: blank when unpriced, rupees otherwise. */
+private fun priceFieldText(paise: Long): String =
+    if (paise == 0L) "" else (paise / 100.0).toString()

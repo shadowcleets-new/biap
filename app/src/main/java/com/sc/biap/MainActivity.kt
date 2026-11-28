@@ -10,6 +10,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import com.sc.biap.ui.components.InputFilters
+import com.sc.biap.ui.components.filterInput
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
@@ -18,10 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -180,8 +184,10 @@ fun EmailAuthScreen(
     auth: FirebaseAuth,
     onBack: () -> Unit
 ) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    val emailField = rememberTextFieldState()
+    val passwordField = rememberTextFieldState()
+    val email = emailField.text.toString()
+    val password = passwordField.text.toString()
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     var isSignUp by remember { mutableStateOf(false) }
@@ -267,8 +273,7 @@ fun EmailAuthScreen(
         Spacer(modifier = Modifier.height(28.dp))
 
         AuthField(
-            value = email,
-            onValueChange = { email = it },
+            state = emailField,
             label = "Email",
             isError = errorMessage.isNotEmpty(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
@@ -277,11 +282,10 @@ fun EmailAuthScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         AuthField(
-            value = password,
-            onValueChange = { password = it },
+            state = passwordField,
             label = "Password",
             isError = errorMessage.isNotEmpty(),
-            visualTransformation = PasswordVisualTransformation(),
+            secure = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
         )
 
@@ -302,10 +306,13 @@ fun PhoneAuthScreen(
     // The dial code is a separate field with the local one already filled in. Retyping
     // "+91" on every attempt is pure friction, and pre-filling the whole field instead
     // would leave the caret sitting in front of it half the time.
-    var dialCode by remember { mutableStateOf("+91") }
-    var localNumber by remember { mutableStateOf("") }
+    val dialCodeField = rememberTextFieldState("+91")
+    val localNumberField = rememberTextFieldState()
     var phoneNumber by remember { mutableStateOf("") }
-    var otpCode by remember { mutableStateOf("") }
+    val otpField = rememberTextFieldState()
+    val dialCode = dialCodeField.text.toString()
+    val localNumber = localNumberField.text.toString()
+    val otpCode = otpField.text.toString()
     var otpSent by remember { mutableStateOf(false) }
     var verificationId by remember { mutableStateOf("") }
     var resendToken by remember { mutableStateOf<PhoneAuthProvider.ForceResendingToken?>(null) }
@@ -495,19 +502,17 @@ fun PhoneAuthScreen(
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 AuthField(
-                    value = dialCode,
-                    onValueChange = { entry ->
-                        // Always exactly one leading '+', then digits.
-                        dialCode = "+" + entry.filter { it.isDigit() }.take(3)
-                    },
+                    state = dialCodeField,
+                    // Always exactly one leading '+', then digits.
+                    inputTransformation = filterInput(InputFilters::dialCode),
                     label = "Code",
                     isError = errorMessage.isNotEmpty(),
                     modifier = Modifier.width(116.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
                 )
                 AuthField(
-                    value = localNumber,
-                    onValueChange = { entry -> localNumber = entry.filter { it.isDigit() }.take(14) },
+                    state = localNumberField,
+                    inputTransformation = filterInput { InputFilters.digitsTruncated(it, 14) },
                     label = "Phone number",
                     isError = errorMessage.isNotEmpty(),
                     modifier = Modifier.weight(1f),
@@ -531,23 +536,29 @@ fun PhoneAuthScreen(
             // rendering suppressed, so the platform keyboard and SMS autofill still work.
             val otpFocus = remember { FocusRequester() }
             BasicTextField(
-                value = otpCode,
-                onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) otpCode = it },
+                state = otpField,
+                inputTransformation = filterInput { InputFilters.digitsUpTo(it, 6) },
+                lineLimits = TextFieldLineLimits.SingleLine,
                 enabled = !isLoading,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 cursorBrush = SolidColor(Color.Transparent),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(otpFocus),
-                decorationBox = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        repeat(6) { index ->
-                            OtpCell(
-                                digit = otpCode.getOrNull(index),
-                                isNext = index == otpCode.length,
-                                modifier = Modifier.weight(1f)
-                            )
+                decorator = { innerTextField ->
+                    Box {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            repeat(6) { index ->
+                                OtpCell(
+                                    digit = otpCode.getOrNull(index),
+                                    isNext = index == otpCode.length,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
+                        // The real field must be composed for the keyboard and SMS autofill,
+                        // but the cells above are what is seen.
+                        Box(Modifier.matchParentSize().alpha(0f)) { innerTextField() }
                     }
                 }
             )

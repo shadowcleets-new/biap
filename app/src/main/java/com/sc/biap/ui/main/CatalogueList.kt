@@ -21,6 +21,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -160,18 +163,18 @@ fun CircleAction(
  */
 @Composable
 fun CatalogueSearchField(
-    query: String,
-    onQueryChange: (String) -> Unit,
+    state: TextFieldState,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val hasText = state.text.isNotEmpty()
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp)
             .clip(RoundedCornerShape(28.dp))
             .background(scheme.surfaceContainerHigh)
-            .padding(start = 20.dp, end = if (query.isNotEmpty()) 4.dp else 20.dp),
+            .padding(start = 20.dp, end = if (hasText) 4.dp else 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -181,7 +184,7 @@ fun CatalogueSearchField(
             tint = scheme.onSurfaceVariant,
         )
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (query.isEmpty()) {
+            if (!hasText) {
                 Text(
                     "Name, fabric, colour, size",
                     style = MaterialTheme.typography.bodyLarge,
@@ -189,16 +192,15 @@ fun CatalogueSearchField(
                 )
             }
             BasicTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                singleLine = true,
+                state = state,
+                lineLimits = TextFieldLineLimits.SingleLine,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = scheme.onSurface),
                 cursorBrush = SolidColor(scheme.primary),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        if (query.isNotEmpty()) {
-            IconButton(onClick = { onQueryChange("") }) {
+        if (hasText) {
+            IconButton(onClick = { state.clearText() }) {
                 Icon(
                     Icons.Default.Close,
                     contentDescription = "Clear search",

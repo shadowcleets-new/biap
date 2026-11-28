@@ -8,7 +8,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedSecureTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -18,7 +18,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextObfuscationMode
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.ui.unit.dp
 import com.sc.biap.security.SyncPassphrase
 
@@ -42,9 +44,12 @@ fun ChangePassphraseDialog(
     error: String? = null,
     busy: Boolean = false,
 ) {
-    var current by remember { mutableStateOf("") }
-    var next by remember { mutableStateOf("") }
-    var confirm by remember { mutableStateOf("") }
+    val currentField = rememberTextFieldState()
+    val nextField = rememberTextFieldState()
+    val confirmField = rememberTextFieldState()
+    val current = currentField.text.toString()
+    val next = nextField.text.toString()
+    val confirm = confirmField.text.toString()
 
     val mismatch = confirm.isNotEmpty() && next != confirm
     val tooShort = next.isNotEmpty() && next.length < SyncPassphrase.MIN_LENGTH
@@ -60,9 +65,9 @@ fun ChangePassphraseDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                PassphraseField(current, { current = it }, "Current passphrase")
-                PassphraseField(next, { next = it }, "New passphrase")
-                PassphraseField(confirm, { confirm = it }, "Repeat new passphrase")
+                PassphraseField(currentField, "Current passphrase")
+                PassphraseField(nextField, "New passphrase")
+                PassphraseField(confirmField, "Repeat new passphrase")
 
                 val message = when {
                     error != null -> error
@@ -111,8 +116,10 @@ fun ResetPassphraseDialog(
     error: String? = null,
     busy: Boolean = false,
 ) {
-    var next by remember { mutableStateOf("") }
-    var confirm by remember { mutableStateOf("") }
+    val nextField = rememberTextFieldState()
+    val confirmField = rememberTextFieldState()
+    val next = nextField.text.toString()
+    val confirm = confirmField.text.toString()
 
     val nothingToBackUp = designCount == 0
     val valid = !nothingToBackUp &&
@@ -146,8 +153,8 @@ fun ResetPassphraseDialog(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    PassphraseField(next, { next = it }, "New passphrase")
-                    PassphraseField(confirm, { confirm = it }, "Repeat new passphrase")
+                    PassphraseField(nextField, "New passphrase")
+                    PassphraseField(confirmField, "Repeat new passphrase")
 
                     val message = when {
                         error != null -> error
@@ -185,13 +192,11 @@ fun ResetPassphraseDialog(
 }
 
 @Composable
-private fun PassphraseField(value: String, onValueChange: (String) -> Unit, label: String) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
+private fun PassphraseField(state: TextFieldState, label: String) {
+    OutlinedSecureTextField(
+        state = state,
         label = { Text(label) },
-        singleLine = true,
-        visualTransformation = PasswordVisualTransformation(),
+        textObfuscationMode = TextObfuscationMode.Hidden,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         modifier = Modifier.fillMaxWidth(),
     )

@@ -39,7 +39,11 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.maxLength
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -268,10 +272,8 @@ fun AddDesignScreen(
                 active = !namedYet,
             ) {
                 BasicDetailsCard(
-                    name = state.name,
-                    category = state.category,
-                    onNameChange = viewModel::onNameChange,
-                    onCategoryChange = viewModel::onCategoryChange
+                    name = viewModel.nameField,
+                    category = viewModel.categoryField,
                 )
             }
 
@@ -429,25 +431,23 @@ private fun AddDesignTopBar(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun BasicDetailsCard(
-    name: String,
-    category: String,
-    onNameChange: (String) -> Unit,
-    onCategoryChange: (String) -> Unit
+    name: TextFieldState,
+    category: TextFieldState,
 ) {
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(AtelierSpacing.Compact)) {
 
             WellTextField(
                 label = "Design name / code",
-                value = name,
-                onValueChange = { if (it.length <= MAX_NAME_LENGTH) onNameChange(it) },
+                state = name,
+                inputTransformation = InputTransformation.maxLength(MAX_NAME_LENGTH),
                 placeholder = "e.g. Green Panel - Style 2",
             )
 
             WellTextField(
                 label = "Category",
-                value = category,
-                onValueChange = { if (it.length <= MAX_CATEGORY_LENGTH) onCategoryChange(it) },
+                state = category,
+                inputTransformation = InputTransformation.maxLength(MAX_CATEGORY_LENGTH),
                 placeholder = "e.g. Salwar Kameez",
             )
         }
@@ -695,12 +695,13 @@ private fun KarigarAssignmentCard(
     onAddKarigar: (String) -> Unit,
     onRemoveKarigar: (String) -> Unit
 ) {
-    var newKarigarName by remember { mutableStateOf("") }
+    val newKarigarName = rememberTextFieldState()
 
     val commit = {
-        if (newKarigarName.isNotBlank()) {
-            onAddKarigar(newKarigarName.trim())
-            newKarigarName = ""
+        val entered = newKarigarName.text.toString()
+        if (entered.isNotBlank()) {
+            onAddKarigar(entered.trim())
+            newKarigarName.clearText()
         }
     }
 
@@ -709,11 +710,11 @@ private fun KarigarAssignmentCard(
 
             WellTextField(
                 label = "Karigar name",
-                value = newKarigarName,
-                onValueChange = { if (it.length <= MAX_KARIGAR_NAME_LENGTH) newKarigarName = it },
+                state = newKarigarName,
+                inputTransformation = InputTransformation.maxLength(MAX_KARIGAR_NAME_LENGTH),
                 placeholder = "e.g. Master Salim",
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { commit() }),
+                onKeyboardAction = { commit() },
                 trailing = {
                     IconButton(
                         onClick = commit,

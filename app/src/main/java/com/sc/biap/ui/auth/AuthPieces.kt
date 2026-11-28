@@ -20,7 +20,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicSecureTextField
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -37,7 +42,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -168,15 +172,16 @@ fun AuthTitle(title: String, supporting: String) {
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AuthField(
-    value: String,
-    onValueChange: (String) -> Unit,
+    state: TextFieldState,
     label: String,
     // Full width unless a caller needs otherwise - the country-code field sits in a Row and
     // asks for a fixed width, so this cannot be forced inside.
     modifier: Modifier = Modifier.fillMaxWidth(),
     isError: Boolean = false,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-    visualTransformation: VisualTransformation = VisualTransformation.None,
+    inputTransformation: InputTransformation? = null,
+    // Hides the text (passwords). Fully hidden, as PasswordVisualTransformation was.
+    secure: Boolean = false,
     trailingIcon: @Composable (() -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -198,18 +203,30 @@ fun AuthField(
                 maxLines = 1,
             )
             Spacer(Modifier.height(2.dp))
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                keyboardOptions = keyboardOptions,
-                visualTransformation = visualTransformation,
-                textStyle = MaterialTheme.typography.titleLargeEmphasized.copy(
-                    color = scheme.onSurface,
-                ),
-                cursorBrush = SolidColor(scheme.primary),
-                modifier = Modifier.fillMaxWidth(),
+            val textStyle = MaterialTheme.typography.titleLargeEmphasized.copy(
+                color = scheme.onSurface,
             )
+            if (secure) {
+                BasicSecureTextField(
+                    state = state,
+                    keyboardOptions = keyboardOptions,
+                    inputTransformation = inputTransformation,
+                    textObfuscationMode = TextObfuscationMode.Hidden,
+                    textStyle = textStyle,
+                    cursorBrush = SolidColor(scheme.primary),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                BasicTextField(
+                    state = state,
+                    lineLimits = TextFieldLineLimits.SingleLine,
+                    keyboardOptions = keyboardOptions,
+                    inputTransformation = inputTransformation,
+                    textStyle = textStyle,
+                    cursorBrush = SolidColor(scheme.primary),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
         if (trailingIcon != null) {
             Spacer(Modifier.size(8.dp))

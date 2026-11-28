@@ -1,5 +1,8 @@
 package com.sc.biap.ui.main
 
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sc.biap.data.DataRepository
@@ -23,8 +26,16 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class MainScreenViewModel(private val dataRepository: DataRepository) : ViewModel() {
+  /** The search field's own text. The field edits it; [searchQuery] follows it. */
+  val searchField = TextFieldState()
   private val _searchQuery = MutableStateFlow("")
   val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+  init {
+    viewModelScope.launch {
+      snapshotFlow { searchField.text.toString() }.collect { _searchQuery.value = it }
+    }
+  }
 
   private val _filters = MutableStateFlow(CatalogueFilters())
   val filters: StateFlow<CatalogueFilters> = _filters.asStateFlow()
@@ -129,7 +140,7 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MainScreenUiState.Loading)
 
   fun updateSearchQuery(query: String) {
-    _searchQuery.value = query
+    searchField.setTextAndPlaceCursorAtEnd(query)
   }
 
   fun toggleAttentionFilter() {
