@@ -30,7 +30,10 @@ android {
     // been tested against SDK 37 behaviour and wants it applied rather than the
     // compatibility shims. So it has to be re-verified on a real device after an upgrade,
     // not just compiled.
-    compileSdk = 37
+    // 37.1 (minor API level) is required by Compose foundation/ui 1.13.0.
+    compileSdk {
+        version = release(37) { minorApiLevel = 1 }
+    }
     defaultConfig {
         applicationId = "com.sc.biap"
         minSdk = 24

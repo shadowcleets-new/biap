@@ -13,6 +13,28 @@ Each entry is written twice over:
 The entries dated 13-15 August 2026 were reconstructed on 30 September 2026 from
 the commit record; they were not written at the time.
 
+## [2026-11-28 20:28:47] - Session `b2843762` - Compose BOM 2026.11.01, Firebase 35, DataStore 1.3, OkHttp 5.5.1
+
+> **In plain English:** Took the four pending library updates (screen toolkit, Firebase
+> login/database, local settings storage, network client). The app builds and its tests pass;
+> it needs a check on a phone, especially sign-in, because Firebase moved a major version.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Dependabot PRs #4, #5, #6, #10 were open and not in `main`.
+- **Specialist Personas Invoked:** Android build engineer.
+- **The Strategy:** Take all four on owner instruction. #10 proposed `material3 1.6.0-alpha01`; kept stable `1.5.0`, which BOM 2026.11.01 already carries, so the explicit override is gone.
+
+### 2. Surgical Technical Modifications
+- `gradle/libs.versions.toml`: `androidxComposeBom` 2026.09.00 -> 2026.11.01 (foundation/ui 1.13.0, material3 1.5.0); `androidxMaterial3` override removed; `firebase` 34.19.0 -> 35.1.0 (auth 25.0.0, firestore 27.1.0); `androidxDataStore` 1.2.1 -> 1.3.0; `okhttp` 5.5.0 -> 5.5.1.
+- `app/build.gradle.kts`: `compileSdk = 37` -> `compileSdk { version = release(37) { minorApiLevel = 1 } }` (37.1, required by foundation 1.13.0). `targetSdk` stays 37.
+- `README.md`: stack versions.
+- **Irreversible Actions:** None. **Payload/Schema Changes:** None.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** `:app:assembleDebug :app:testDebugUnitTest` and `:app:assembleRelease` (R8) -> BUILD SUCCESSFUL.
+- **Resulting App State:** New deprecations from Compose 1.13: value-based `BasicTextField` and `PasswordVisualTransformation` (`MainActivity`, `AuthPieces`, `AddPieces`, `CatalogueList`, `SyncPassphraseDialog`, `PassphraseDialogs`). Still compile and run.
+- **Next Sprint Phase:** Device test of sign-in (Firebase Auth 25) and Firestore access; migrate text fields to `TextFieldState` / `SecureTextField`.
+
 ## [2026-11-28 13:07:33] - Session `b2843762` - AGP 9.5.3, Gradle 9.9.3, Kotlin 2.4.21, KSP 2.3.14
 
 > **In plain English:** Updated the tools that build the app to their newest stable
