@@ -77,10 +77,31 @@ fun attributeVocabulary(designs: List<Design>): Map<String, List<AttributeValue>
     }
 }
 
+/**
+ * One drifted spelling group on a single attribute field, ready for a tidy-up list.
+ *
+ * [orderedSpellings] puts [AttributeValue.canonical] first as the recommended target, followed
+ * by the remaining spellings in stable alphabetical order.
+ */
+data class AttributeDrift(
+    val field: String,
+    val value: AttributeValue,
+) {
+    val orderedSpellings: List<String>
+        get() = listOf(value.canonical) + (value.spellings - value.canonical).sorted()
+}
+
 /** Values of one field written more than one way - worth offering to tidy up. */
 fun inconsistentValues(vocabulary: Map<String, List<AttributeValue>>): Map<String, List<AttributeValue>> =
     vocabulary.mapValues { (_, values) -> values.filter { it.isInconsistent } }
         .filterValues { it.isNotEmpty() }
+
+/** Flattened, deterministically ordered list of attribute spelling drifts across [designs]. */
+fun attributeDrifts(designs: List<Design>): List<AttributeDrift> =
+    inconsistentValues(attributeVocabulary(designs))
+        .entries
+        .sortedBy { it.key }
+        .flatMap { (field, values) -> values.map { AttributeDrift(field, it) } }
 // #endregion
 
 // #region 3. Suggesting while typing
