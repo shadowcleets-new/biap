@@ -23,7 +23,7 @@ plugins {
 
 android {
     namespace = "com.sc.biap"
-    // 37 is required by material3 1.5.0-alpha (Expressive) to compile at all.
+    // 37 is required by material3 1.5.x (Expressive) to compile at all.
     //
     // targetSdk follows it at the owner's instruction. Unlike compileSdk, which only sets
     // what the code may refer to, targetSdk is a declaration to the OS that this app has

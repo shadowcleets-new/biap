@@ -640,7 +640,7 @@ private fun SpecificationsCard(
                 val specTabs = listOf("Top (Kameez)", "Bottom (Salwar)", "Dupatta", "General")
                 var selectedSpecTab by remember { mutableStateOf(0) }
 
-                ScrollableTabRow(
+                PrimaryScrollableTabRow(
                     selectedTabIndex = selectedSpecTab,
                     edgePadding = AtelierSpacing.None,
                     indicator = {},

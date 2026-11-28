@@ -14,8 +14,8 @@ offline-first encrypted local storage and encrypted cloud backup.
 
 | | |
 |---|---|
-| Language / UI | Kotlin `2.3.21` (KSP `2.3.12`), Jetpack Compose (BOM `2026.09.00`), Material 3 Expressive (`1.5.0-alpha29`) |
-| Build | AGP `9.4.1`, Gradle `9.8.0`, `compileSdk` 37, `targetSdk` 37, `minSdk` 24 |
+| Language / UI | Kotlin `2.4.21` (KSP `2.3.14`), Jetpack Compose (BOM `2026.09.00`), Material 3 Expressive (`1.5.0`) |
+| Build | AGP `9.5.3`, Gradle `9.9.3`, `compileSdk` 37, `targetSdk` 37, `minSdk` 24 |
 | Navigation | Navigation 3 (`1.2.0`) |
 | Local storage | Room `2.8.5` (schema v11, 15 entities) + SQLCipher `4.19.1`, per-identity encrypted DB |
 | Auth & Access | Firebase Auth (BOM `34.19.0` — Email/Password, Phone OTP, Google Sign-In via `play-services-auth 21.6.0`), Firestore access roles, App Check, Biometric `AppLock` |

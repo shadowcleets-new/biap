@@ -13,6 +13,54 @@ Each entry is written twice over:
 The entries dated 13-15 August 2026 were reconstructed on 30 September 2026 from
 the commit record; they were not written at the time.
 
+## [2026-11-28 13:07:33] - Session `b2843762` - AGP 9.5.3, Gradle 9.9.3, Kotlin 2.4.21, KSP 2.3.14
+
+> **In plain English:** Updated the tools that build the app to their newest stable
+> releases. The app itself does not change; it builds the same way on newer tooling.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** Build tooling was behind: AGP 9.4.1, Gradle 9.8.0, Kotlin 2.3.21 (held back by a KSP note), KSP 2.3.12, google-services 4.5.0.
+- **Specialist Personas Invoked:** Android build engineer.
+- **The Strategy:** Move every Gradle plugin to latest stable. The "KSP caps Kotlin" note was stale: KSP2 is decoupled from the compiler, and Dependabot PR #9 (Kotlin 2.4.21 + KSP 2.3.13) already built green in CI. Alphas skipped (AGP 9.6.0-alpha07, benchmark 1.6.0-alpha02).
+
+### 2. Surgical Technical Modifications
+- **Modified Files:**
+  - `gradle/libs.versions.toml`: `androidGradlePlugin` 9.4.1 -> 9.5.3; `kotlin` 2.3.21 -> 2.4.21 (Compose compiler + serialization plugins follow); `ksp` 2.3.12 -> 2.3.14; `com.google.gms.google-services` 4.5.0 -> 4.6.0. Stale KSP-cap comments rewritten.
+  - `gradle/wrapper/gradle-wrapper.properties` (+ wrapper jar/scripts): Gradle 9.8.0 -> 9.9.3, `distributionSha256Sum` 4f2135b7... taken from services.gradle.org.
+  - `README.md`: stack table versions.
+- **Unchanged (already latest stable):** `androidx.baselineprofile` 1.5.0, `foojay-resolver-convention` 1.0.0.
+- **Irreversible Actions:** None. **Payload/Schema Changes:** None.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** `./gradlew :app:assembleDebug :app:testDebugUnitTest :baselineprofile:compileNonMinifiedReleaseKotlin` -> BUILD SUCCESSFUL (Room `kspDebugKotlin` ran); `./gradlew :app:assembleRelease` (R8) -> BUILD SUCCESSFUL.
+- **Resulting App State:** Not yet run on a device. Pre-existing warnings remain (`org.jetbrains.kotlin.android` plugin usage, `Project.android(...)` DSL deprecation).
+- **Next Sprint Phase:** Close Dependabot PRs #7 and #9 (superseded); drop the deprecated `kotlin.android` plugin / old `android {}` DSL usage before AGP 10.
+
+## [2026-11-28 12:54:32] - Session `b2843762` - Material 3 Expressive alpha29 -> 1.5.0 stable
+
+> **In plain English:** The app's look-and-feel toolkit (Material 3 Expressive) moved from
+> a test version to the finished, stable release. Nothing should look different; two tab
+> bars and two pop-up sheets were switched to the toolkit's current way of doing the same thing.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** `material3` was pinned to `1.5.0-alpha29` because no stable build exposed the Expressive APIs; `1.5.0` stable is now out.
+- **Specialist Personas Invoked:** Android build engineer, Compose UI.
+- **The Strategy:** Pin `material3 = 1.5.0` over BOM `2026.09.00`. BOM `2026.11.01` (which carries 1.5.0) was tried and rejected: it lifts `foundation`/`ui` to `1.13.0`, which fails `checkDebugAarMetadata` on `compileSdk` 37.0 (needs 37.1).
+
+### 2. Surgical Technical Modifications
+- **Modified Files:**
+  - `gradle/libs.versions.toml`: `androidxMaterial3` `1.5.0-alpha29` -> `1.5.0`; comment explains why the BOM stays.
+  - `app/build.gradle.kts`: compileSdk comment now says `1.5.x`.
+  - `ui/design/AddDesignScreen.kt`, `ui/design/DesignDetailScreen.kt`: deprecated `ScrollableTabRow` -> `PrimaryScrollableTabRow` (same default colours/behaviour).
+  - `ui/design/SizeBatchSheet.kt`, `ui/hub/WorkDialogs.kt`: deprecated `rememberModalBottomSheetState(skipPartiallyExpanded = true)` -> `rememberBottomSheetState(initialValue = Hidden, enabledValues = setOf(Hidden, Expanded))`.
+- **Irreversible Actions:** None.
+- **Payload/Schema Changes:** None (schema stays v11).
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** `./gradlew :app:compileDebugKotlin :app:testDebugUnitTest` -> BUILD SUCCESSFUL; `:app:dependencies` resolves `material3:1.5.0`, `foundation:1.12.1`. No remaining Material 3 deprecation warnings.
+- **Resulting App State:** Not yet run on a device; check the design-detail spec tabs, add-design attribute tabs, size batch sheet and work dialogs open/scroll as before.
+- **Next Sprint Phase:** Move to BOM `2026.11.01` once compileSdk 37.1 is installed; optionally migrate the deprecated `Icons.Filled.*` to `Icons.AutoMirrored.*`.
+
 ## [2026-11-26 15:15:00] - Swarm Session `090b60b9` - v9-v11 Drive sync, JobWork media, cold-start fix & UI polish
 
 > **In plain English:** Finished wiring the newer workshop features into cloud backup so

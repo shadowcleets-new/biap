@@ -848,7 +848,7 @@ private fun AttributeScopeTabs(
     selectedTab: Int,
     onSelectTab: (Int) -> Unit
 ) {
-    ScrollableTabRow(
+    PrimaryScrollableTabRow(
         selectedTabIndex = selectedTab,
         edgePadding = AtelierSpacing.None,
         indicator = {},
