@@ -13,6 +13,31 @@ Each entry is written twice over:
 The entries dated 13-15 August 2026 were reconstructed on 30 September 2026 from
 the commit record; they were not written at the time.
 
+## [2026-11-28 20:53:49] - Session `b2843762` - GitHub repository hardening & single-branch sync
+
+> **In plain English:** Undid an accidental change on GitHub that had deleted a large part of
+> the app, brought every pending update into the app, cleaned GitHub down to a single branch,
+> and filled in the repository's settings: description, licence, security policy, automatic
+> build checks, protection for the main branch, labels, issue forms and a to-do list of issues.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** `cd406a7` on GitHub deleted ~2,000 lines and `google-services.json` and broke CI; 6 stale Dependabot branches; repo had no description, licence, security policy, build CI or branch protection.
+- **Specialist Personas Invoked:** Release/DevOps engineer, security auditor.
+- **The Strategy:** Revert (not force-push) the bad commit; take every update on `main`; let only `main` exist.
+
+### 2. Surgical Technical Modifications
+- **Commits on `main`:** `95d4599` revert of `cd406a7`; `9c12b08` M3 1.5.0 + AGP/Gradle/Kotlin; `cd0a85b` Compose BOM/Firebase/DataStore/OkHttp; `478a77d` repo files; `84621fd` `gradlew` +x (CI exit 126); `28013db` serialization 1.13.0, Firebase 35.2.0, actions to latest SHAs.
+- **Files added:** `LICENSE` (proprietary), `SECURITY.md`, `.github/CODEOWNERS`, `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.yml`, `.github/pull_request_template.md`, `.github/workflows/android-ci.yml` (assembleDebug + unit tests + lint). `dependabot.yml` gains a `github-actions` ecosystem.
+- **GitHub settings:** description + 14 topics; wiki/projects/discussions off; squash-merge only, auto-delete merged branches, auto-merge, update-branch; private vulnerability reporting on; ruleset "Protect main" (no deletion, no force-push, PR + `Build, test & lint` + `Analyze java-kotlin` required, admin bypass); labels added (dependencies, github-actions, triage, security, area:*, tech-debt).
+- **Alerts:** code scanning #14 (MD5 legacy filename) dismissed false positive, #3 (biometric without CryptoObject) won't fix by design; secret scanning #1-2 (Firebase client key) resolved won't fix.
+- **Branches/PRs:** PRs #5, #6, #7, #11, #12 closed as superseded (Dependabot closed #4, #9, #10 itself); all `dependabot/*` branches deleted.
+- **Irreversible Actions:** Branch deletions (contents are on `main`). **Payload/Schema Changes:** None.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** Local `assembleDebug`, `assembleRelease`, `testDebugUnitTest` pass; GitHub Android CI + CodeQL green on `84621fd`.
+- **Resulting App State:** Builds; not yet device-tested (issue #13).
+- **Next Sprint Phase:** Backlog issues #13-#18; 9 Dependabot alerts remain, all in Gradle build-tool classpath (not shipped in the APK).
+
 ## [2026-11-28 20:28:47] - Session `b2843762` - Compose BOM 2026.11.01, Firebase 35, DataStore 1.3, OkHttp 5.5.1
 
 > **In plain English:** Took the four pending library updates (screen toolkit, Firebase
