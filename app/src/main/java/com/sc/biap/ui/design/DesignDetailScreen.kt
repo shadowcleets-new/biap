@@ -26,8 +26,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.HelpOutline
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Delete
@@ -1526,7 +1526,7 @@ Card(
                         if (!onHub) {
                             Spacer(Modifier.width(6.dp))
                             Icon(
-                                Icons.Default.HelpOutline,
+                                Icons.AutoMirrored.Filled.HelpOutline,
                                 contentDescription = "Not on the Business Hub list",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(14.dp),
@@ -1798,7 +1798,7 @@ private fun DetailStatusScaffold(
                 title = { Text(title, style = MaterialTheme.typography.titleLargeStrong) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )

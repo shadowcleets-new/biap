@@ -13,6 +13,27 @@ Each entry is written twice over:
 The entries dated 13-15 August 2026 were reconstructed on 30 September 2026 from
 the commit record; they were not written at the time.
 
+## [2026-11-28 21:37:20] - Session `b2843762` - AutoMirrored icons (issue #16)
+
+> **In plain English:** The back arrow, help, receipt and undo icons now use versions that
+> flip the right way if the phone is set to a right-to-left language. Nothing changes in English.
+
+### 1. Intent, Roles, & Context
+- **The Problem:** `Icons.Filled/Outlined.{ArrowBack, HelpOutline, ReceiptLong, Undo}` are deprecated for their `Icons.AutoMirrored.*` versions.
+- **Specialist Personas Invoked:** Compose UI engineer (accessibility / RTL).
+- **The Strategy:** Straight swap of usage and import; same glyphs in LTR.
+
+### 2. Surgical Technical Modifications
+- `ui/design/AddDesignScreen.kt`, `ui/design/DesignDetailScreen.kt`, `ui/profile/AccessManagementScreen.kt`, `ui/profile/ProfileScreen.kt`: `ArrowBack` (and `HelpOutline`) -> `Icons.AutoMirrored.Filled.*`.
+- `ui/main/MainScreen.kt`: `ReceiptLong` filled/outlined -> `Icons.AutoMirrored.Filled/Outlined.ReceiptLong`.
+- `ui/orders/OrdersList.kt`: `Undo` -> `Icons.AutoMirrored.Filled.Undo`.
+- **Irreversible Actions:** None. **Payload/Schema Changes:** None.
+
+### 3. Verification & Validation
+- **Execution Commands & Diagnostics:** `compileDebugKotlin --rerun-tasks` shows no icon deprecation warnings; `testDebugUnitTest`, `assembleDebug` pass.
+- **Resulting App State:** Identical in LTR; mirrored in RTL locales.
+- **Next Sprint Phase:** #18 build-file clean-up; device test (#13).
+
 ## [2026-11-28 21:20:03] - Session `b2843762` - Text fields moved to TextFieldState (issue #14)
 
 > **In plain English:** Every typing box in the app (sign-in, phone and code, search, design

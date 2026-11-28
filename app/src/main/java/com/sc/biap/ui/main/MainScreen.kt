@@ -10,9 +10,9 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
@@ -117,8 +117,8 @@ private fun MainNavigationBar(selected: MainTab, onSelect: (MainTab) -> Unit) {
             onClick = { onSelect(MainTab.ORDERS) },
             icon = {
                 Icon(
-                    if (selected == MainTab.ORDERS) Icons.Filled.ReceiptLong
-                    else Icons.Outlined.ReceiptLong,
+                    if (selected == MainTab.ORDERS) Icons.AutoMirrored.Filled.ReceiptLong
+                    else Icons.AutoMirrored.Outlined.ReceiptLong,
                     contentDescription = null,
                 )
             },

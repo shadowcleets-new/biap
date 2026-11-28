@@ -23,7 +23,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Inventory
-import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -299,7 +299,7 @@ private fun OrderCard(
                     colors = ButtonDefaults.textButtonColors(contentColor = scheme.error),
                 ) {
                     Icon(
-                        Icons.Default.Undo,
+                        Icons.AutoMirrored.Filled.Undo,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )
