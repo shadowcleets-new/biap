@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest something new for the app or the workshop flow.
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation in the workshop or shop where this would help.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What should the app do?
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: How important is it?
+      options:
+        - Nice to have
+        - Important
+        - Blocking daily work

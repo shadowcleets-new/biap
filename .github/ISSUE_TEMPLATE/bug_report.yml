@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in the app is broken or behaves wrongly.
+labels: ["bug", "triage"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What went wrong, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a design
+        2. Tap ...
+        3. See ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Catalogue / designs
+        - Stock, sizes & batches
+        - Orders
+        - Karigars & job work
+        - Business Hub
+        - Sign-in & access
+        - Drive sync & backup
+        - Voice entry
+        - Settings
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Phone and Android version
+      placeholder: e.g. Pixel 9, Android 17
+  - type: input
+    id: build
+    attributes:
+      label: App build / commit
+      placeholder: e.g. 1.0 (commit abc1234)
+  - type: textarea
+    id: logs
+    attributes:
+      label: Screenshots or logs
+      description: Do not paste passphrases, customer details or account information.

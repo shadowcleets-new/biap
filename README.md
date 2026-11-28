@@ -1,5 +1,8 @@
 # BIAP
 
+[![Android CI](https://github.com/shadowcleets-new/biap/actions/workflows/android-ci.yml/badge.svg)](https://github.com/shadowcleets-new/biap/actions/workflows/android-ci.yml)
+[![CodeQL](https://github.com/shadowcleets-new/biap/actions/workflows/codeql.yml/badge.svg)](https://github.com/shadowcleets-new/biap/actions/workflows/codeql.yml)
+
 Internal operations app for an Indian D2C ethnic wear atelier (Salwar Kameez & Kurtis).
 Android, Kotlin, Jetpack Compose (Material 3 Expressive).
 
@@ -114,3 +117,7 @@ live encrypted in the signed-in user's Google Drive `appDataFolder`.
 | branch | contents |
 |---|---|
 | `main` | active trunk (Schema v11, JobWork + media sync, Business Hub, SDK 37, CodeQL/Dependabot) |
+
+## License
+
+Proprietary - all rights reserved. See [LICENSE](LICENSE). Security reports: [SECURITY.md](SECURITY.md).
